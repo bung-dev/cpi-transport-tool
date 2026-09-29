@@ -156,4 +156,18 @@ curl -s -X POST http://localhost:18081/__admin/scenarios/reset
 curl -s -X POST http://localhost:18082/__admin/scenarios/reset
 ```
 
-앱·스텁 터미널에서 Ctrl+C로 정지합니다. Windows에서 잔여 프로세스가 있으면 PowerShell의 `netstat -ano | Select-String ':18081|:18082|:8080'`로 확인하고, 자신이 실행한 프로세스와 자식 PID만 `Stop-Process -Id <PID> -Force`로 정지합니다. 이 샌드박스에서는 `taskkill /T /F`와 `Get-NetTCPConnection`이 권한 오류로 실패할 수 있습니다. Git Bash에서도 필요하면 별도 PowerShell에서 같은 확인·정지를 수행합니다.
+앱·스텁 터미널에서 Ctrl+C로 정지합니다. 잔여 프로세스가 있으면 `netstat -ano`로 8080, 18081, 18082를 LISTEN하는 PID를 확인하고, 자신이 실행한 java 프로세스만 정지합니다.
+
+Git Bash:
+
+```bash
+netstat -ano | grep -E ':(8080|18081|18082) .*LISTENING'
+taskkill //PID <PID> //T //F
+```
+
+PowerShell:
+
+```powershell
+netstat -ano | Select-String -Pattern ":8080|:18081|:18082"
+taskkill /PID <PID> /T /F
+```
