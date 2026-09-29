@@ -25,6 +25,8 @@ dependencies {
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
+	implementation 'tools.jackson.dataformat:jackson-dataformat-yaml'
+	testImplementation 'org.wiremock:wiremock-standalone:3.13.2'
 }
 
 tasks.named('test') {
