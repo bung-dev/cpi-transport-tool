@@ -28,11 +28,29 @@ public class TransportService {
         this.clock = clock;
     }
 
-    // AI-NOTE: Request validation, EnvironmentGuard and DEV package validation belong to TODO-014.
-    // Preflight can pass its already loaded snapshot to the overload to avoid duplicate reads.
     public TransportResponse execute(TransportRequest request) {
         var loaded = mappings.load();
         return execute(request, api.listArtifacts(CpiEnvironment.DEV, request.packageId()), loaded);
+    }
+
+    // Request validation and environment checks are performed by the controller.
+    public TransportResponse preflightAndExecute(TransportRequest request) {
+        var loaded = mappings.load();
+        List<CpiArtifact> artifacts;
+        try {
+            if (api.getPackage(CpiEnvironment.DEV, request.packageId()).isEmpty()) {
+                throw new ErrorResponse.ApiException(ErrorResponse.Code.PACKAGE_NOT_FOUND);
+            }
+            artifacts = api.listArtifacts(CpiEnvironment.DEV, request.packageId());
+        } catch (CpiCallException failure) {
+            // AI-NOTE: The executor identifies token failure origin through this fixed message.
+            if (Integer.valueOf(404).equals(failure.httpStatus())
+                    && !"CPI authentication failed".equals(failure.getMessage())) {
+                throw new ErrorResponse.ApiException(ErrorResponse.Code.PACKAGE_NOT_FOUND);
+            }
+            throw failure;
+        }
+        return execute(request, artifacts, loaded);
     }
 
     public TransportResponse execute(TransportRequest request, List<CpiArtifact> artifacts,
