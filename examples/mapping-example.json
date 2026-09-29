@@ -1,0 +1,88 @@
+{
+  "mappings": [
+    {
+      "artifactId": "IF_Order_Sync",
+      "targetType": "header",
+      "key": "TargetSystem",
+      "devValue": "DEV_ERP",
+      "prdValue": "PRD_ERP"
+    },
+    {
+      "artifactId": "IF_Order_Sync",
+      "targetType": "header",
+      "key": "ApiKey",
+      "devValue": "dummy-dev-apikey-123",
+      "prdValue": "dummy-prd-apikey-456"
+    },
+    {
+      "artifactId": "IF_Order_Sync",
+      "targetType": "header",
+      "key": "Filter",
+      "devValue": "a&b<c>\"d'e",
+      "prdValue": "x&y<z>\"w'v"
+    },
+    {
+      "artifactId": "IF_Order_Sync",
+      "targetType": "property",
+      "key": "Endpoint",
+      "devValue": "http://dev-backend.localhost/orders",
+      "prdValue": "http://prd-backend.localhost/orders"
+    },
+    {
+      "artifactId": "IF_Order_Sync",
+      "targetType": "property",
+      "key": "NotExisting",
+      "devValue": "x",
+      "prdValue": "y"
+    },
+    {
+      "artifactId": "IF_Customer_Push",
+      "targetType": "property",
+      "key": "Region",
+      "devValue": "KR-DEV",
+      "prdValue": "KR-PRD"
+    },
+    {
+      "artifactId": "IF_Customer_Push",
+      "targetType": "externalParam",
+      "key": "ReceiverUrl",
+      "devValue": "http://dev-receiver.localhost/customers",
+      "prdValue": "http://prd-receiver.localhost/customers"
+    },
+    {
+      "artifactId": "IF_Customer_Push",
+      "targetType": "externalParam",
+      "key": "Timeout",
+      "devValue": "60000",
+      "prdValue": "90000"
+    },
+    {
+      "artifactId": "IF_Customer_Push",
+      "targetType": "externalParam",
+      "key": "ClientPassword",
+      "devValue": "dummy-dev-pass-XYZ",
+      "prdValue": "dummy-prd-pass-QRS"
+    },
+    {
+      "artifactId": "IF_Customer_Push",
+      "targetType": "externalParam",
+      "key": "MissingParam",
+      "devValue": "a",
+      "prdValue": "b"
+    },
+    {
+      "artifactId": "IF_Fault_ParamPutFail",
+      "targetType": "externalParam",
+      "key": "ParamA",
+      "devValue": "a-dev",
+      "prdValue": "a-prd"
+    },
+    {
+      "artifactId": "IF_Fault_ParamPutFail",
+      "targetType": "externalParam",
+      "key": "ParamB",
+      "devValue": "b-dev",
+      "prdValue": "b-prd"
+    }
+  ]
+}

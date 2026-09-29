@@ -32,3 +32,8 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+tasks.register('runLocalStubs', JavaExec) {
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.company.sap.cpitransport.stub.LocalCpiStubs'
+}
