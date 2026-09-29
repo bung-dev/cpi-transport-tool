@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import type { TransportResponse } from '../../api/types';
+import { TransportResult } from '../result/TransportResult';
 import { ArtifactPicker } from './ArtifactPicker';
 import { PackagePicker } from './PackagePicker';
 import { RunPanel } from './RunPanel';
@@ -10,8 +11,7 @@ export function TransportTab() {
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   const [selectedArtifactIds, setSelectedArtifactIds] = useState<string[]>([]);
 
-  // 결과 표시는 TODO-008에서 연결한다.
-  const [, setResult] = useState<TransportResponse | null>(null);
+  const [result, setResult] = useState<TransportResponse | null>(null);
 
   function selectPackage(id: string) {
     if (id === selectedPackageId) return;
@@ -40,6 +40,7 @@ export function TransportTab() {
         <h2 className="mb-3 text-lg font-semibold">실행</h2>
         <RunPanel packageId={selectedPackageId} artifactIds={selectedArtifactIds} onResult={setResult} />
       </Card>
+      {result && <TransportResult result={result} />}
     </div>
   );
 }
