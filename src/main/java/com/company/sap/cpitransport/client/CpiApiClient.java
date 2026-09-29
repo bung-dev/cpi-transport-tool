@@ -103,10 +103,9 @@ public class CpiApiClient {
         try {
             return Optional.of(read(environment, path));
         } catch (CpiCallException failure) {
-            // AI-NOTE: TODO-005 exposes no failure origin. Its fixed authentication summary
-            // distinguishes token-endpoint 404 from resource 404 without changing that file.
+            // A token-endpoint 404 is an authentication failure, not a missing resource.
             if (Integer.valueOf(404).equals(failure.httpStatus())
-                    && !"CPI authentication failed".equals(failure.getMessage())) return Optional.empty();
+                    && !failure.isTokenStageFailure()) return Optional.empty();
             throw failure;
         }
     }

@@ -66,7 +66,7 @@ public class CpiHttpExecutor {
             try {
                 bearer = tokens.getToken(environment.configurationEnvironment());
             } catch (OAuthTokenProvider.TokenRequestException failure) {
-                throw new CpiCallException(failure.httpStatus(), "CPI authentication failed");
+                throw new CpiCallException(failure.httpStatus(), "CPI authentication failed", true);
             }
             secrets.add(bearer);
             if (session != null) {
