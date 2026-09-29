@@ -214,7 +214,7 @@ class TransportServiceWireMockTests {
         assertThat(result.replacements()).extracting(Replacement::status).containsOnly(ReplacementStatus.APPLIED);
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "{displayName} [{index}] deploy={0}")
     @ValueSource(booleans = {false, true})
     @DisplayName("REQ-010 AC-1, AC-2, AC-3, AC-4: dry run performs no writes CSRF or PRD requests even on failure")
     void req010_ac1_dryRun(boolean deploy) {
