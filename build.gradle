@@ -37,3 +37,8 @@ tasks.register('runLocalStubs', JavaExec) {
 	classpath = sourceSets.test.runtimeClasspath
 	mainClass = 'com.company.sap.cpitransport.stub.LocalCpiStubs'
 }
+
+tasks.register('extractUploadedArtifacts', JavaExec) {
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.company.sap.cpitransport.stub.UploadedArtifactExtractor'
+}
