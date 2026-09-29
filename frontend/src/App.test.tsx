@@ -29,7 +29,7 @@ describe('App', () => {
     expect(await screen.findByLabelText('패키지 검색')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('tab', { name: '이력' }));
     expect(screen.getByRole('tab', { name: '이력' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText('이력 탭')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '새로고침' })).toBeInTheDocument();
     expect(screen.queryByLabelText('패키지 검색')).toBeNull();
   });
 
