@@ -69,14 +69,14 @@ public class OAuthTokenProvider {
                         throw new TokenRequestException(response.getStatusCode().value());
                     })
                     .body(JsonNode.class);
-            if (body == null || !body.path("access_token").isTextual()
-                    || body.path("access_token").asText().isBlank()
+            if (body == null || !body.path("access_token").isString()
+                    || body.path("access_token").asString().isBlank()
                     || !body.path("expires_in").isIntegralNumber()
                     || !body.path("expires_in").canConvertToLong()
                     || body.path("expires_in").asLong() <= 0) {
                 throw new TokenRequestException(null);
             }
-            return new AccessToken(body.path("access_token").asText(),
+            return new AccessToken(body.path("access_token").asString(),
                     issuedAt.plusSeconds(body.path("expires_in").asLong()).minusSeconds(60));
         } catch (TokenRequestException | ResourceAccessException failure) {
             throw failure;

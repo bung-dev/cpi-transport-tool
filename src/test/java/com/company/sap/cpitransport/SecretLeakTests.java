@@ -132,7 +132,7 @@ class SecretLeakTests {
         for (var entry : root.path("mappings")) {
             var values = new LinkedHashMap<String, String>();
             for (String key : List.of("artifactId", "targetType", "key", "devValue", "prdValue"))
-                values.put(key, entry.path(key).asText());
+                values.put(key, entry.path(key).asString());
             boolean sensitive = Set.of("ApiKey", "ClientPassword").contains(values.get("key"));
             if (sensitive && !mapped) continue;
             // Distinct current and mapped DEV values exercise masking before value comparison.
@@ -177,7 +177,7 @@ class SecretLeakTests {
         for (var artifact : root.path("results")) {
             for (var key : artifact.path("unmappedKeys")) {
                 assertThat(key.size()).isEqualTo(2);
-                keys.add(key.path("key").asText());
+                keys.add(key.path("key").asString());
             }
         }
         assertThat(keys).contains("ApiKey", "ClientPassword");

@@ -51,18 +51,18 @@ public final class UploadedArtifactExtractor {
         int count = 0;
         for (var event : events) {
             var request = event.path("request");
-            String method = request.path("method").asText();
-            String url = request.path("url").asText();
+            String method = request.path("method").asString();
+            String url = request.path("url").asString();
             var update = UPDATE.matcher(url);
             boolean create = method.equals("POST") && url.equals(ROOT);
             if (!create && !(method.equals("PUT") && update.matches())) continue;
-            var body = mapper.readTree(request.path("body").asText());
-            String id = create ? body.path("Id").asText() : update.group(1);
+            var body = mapper.readTree(request.path("body").asString());
+            String id = create ? body.path("Id").asString() : update.group(1);
             if (!id.matches("[A-Za-z0-9_.-]{1,100}") || id.equals(".") || id.equals("..")) {
                 throw new IOException("Invalid artifact identifier in journal");
             }
-            if (!body.path("ArtifactContent").isTextual()) throw new IOException("Missing ArtifactContent: " + id);
-            byte[] zip = Base64.getDecoder().decode(body.path("ArtifactContent").asText());
+            if (!body.path("ArtifactContent").isString()) throw new IOException("Missing ArtifactContent: " + id);
+            byte[] zip = Base64.getDecoder().decode(body.path("ArtifactContent").asString());
             Path target = base.resolve("uploads").resolve(++count + "-" + id);
             Files.createDirectories(target.getParent());
             Path zipFile = target.resolveSibling(target.getFileName() + ".zip");
