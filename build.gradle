@@ -56,8 +56,8 @@ tasks.register('frontendBuild', Exec) {
 	commandLine npmCommand, 'run', 'build'
 }
 
-// AI-NOTE: processResources는 frontendBuild에 의존하지 않는다(test·bootRun은 npm 미실행, REQ-002 AC-2·AC-3a).
-// mustRunAfter는 같은 실행에 둘 다 있을 때 순서만 정한다(spec-ISS-007). frontend/dist 존재 판정은 실행 시점(from 경로 해석)에 맡긴다.
+// AI-NOTE: processResources는 frontendBuild에 의존하지 않는다(test·bootRun은 npm 미실행) (근거: REQ-002 AC-2·AC-3a, run 20260929-frontend-ui).
+// mustRunAfter는 같은 실행에 둘 다 있을 때 순서만 정한다. frontend/dist 존재 판정은 실행 시점(from 경로 해석)에 맡긴다 (근거: REQ-002 AC-1·AC-3a, spec-ISS-007, run 20260929-frontend-ui)
 tasks.named('processResources') {
 	from('frontend/dist') {
 		into 'static'
