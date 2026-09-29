@@ -133,8 +133,8 @@ public class CpiApiClient {
     }
 
     private String field(JsonNode node, String key) {
-        if (!node.path(key).isTextual()) throw invalidResponse();
-        return node.path(key).asText();
+        if (!node.path(key).isString()) throw invalidResponse();
+        return node.path(key).asString();
     }
 
     private CpiCallException invalidResponse() {
