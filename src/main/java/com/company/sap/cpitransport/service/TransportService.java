@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -60,7 +61,17 @@ public class TransportService {
         var ids = request.artifactIds() == null || request.artifactIds().isEmpty()
                 ? artifacts.stream().map(CpiArtifact::id).toList() : request.artifactIds();
         var results = new ArrayList<ArtifactResult>();
-        for (String id : ids) results.add(process(transportId, request, id, artifacts, loadedMappings));
+        for (String id : ids) {
+            var previousContext = MDC.getCopyOfContextMap();
+            try {
+                MDC.put("transportId", transportId);
+                MDC.put("artifactId", id);
+                results.add(process(transportId, request, id, artifacts, loadedMappings));
+            } finally {
+                if (previousContext == null) MDC.clear();
+                else MDC.setContextMap(previousContext);
+            }
+        }
         int succeeded = (int) results.stream().filter(r -> r.status() == ArtifactStatus.SUCCESS).count();
         return new TransportResponse(transportId, request.packageId(), request.dryRun(), request.deploy(),
                 started, clock.instant(), new TransportSummary(results.size(), succeeded, results.size() - succeeded), results);
@@ -88,6 +99,7 @@ public class TransportService {
                 var replaced = iflw.process(zip, applicable, request.dryRun());
                 replacements.addAll(replaced.replacements());
                 unmapped.addAll(replaced.unmappedKeys());
+                if (request.dryRun()) skipped(transportId, id, Stage.UPLOAD, "SKIPPED_DRY_RUN");
                 if (!request.dryRun()) {
                     stage = next(transportId, id, stage, Stage.TARGET);
                     if (api.getPackage(CpiEnvironment.PRD, request.packageId()).isEmpty()) {
@@ -117,6 +129,9 @@ public class TransportService {
                             error = new ArtifactError(deployStatus == DeployStatus.TIMEOUT ? "DEPLOY_TIMEOUT" : stage.code,
                                     "DEPLOY: CPI deployment " + deployStatus);
                         }
+                    } else if (external.error() == null) {
+                        skipped(transportId, id, Stage.DEPLOY,
+                                request.dryRun() ? "SKIPPED_DRY_RUN" : "NOT_REQUESTED");
                     }
                 }
             }
@@ -143,7 +158,24 @@ public class TransportService {
     }
 
     private void event(String transportId, String id, Stage stage, String outcome) {
-        log.info("transportId={} artifactId={} stage={} {}", transportId, id, stage, outcome);
+        // The existing parameter replacer performs GET and PUT in one call.
+        if (stage == Stage.CONFIGURATION_READ && outcome.equals("succeeded")
+                || stage == Stage.CONFIGURATION_UPDATE && outcome.equals("started")) return;
+        String step = switch (stage) {
+            case IFLW -> "REPLACE";
+            case CONFIGURATION_READ, CONFIGURATION_UPDATE -> "PARAMETER_REPLACE";
+            default -> stage.name();
+        };
+        boolean start = outcome.equals("started");
+        String result = outcome.equals("succeeded") ? "OK"
+                : outcome.startsWith("failed") ? "FAILED" : outcome;
+        log.info("transportId={} artifactId={} step={} phase={} result={}",
+                transportId, id, step, start ? "START" : "END", start ? "PENDING" : result);
+    }
+
+    private void skipped(String transportId, String id, Stage stage, String reason) {
+        event(transportId, id, stage, "started");
+        event(transportId, id, stage, reason);
     }
 
     private enum Stage {
