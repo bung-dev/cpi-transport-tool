@@ -1,0 +1,17 @@
+<b:definitions xmlns:b="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:ifl="http:///com.sap.ifl.model/Ifl.xsd">
+  <b:process>
+    <b:callActivity id="one"><b:extensionElements>
+      <ifl:property><key>activityType</key><value>Enricher</value></ifl:property>
+      <ifl:property><key>headerTable</key><value><![CDATA[<row><cell id="Name">Endpoint</cell><cell id="Value">dev</cell><cell id="Type">constant</cell><cell id="Datatype">java.lang.String</cell></row><row><cell id="Name">Endpoint</cell><cell id="Value">other</cell></row><row><cell id="Name">Unmapped</cell><cell id="Value">unchanged</cell></row><row><cell id="Name">Password</cell><cell id="Value">***</cell></row><row><cell id="Name">Token</cell><cell id="Value">***</cell></row>]]></value></ifl:property>
+      <ifl:property><key>propertyTable</key><value><![CDATA[<row><cell id="Name">Endpoint</cell><cell id="Value">property-dev</cell></row><row><cell id="Name">Unmapped</cell><cell id="Value">unchanged</cell></row>]]></value></ifl:property>
+    </b:extensionElements></b:callActivity>
+    <b:callActivity id="two">
+      <ifl:property><key>activityType</key><value>Enricher</value></ifl:property>
+      <ifl:property><key>headerTable</key><value><![CDATA[<row><cell id="Name">Endpoint</cell><cell id="Value">dev</cell></row><row><cell id="Name">Unmapped</cell><cell id="Value">unchanged</cell></row>]]></value></ifl:property>
+    </b:callActivity>
+    <b:callActivity id="other">
+      <ifl:property><key>activityType</key><value>OtherStep</value></ifl:property>
+      <ifl:property><key>headerTable</key><value><![CDATA[<row><cell id="Name">Endpoint</cell><cell id="Value">dev</cell></row><row><cell id="Name">OnlyOtherStep</cell><cell id="Value">dev</cell></row>]]></value></ifl:property>
+    </b:callActivity>
+  </b:process>
+</b:definitions>
