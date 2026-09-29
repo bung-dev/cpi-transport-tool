@@ -1,4 +1,4 @@
-package com.bung.cpi_transport_tool;
+package com.company.sap.cpitransport;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
