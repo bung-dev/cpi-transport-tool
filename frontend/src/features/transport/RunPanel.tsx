@@ -22,7 +22,7 @@ export function RunPanel({ packageId, artifactIds, onResult }: Props) {
   const [busy, setBusy] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  // AI-NOTE: 상태 갱신(busy)은 비동기라 disabled만으로는 같은 틱의 연속 클릭을 막지 못한다. 동기 플래그로 중복 전송을 막는다.
+  // AI-NOTE: 상태 갱신(busy)은 비동기라 disabled만으로는 같은 틱의 연속 클릭을 막지 못한다. 동기 플래그로 중복 전송을 막는다 (근거: REQ-005 AC-4, run 20260929-frontend-ui)
   const inFlight = useRef(false);
 
   const tooMany = artifactIds.length > MAX_ARTIFACTS;
