@@ -44,9 +44,9 @@ public class TransportService {
             }
             artifacts = api.listArtifacts(CpiEnvironment.DEV, request.packageId());
         } catch (CpiCallException failure) {
-            // AI-NOTE: The executor identifies token failure origin through this fixed message.
+            // A token-endpoint 404 is an authentication failure, not a missing package.
             if (Integer.valueOf(404).equals(failure.httpStatus())
-                    && !"CPI authentication failed".equals(failure.getMessage())) {
+                    && !failure.isTokenStageFailure()) {
                 throw new ErrorResponse.ApiException(ErrorResponse.Code.PACKAGE_NOT_FOUND);
             }
             throw failure;

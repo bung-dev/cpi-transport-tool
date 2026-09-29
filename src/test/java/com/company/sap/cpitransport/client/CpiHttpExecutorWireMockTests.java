@@ -94,6 +94,22 @@ class CpiHttpExecutorWireMockTests {
     }
 
     @Test
+    @DisplayName("REQ-004 AC-5: resource 404 is not flagged as token-stage failure")
+    void req004_ac5_tokenStageFlag() {
+        server.stubFor(get(urlEqualTo("/dev/api/v1/items")).willReturn(notFound()));
+        assertThatThrownBy(() -> call(HttpMethod.GET)).isInstanceOfSatisfying(CpiCallException.class,
+                ex -> assertThat(ex.isTokenStageFailure()).isFalse());
+    }
+
+    @Test
+    @DisplayName("REQ-004 AC-5: token endpoint 404 is flagged as token-stage failure")
+    void req004_ac5_tokenStageFlagOnTokenFailure() {
+        server.stubFor(post(urlEqualTo("/dev/oauth/token")).willReturn(notFound()));
+        assertThatThrownBy(() -> call(HttpMethod.GET)).isInstanceOfSatisfying(CpiCallException.class,
+                ex -> assertThat(ex.isTokenStageFailure()).isTrue());
+    }
+
+    @Test
     @DisplayName("REQ-003 AC-1: POST and PUT reuse environment-specific CSRF and cookies")
     void req003_ac1_cacheAndEnvironmentIsolation() {
         for (String env : List.of("dev", "prd")) {

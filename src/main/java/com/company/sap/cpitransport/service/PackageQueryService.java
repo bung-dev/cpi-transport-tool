@@ -35,10 +35,9 @@ public class PackageQueryService {
             return client.listArtifacts(CpiEnvironment.DEV, packageId).stream()
                     .map(a -> new ArtifactSummary(a.id(), a.name(), a.version())).toList();
         } catch (CpiCallException failure) {
-            // AI-NOTE: The existing executor exposes token failure origin only through this
-            // fixed summary. Keep token 404 distinct from a package resource 404.
+            // A token-endpoint 404 is an authentication failure, not a missing package.
             if (Integer.valueOf(404).equals(failure.httpStatus())
-                    && !"CPI authentication failed".equals(failure.getMessage())) {
+                    && !failure.isTokenStageFailure()) {
                 throw new ApiException(Code.PACKAGE_NOT_FOUND);
             }
             throw failure;
