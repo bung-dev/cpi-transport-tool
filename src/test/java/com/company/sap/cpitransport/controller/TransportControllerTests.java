@@ -30,6 +30,7 @@ class TransportControllerTests {
     private MockMvc mvc;
     private EnvironmentGuard guard;
     private TransportService transportService;
+    private TransportHistoryStore history;
     private final List<Duration> waits = new ArrayList<>();
     @TempDir Path temporary;
 
@@ -63,11 +64,12 @@ class TransportControllerTests {
         var service = new TransportService(api, new IflwReplacer(sensitive), new ExternalParameterReplacer(api, sensitive),
                 new DeployService(api, settings, clock, sleeper), new MappingFileLoader(settings), clock);
         transportService = service;
+        history = new TransportHistoryStore(settings, json);
         guard = new EnvironmentGuard(props);
         mvc = mvc(service);
     }
     private MockMvc mvc(TransportService service) {
-        return MockMvcBuilders.standaloneSetup(new TransportController(service, guard))
+        return MockMvcBuilders.standaloneSetup(new TransportController(service, guard, history))
                 .setControllerAdvice(new ApiExceptionHandler()).build();
     }
     private void stub(String path, String body) {
@@ -78,9 +80,10 @@ class TransportControllerTests {
                 .contentType("application/json").content(body));
     }
     private void error(String body, int status, String code) throws Exception {
+        int before = history.findAll().size();
         request(body).andExpect(status().is(status)).andExpect(jsonPath("$.error").value(code))
                 .andExpect(jsonPath("$.message").isString());
-        assertThat(Files.exists(temporary.resolve("history.jsonl"))).isFalse();
+        assertThat(history.findAll()).hasSize(before);
     }
 
     @ParameterizedTest(name = "{displayName} [{index}]")
@@ -227,4 +230,45 @@ class TransportControllerTests {
         assertThat(result.at("/replacements/0").propertyNames()).containsExactlyInAnyOrder("targetType", "key", "before", "after", "status", "occurrences");
         assertThat(result.at("/unmappedKeys/0").propertyNames()).containsExactlyInAnyOrder("targetType", "key");
     }
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    @DisplayName("REQ-011 AC-1, AC-2, REQ-010 AC-5: each successful response is appended and queryable")
+    void req011_ac1_history(boolean dryRun) throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/transport/history"))
+                .andExpect(status().isOk()).andExpect(content().json("[]"));
+        for (int i = 1; i <= 2; i++) {
+            String response = request(json.writeValueAsString(Map.of("packageId", "Pkg", "dryRun", dryRun)))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+            var lines = Files.readAllLines(temporary.resolve("history.jsonl"));
+            assertThat(lines).hasSize(i);
+            assertThat(json.readTree(lines.get(i - 1))).isEqualTo(json.readTree(response));
+            assertThat(history.findAll().get(i - 1).dryRun()).isEqualTo(dryRun);
+        }
+        String result = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/transport/history"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(json.readTree(result)).isEqualTo(json.valueToTree(history.findAll()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {400, 503, 422, 404, 502})
+    @DisplayName("REQ-011 AC-1: rejected requests append zero lines")
+    void req011_ac1_errors(int statusCode) throws Exception {
+        switch (statusCode) {
+            case 400 -> error("{}", 400, "INVALID_REQUEST");
+            case 503 -> {
+                configure(0, -1, "");
+                error("{\"packageId\":\"Pkg\"}", 503, "ENVIRONMENT_NOT_CONFIGURED");
+            }
+            case 422 -> {
+                configure(-1, -1, temporary.resolve("missing.yaml").toString());
+                error("{\"packageId\":\"Pkg\"}", 422, "MAPPING_INVALID");
+            }
+            default -> {
+                server.stubFor(get(urlEqualTo(PACKAGE)).willReturn(aResponse().withStatus(statusCode == 404 ? 404 : 500)));
+                error("{\"packageId\":\"Pkg\"}", statusCode, statusCode == 404 ? "PACKAGE_NOT_FOUND" : "CPI_UNAVAILABLE");
+            }
+        }
+        assertThat(Files.exists(temporary.resolve("history.jsonl"))).isFalse();
+    }
+
 }

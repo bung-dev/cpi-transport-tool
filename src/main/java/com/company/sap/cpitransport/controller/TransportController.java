@@ -5,6 +5,7 @@ import com.company.sap.cpitransport.config.CpiProperties.Environment;
 import com.company.sap.cpitransport.model.*;
 import com.company.sap.cpitransport.service.EnvironmentGuard;
 import com.company.sap.cpitransport.service.TransportService;
+import com.company.sap.cpitransport.service.TransportHistoryStore;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.*;
@@ -14,10 +15,12 @@ import tools.jackson.databind.JsonNode;
 public class TransportController {
     private final TransportService service;
     private final EnvironmentGuard guard;
+    private final TransportHistoryStore history;
 
-    public TransportController(TransportService service, EnvironmentGuard guard) {
+    public TransportController(TransportService service, EnvironmentGuard guard, TransportHistoryStore history) {
         this.service = service;
         this.guard = guard;
+        this.history = history;
     }
 
     @PostMapping("/transport")
@@ -37,7 +40,14 @@ public class TransportController {
         var missing = new ArrayList<>(guard.missingKeys(Environment.DEV));
         if (!dryRun) missing.addAll(guard.missingKeys(Environment.PRD));
         if (!missing.isEmpty()) throw new EnvironmentNotConfiguredException(missing);
-        return service.preflightAndExecute(new TransportRequest(body.get("packageId").asString(), ids, dryRun, deploy));
+        var response = service.preflightAndExecute(new TransportRequest(body.get("packageId").asString(), ids, dryRun, deploy));
+        history.append(response);
+        return response;
+    }
+
+    @GetMapping("/transport/history")
+    public java.util.List<TransportResponse> history() {
+        return history.findAll();
     }
 
     private static boolean validId(JsonNode value) {
