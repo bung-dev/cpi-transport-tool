@@ -56,7 +56,7 @@ class TestHostPolicyTests {
                         } catch (IllegalArgumentException malformedUrl) {
                             host = null;
                         }
-                        if (host == null || !(host.equalsIgnoreCase("localhost")
+                        if (host == null || !(host.equalsIgnoreCase("localhost") || host.equals("127.0.0.1")
                                 || host.toLowerCase(Locale.ROOT).endsWith(".localhost"))) {
                             long line = content.substring(0, matcher.start()).chars().filter(c -> c == '\n').count() + 1;
                             violations.add(path + ":" + line + ": " + url);
