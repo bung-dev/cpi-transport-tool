@@ -137,7 +137,7 @@ public class TransportService {
             }
         } catch (RuntimeException failure) {
             if (stage == Stage.DEPLOY) deployStatus = DeployStatus.ERROR;
-            // AI-NOTE: CPI bodies can echo unknown sensitive values; use a categorical summary.
+            // AI-NOTE: CPI bodies can echo unknown sensitive values; use a categorical summary. (근거: REQ-012 AC-3, run 20260928-cpi-transport)
             // DeployService returns only status, so HTTP details are unavailable for returned failures.
             String detail = failure instanceof CpiCallException call
                     ? "HTTP " + call.httpStatus() + "; CPI call failed" : "CPI processing failed";

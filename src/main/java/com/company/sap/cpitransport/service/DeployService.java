@@ -32,7 +32,7 @@ public class DeployService {
         try {
             api.deploy(CpiEnvironment.PRD, id);
             var deadline = clock.instant().plus(settings.timeout());
-            // AI-NOTE: Poll first after one interval; the deadline is exclusive.
+            // Poll first after one interval; the deadline is exclusive.
             // Cap the last wait when timeout is not divisible by the interval.
             while (clock.instant().isBefore(deadline)) {
                 Duration remaining = Duration.between(clock.instant(), deadline);

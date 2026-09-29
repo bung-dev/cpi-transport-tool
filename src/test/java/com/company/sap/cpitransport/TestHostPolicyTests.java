@@ -16,14 +16,14 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class TestHostPolicyTests {
-    // AI-NOTE: D-041 / REQ-015 AC-4 forbids connections, not identifier URIs.
-    // These exact BPMN namespace and JAXP feature identifiers are never fetched;
-    // SecureXml disables external DTD/entity access. Domain-wide exemptions are forbidden.
+    // AI-NOTE: REQ-015 AC-4 forbids connections, not identifier URIs. These exact BPMN namespace and
+    // JAXP feature identifiers are never fetched; SecureXml disables external DTD/entity access.
+    // Domain-wide exemptions are forbidden. (근거: D-041, REQ-015 AC-4, run 20260928-cpi-transport)
     private static final Set<String> IDENTIFIER_URIS = Set.of(
             "http://www.omg.org/spec/BPMN/20100524/MODEL",
             "http://apache.org/xml/features/disallow-doctype-decl");
 
-    // AI-NOTE: Match URLs with an authority; the hostless SAP XML namespace is not a connection URL.
+    // Match URLs with an authority; the hostless SAP XML namespace is not a connection URL.
     private static final Pattern URL = Pattern.compile("https?://(?!/)[^\\s\"'<>\\\\]+",
             Pattern.CASE_INSENSITIVE);
 
@@ -40,7 +40,7 @@ class TestHostPolicyTests {
                     try {
                         content = Files.readString(path);
                     } catch (MalformedInputException binaryFile) {
-                        // AI-NOTE: Repository text fixtures are UTF-8; binary files are outside this text scan.
+                        // Repository text fixtures are UTF-8; binary files are outside this text scan.
                         continue;
                     }
                     var matcher = URL.matcher(content);

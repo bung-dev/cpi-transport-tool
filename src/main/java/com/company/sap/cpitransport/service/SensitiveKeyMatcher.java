@@ -18,7 +18,7 @@ public class SensitiveKeyMatcher {
     }
 
     public boolean isSensitive(String key) {
-        // AI-NOTE: The spec does not define null keys; an absent key cannot match.
+        // The spec does not define null keys; an absent key cannot match.
         if (key == null) {
             return false;
         }

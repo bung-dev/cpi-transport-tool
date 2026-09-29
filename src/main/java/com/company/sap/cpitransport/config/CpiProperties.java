@@ -18,7 +18,7 @@ public record CpiProperties(@DefaultValue Connection dev, @DefaultValue Connecti
                              @DefaultValue("") String tokenUrl,
                              @DefaultValue("") String clientId,
                              @DefaultValue("") String clientSecret) {
-        // AI-NOTE: Record-generated toString would expose credentials in diagnostic logs.
+        // AI-NOTE: Record-generated toString would expose credentials in diagnostic logs. (근거: REQ-002 AC-6, run 20260928-cpi-transport)
         @Override
         public String toString() {
             return "Connection[redacted]";
