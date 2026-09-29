@@ -72,7 +72,7 @@ public final class UploadedArtifactExtractor {
             if (Files.isRegularFile(original)) describe("DEV", id, original, Files.readAllBytes(original), null);
             else System.out.println("DEV\t" + id + "\tMISSING\t-\t-\t" + original);
         }
-        // AI-NOTE: The journal includes failed attempts and retries; every matching upload request is retained.
+        // The journal includes failed attempts and retries; every matching upload request is retained.
         System.out.println("Upload requests: " + count);
     }
 

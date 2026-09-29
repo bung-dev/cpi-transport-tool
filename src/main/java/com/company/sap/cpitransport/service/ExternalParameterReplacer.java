@@ -74,7 +74,7 @@ public class ExternalParameterReplacer {
                         status = ReplacementStatus.APPLIED;
                     } catch (CpiCallException exception) {
                         status = ReplacementStatus.FAILED;
-                        // AI-NOTE: A transport failure has no HTTP status; never include its message or body.
+                        // AI-NOTE: A transport failure has no HTTP status; never include its message or body. (근거: REQ-012 AC-3, run 20260928-cpi-transport)
                         failures.add(mapping.key() + ": HTTP " + exception.httpStatus());
                     }
                 }

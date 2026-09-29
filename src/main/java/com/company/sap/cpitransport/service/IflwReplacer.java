@@ -22,7 +22,7 @@ import org.w3c.dom.Node;
 public class IflwReplacer {
     private static final Logger LOG = LoggerFactory.getLogger(IflwReplacer.class);
     private static final String BPMN = "http://www.omg.org/spec/BPMN/20100524/MODEL";
-    // AI-NOTE: The contract omits the ifl namespace URI; use the CPI export namespace.
+    // AI-NOTE: The contract omits the ifl namespace URI; use the CPI export namespace. (근거: REQ-007 AC-1, run 20260928-cpi-transport)
     private static final String IFL = "http:///com.sap.ifl.model/Ifl.xsd";
     private static final String PREFIX = "src/main/resources/scenarioflows/integrationflow/";
     private final SensitiveKeyMatcher sensitiveKeys;
@@ -98,7 +98,7 @@ public class IflwReplacer {
             }
         }
         for (var key : unmapped) LOG.info("Unmapped Content Modifier key: {}", key.key());
-        // AI-NOTE: changed describes actual zip changes, and is false for a dry run.
+        // changed describes actual zip changes, and is false for a dry run.
         return new Result(changed ? writeZip(entries) : zipBytes, replacements, new ArrayList<>(unmapped), changed);
     }
 
@@ -137,7 +137,7 @@ public class IflwReplacer {
                         if ("Name".equals(cell.getAttribute("id"))) name = cell;
                         if ("Value".equals(cell.getAttribute("id"))) cellValue = cell;
                     }
-                    // AI-NOTE: Reject incomplete rows rather than silently losing their comparison results.
+                    // Reject incomplete rows rather than silently losing their comparison results.
                     if (name == null || cellValue == null) throw new IflwParseException();
                     table.rows.add(new Row(type, name.getTextContent(), cellValue, table));
                 }

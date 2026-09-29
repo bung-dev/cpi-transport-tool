@@ -52,7 +52,7 @@ public class MappingFileLoader {
         } catch (IOException | InvalidPathException | SecurityException failure) {
             throw new MappingInvalidException("Mapping file cannot be read");
         } catch (JacksonException failure) {
-            // AI-NOTE: Parser diagnostics may expose values; deliberately omit the cause.
+            // AI-NOTE: Parser diagnostics may expose values; deliberately omit the cause. (근거: REQ-006 AC-3, REQ-012 AC-3, run 20260928-cpi-transport)
             throw new MappingInvalidException("Mapping file has invalid syntax");
         }
         if (root == null || !root.isObject() || !root.path("mappings").isArray()) {

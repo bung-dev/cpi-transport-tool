@@ -18,7 +18,7 @@ import tools.jackson.databind.SerializationFeature;
 @Service
 public class TransportHistoryStore {
     private static final Logger log = LoggerFactory.getLogger(TransportHistoryStore.class);
-    // AI-NOTE: A JVM-wide lock also covers multiple store instances and path aliases.
+    // AI-NOTE: A JVM-wide lock also covers multiple store instances and path aliases. (근거: REQ-011 AC-5, run 20260928-cpi-transport)
     private static final ReentrantLock LOCK = new ReentrantLock();
     private final Path file;
     private final ObjectMapper json;
@@ -48,7 +48,7 @@ public class TransportHistoryStore {
                 }
             }
         } catch (IOException failure) {
-            // AI-NOTE: Storage errors have no specified API contract; fail rather than return an unrecorded 200.
+            // Storage errors have no specified API contract; fail rather than return an unrecorded 200.
             throw new UncheckedIOException("History append failed", failure);
         } finally {
             LOCK.unlock();

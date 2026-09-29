@@ -101,7 +101,7 @@ public class CpiHttpExecutor {
                 delay = nextDelay(delay, transientFailures);
                 continue;
             } catch (RuntimeException failure) {
-                // AI-NOTE: URI/client diagnostics can contain credentials; never retain their cause.
+                // AI-NOTE: URI/client diagnostics can contain credentials; never retain their cause. (근거: REQ-002 AC-6, run 20260928-cpi-transport)
                 throw new CpiCallException(null, "CPI request failed");
             }
             int status = response.getStatusCode().value();
@@ -119,7 +119,7 @@ public class CpiHttpExecutor {
             }
             if ((status == 429 || status >= 500 && status <= 599)
                     && ++transientFailures < retry.maxAttempts()) {
-                // AI-NOTE: Auth/CSRF replays do not reset the transient-failure budget.
+                // AI-NOTE: Auth/CSRF replays do not reset the transient-failure budget. (근거: REQ-003 AC-3, run 20260928-cpi-transport)
                 pause(delay);
                 delay = nextDelay(delay, transientFailures);
                 continue;
@@ -155,7 +155,7 @@ public class CpiHttpExecutor {
 
     private String summarize(byte[] body, List<String> secrets) {
         String summary = body == null ? "" : new String(body, StandardCharsets.UTF_8);
-        // AI-NOTE: Sanitize before truncation so a secret crossing character 200 cannot leak a prefix.
+        // AI-NOTE: Sanitize before truncation so a secret crossing character 200 cannot leak a prefix. (근거: REQ-002 AC-6, run 20260928-cpi-transport)
         for (String secret : secrets.stream().filter(value -> value != null && !value.isEmpty())
                 .sorted((a, b) -> Integer.compare(b.length(), a.length())).toList()) {
             summary = summary.replace(secret, "***");

@@ -57,7 +57,7 @@ public class OAuthTokenProvider {
 
     private AccessToken requestToken(Environment environment) {
         var connection = properties.connection(environment);
-        // AI-NOTE: Request-start time conservatively avoids extending validity by network latency.
+        // AI-NOTE: Request-start time conservatively avoids extending validity by network latency. (근거: REQ-002 AC-4, run 20260928-cpi-transport)
         var issuedAt = clock.instant();
         try {
             JsonNode body = client.post().uri(connection.tokenUrl())
@@ -81,7 +81,7 @@ public class OAuthTokenProvider {
         } catch (TokenRequestException | ResourceAccessException failure) {
             throw failure;
         } catch (RuntimeException failure) {
-            // AI-NOTE: Parser/URI errors may contain secrets; discard their messages and causes.
+            // AI-NOTE: Parser/URI errors may contain secrets; discard their messages and causes. (근거: REQ-002 AC-6, run 20260928-cpi-transport)
             throw new TokenRequestException(null);
         }
     }
@@ -99,7 +99,7 @@ public class OAuthTokenProvider {
         }
     }
 
-    // AI-NOTE: Nested to respect TODO-004 file scope; TODO-005 can reuse this executor.
+    // Nested retry helper, reusable by other callers.
     public static final class RetryExecutor {
         private final TransportProperties.Retry settings;
         private final Sleeper sleeper;

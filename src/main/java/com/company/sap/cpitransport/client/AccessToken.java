@@ -7,7 +7,7 @@ public record AccessToken(String value, Instant refreshAt) {
         return now.isBefore(refreshAt);
     }
 
-    // AI-NOTE: Diagnostic string representations must not expose credentials.
+    // AI-NOTE: Diagnostic string representations must not expose credentials. (근거: REQ-002 AC-6, run 20260928-cpi-transport)
     @Override
     public String toString() {
         return "AccessToken[redacted]";

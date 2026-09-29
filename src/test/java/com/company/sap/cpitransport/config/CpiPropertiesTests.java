@@ -25,7 +25,7 @@ class CpiPropertiesTests {
     private ApplicationContextRunner context(Map<String, Object> variables, String... overrides) {
         return new ApplicationContextRunner()
                 .withInitializer(ctx -> {
-                    // AI-NOTE: Isolate binding tests from developer machine credentials.
+                    // Isolate binding tests from developer machine credentials.
                     ctx.getEnvironment().getPropertySources().replace("systemEnvironment",
                             new SystemEnvironmentPropertySource("systemEnvironment", variables));
                     new ConfigDataApplicationContextInitializer().initialize(ctx);

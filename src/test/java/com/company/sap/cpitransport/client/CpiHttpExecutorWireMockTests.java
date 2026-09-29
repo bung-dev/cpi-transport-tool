@@ -279,7 +279,7 @@ class CpiHttpExecutorWireMockTests {
     @Test
     @DisplayName("REQ-003 AC-2: refreshed CSRF token and cookie replace stale pair")
     void req003_ac2_replayUsesNewSession() {
-        // AI-NOTE: Both rotating values use the approved dummy table, within one DEV scenario.
+        // Both rotating values use the approved dummy table, within one DEV scenario.
         server.stubFor(get(urlEqualTo("/dev/api/v1/")).inScenario("csrf")
                 .whenScenarioStateIs("Started").willReturn(ok()
                         .withHeader("X-CSRF-Token", "dummy-dev-csrf-0001")

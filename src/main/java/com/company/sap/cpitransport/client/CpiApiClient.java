@@ -25,8 +25,8 @@ public class CpiApiClient {
         this.mapper = mapper;
     }
 
-    // AI-NOTE: These OData v2 contracts are the spec section 4 assumptions;
-    // actual tenant compatibility remains backlog Q-13.
+    // AI-NOTE: These OData v2 contracts are the spec section 4 assumptions; actual tenant
+    // compatibility is unverified (backlog Q-13). (근거: REQ-005 AC-4, run 20260928-cpi-transport)
     public List<CpiPackage> listPackages(CpiEnvironment environment) {
         return list(environment, "/IntegrationPackages", this::packageValue);
     }
@@ -117,7 +117,7 @@ public class CpiApiClient {
             if (!data.isObject()) throw invalidResponse();
             return data;
         } catch (RuntimeException failure) {
-            // AI-NOTE: JSON parser diagnostics can expose configuration values; discard the cause.
+            // AI-NOTE: JSON parser diagnostics can expose configuration values; discard the cause. (근거: REQ-002 AC-6, run 20260928-cpi-transport)
             throw invalidResponse();
         }
     }
