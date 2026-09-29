@@ -1,6 +1,7 @@
-@import "tailwindcss";
+/* AI-NOTE: source("./")로 유틸리티 클래스 탐색 범위를 src로 고정한다. 자동 감지는 빌드 위치(저장소 vs git archive 사본)에 따라 CSS가 달라진다 (근거: REQ-002 AC-3, run 20260929-frontend-ui) */
+@import "tailwindcss" source("./");
 
-/* AI-NOTE: static이 없으면 Tailwind v4가 사용되지 않은 테마 변수를 출력에서 뺀다. REQ-003 AC-1 토큰 전부를 빌드 CSS에 남기려면 필요하다. */
+/* AI-NOTE: static이 없으면 Tailwind v4가 사용되지 않은 테마 변수를 출력에서 뺀다. REQ-003 AC-1 토큰 전부를 빌드 CSS에 남기려면 필요하다 (근거: REQ-003 AC-1, run 20260929-frontend-ui) */
 @theme static {
   --color-primary: #5645d4;
   --color-primary-pressed: #4534b3;
