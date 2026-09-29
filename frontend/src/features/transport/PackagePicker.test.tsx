@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ARTIFACTS, PACKAGES, json, mockApi } from '../../test/mockFetch';
@@ -97,7 +97,9 @@ describe('패키지 목록', () => {
     await userEvent.click(screen.getByRole('radio', { name: /Not In PRD/ }));
     await screen.findByRole('checkbox', { name: /IF_Orphan/ });
     releaseFirst(json(ARTIFACTS));
-    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(1));
+    await waitFor(() =>
+      expect(within(screen.getByRole('list', { name: '아티팩트 목록' })).getAllByRole('checkbox')).toHaveLength(1),
+    );
     expect(screen.queryByRole('checkbox', { name: /IF_Order_Sync/ })).toBeNull();
   });
 });

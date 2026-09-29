@@ -1,10 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ARTIFACTS, PACKAGES, json, mockApi } from '../../test/mockFetch';
 import { TransportTab } from './TransportTab';
 
 afterEach(() => vi.unstubAllGlobals());
+
+const boxes = () => within(screen.getByRole('list', { name: '아티팩트 목록' })).getAllByRole('checkbox') as HTMLInputElement[];
 
 async function openDemo() {
   render(<TransportTab />);
@@ -19,15 +21,14 @@ describe('아티팩트 선택', () => {
       'GET /packages/PkgTransportDemo/artifacts': () => json(ARTIFACTS),
     });
     await openDemo();
-    const boxes = screen.getAllByRole('checkbox');
-    expect(boxes.every((b) => !(b as HTMLInputElement).checked)).toBe(true);
-    await userEvent.click(boxes[1]);
-    expect(boxes[1]).toBeChecked();
-    expect(boxes[0]).not.toBeChecked();
+    expect(boxes().every((b) => !b.checked)).toBe(true);
+    await userEvent.click(boxes()[1]);
+    expect(boxes()[1]).toBeChecked();
+    expect(boxes()[0]).not.toBeChecked();
     await userEvent.click(screen.getByRole('button', { name: '전체 선택' }));
-    expect(screen.getAllByRole('checkbox').every((b) => (b as HTMLInputElement).checked)).toBe(true);
+    expect(boxes().every((b) => b.checked)).toBe(true);
     await userEvent.click(screen.getByRole('button', { name: '선택 해제' }));
-    expect(screen.getAllByRole('checkbox').every((b) => !(b as HTMLInputElement).checked)).toBe(true);
+    expect(boxes().every((b) => !b.checked)).toBe(true);
   });
 
   it('REQ-004 AC-3: 다른 패키지를 고르면 이전 선택이 비워진다', async () => {
@@ -40,7 +41,7 @@ describe('아티팩트 선택', () => {
     await userEvent.click(screen.getByRole('button', { name: '전체 선택' }));
     await userEvent.click(screen.getByRole('radio', { name: /Not In PRD/ }));
     await screen.findByRole('checkbox', { name: /IF_Order_Sync/ });
-    expect(screen.getAllByRole('checkbox').every((b) => !(b as HTMLInputElement).checked)).toBe(true);
+    expect(boxes().every((b) => !b.checked)).toBe(true);
   });
 
   it('REQ-004 AC-4: 아티팩트 조회 오류 후 다시 시도가 같은 packageId로 재조회한다', async () => {
