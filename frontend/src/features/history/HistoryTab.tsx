@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getHistory } from '../../api/client';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Button } from '../../components/ui/Button';
@@ -12,13 +12,28 @@ const yesNo = (v: boolean) => (v ? '예' : '아니오');
 export function HistoryTab() {
   const { state, retry } = useRemote(getHistory, 'history');
   const [selected, setSelected] = useState<number | null>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
+  const rowButtons = useRef(new Map<number, HTMLButtonElement>());
+  // 상세를 연 행. 목록으로 돌아왔을 때만 그 행에 포커스를 돌려주고, 새로고침·재진입 렌더에서는 포커스를 옮기지 않는다.
+  const openedFrom = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (selected !== null) {
+      backRef.current?.focus();
+    } else if (openedFrom.current !== null) {
+      rowButtons.current.get(openedFrom.current)?.focus();
+      openedFrom.current = null;
+    }
+  }, [selected]);
 
   // 상세는 목록 응답의 항목을 그대로 쓴다(추가 API 호출 없음, REQ-007 AC-2).
   if (state.status === 'ok' && selected !== null && state.data[selected]) {
     return (
       <div className="flex flex-col gap-4 min-w-0">
         <div>
-          <Button onClick={() => setSelected(null)}>목록으로</Button>
+          <Button ref={backRef} onClick={() => setSelected(null)}>
+            목록으로
+          </Button>
         </div>
         <TransportResult result={state.data[selected]} />
       </div>
@@ -66,7 +81,14 @@ export function HistoryTab() {
                   <Td>
                     <button
                       type="button"
-                      onClick={() => setSelected(i)}
+                      ref={(el) => {
+                        if (el) rowButtons.current.set(i, el);
+                        else rowButtons.current.delete(i);
+                      }}
+                      onClick={() => {
+                        openedFrom.current = i;
+                        setSelected(i);
+                      }}
                       className="cursor-pointer text-left text-link-blue underline break-all"
                     >
                       {h.transportId}

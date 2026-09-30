@@ -97,6 +97,22 @@ describe('이력 탭', () => {
     );
   });
 
+  it('REQ-009 AC-2: 상세를 열면 목록으로 버튼에, 돌아오면 연 행의 transportId 버튼에 포커스가 가고 새로고침은 포커스를 옮기지 않는다', async () => {
+    mockApi({ 'GET /transport/history': () => json([entry('t-1'), entry('t-2')]) });
+    render(<HistoryTab />);
+    const rowBtn = await screen.findByRole('button', { name: 't-2' });
+    expect(document.activeElement).toBe(document.body);
+    rowBtn.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '목록으로' }));
+    await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 't-2' }));
+    await userEvent.click(screen.getByRole('button', { name: '새로고침' }));
+    await screen.findByRole('button', { name: 't-2' });
+    expect(document.activeElement).not.toBe(screen.getByRole('button', { name: 't-2' }));
+    expect(document.activeElement).not.toBe(screen.getByRole('button', { name: 't-1' }));
+  });
+
   it('REQ-008 AC-3: 조회 오류는 role=alert와 다시 시도로 보인다', async () => {
     mockApi({ 'GET /transport/history': () => json({ error: 'CPI_UNAVAILABLE', message: 'down' }, 502) });
     render(<HistoryTab />);
