@@ -159,7 +159,11 @@ describe('이력 탭', () => {
     await userEvent.click(refresh);
     expect(refresh).toBeDisabled();
     // 실제 브라우저는 disabled가 된 버튼에서 포커스를 body로 떨어뜨린다(jsdom은 흉내 내지 않음).
-    refresh.blur();
+    // jsdom은 disabled 요소의 blur()를 무시하므로 임시 요소로 포커스를 옮긴 뒤 지운다.
+    const sink = document.createElement('button');
+    document.body.append(sink);
+    sink.focus();
+    sink.remove();
     expect(document.activeElement).toBe(document.body);
     release(json([entry('t-3')]));
     await screen.findByRole('button', { name: 't-3' });
