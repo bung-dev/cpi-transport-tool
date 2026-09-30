@@ -1,5 +1,65 @@
 # CPI Transport Tool
 
+## 실행 방법
+
+필요한 것: JDK 25(Gradle toolchain이 사용), Node.js 24 이상과 npm, 비어 있는 포트 8080·18081·18082. 저장소 루트에서 실행하며, 실제 SAP CPI 없이 로컬 스텁과 더미 자격증명으로 실행됩니다.
+
+**터미널 1: 스텁 기동**
+
+PowerShell 5.1:
+
+```powershell
+.\gradlew.bat runLocalStubs
+```
+
+Git Bash:
+
+```bash
+./gradlew runLocalStubs
+```
+
+**터미널 2: 더미 환경 변수 설정, 프론트 빌드, 앱 기동**
+
+PowerShell 5.1:
+
+```powershell
+$env:CPI_DEV_API_URL = 'http://localhost:18081'
+$env:CPI_DEV_TOKEN_URL = 'http://localhost:18081/oauth/token'
+$env:CPI_DEV_CLIENT_ID = 'dummy-dev-client'
+$env:CPI_DEV_CLIENT_SECRET = 'dummy-dev-secret'
+$env:CPI_PRD_API_URL = 'http://localhost:18082'
+$env:CPI_PRD_TOKEN_URL = 'http://localhost:18082/oauth/token'
+$env:CPI_PRD_CLIENT_ID = 'dummy-prd-client'
+$env:CPI_PRD_CLIENT_SECRET = 'dummy-prd-secret'
+New-Item -ItemType Directory -Force build/local-stubs | Out-Null
+$env:CPI_TRANSPORT_MAPPINGFILE = 'examples/mapping-example.yml'
+$env:CPI_TRANSPORT_HISTORY_FILE = 'build/local-stubs/history.jsonl'
+$env:LOGGING_FILE_NAME = 'build/local-stubs/app.log'
+.\gradlew.bat frontendBuild
+.\gradlew.bat bootRun
+```
+
+Git Bash:
+
+```bash
+export CPI_DEV_API_URL=http://localhost:18081
+export CPI_DEV_TOKEN_URL=http://localhost:18081/oauth/token
+export CPI_DEV_CLIENT_ID=dummy-dev-client
+export CPI_DEV_CLIENT_SECRET=dummy-dev-secret
+export CPI_PRD_API_URL=http://localhost:18082
+export CPI_PRD_TOKEN_URL=http://localhost:18082/oauth/token
+export CPI_PRD_CLIENT_ID=dummy-prd-client
+export CPI_PRD_CLIENT_SECRET=dummy-prd-secret
+mkdir -p build/local-stubs
+export CPI_TRANSPORT_MAPPINGFILE=examples/mapping-example.yml
+export CPI_TRANSPORT_HISTORY_FILE=build/local-stubs/history.jsonl
+export LOGGING_FILE_NAME=build/local-stubs/app.log
+./gradlew frontendBuild
+./gradlew bootRun
+```
+
+**브라우저**로 http://localhost:8080/ 을 엽니다. 정지는 두 터미널에서 Ctrl+C입니다. 자세한 절차는 아래 [1절](#1-스텁-기동-터미널-1), [2절](#2-앱-기동-터미널-2), [5절](#5-요청-저널시나리오-초기화와-정지), [6절](#6-화면프론트엔드)을 봅니다.
+
 SAP Cloud Integration(CPI)의 DEV 패키지를 PRD로 이관하는 도구입니다. 웹 화면과 REST API를 제공합니다.
 
 - 패키지와 아티팩트(iFlow)를 골라 DEV에서 PRD로 이관합니다.
@@ -8,6 +68,8 @@ SAP Cloud Integration(CPI)의 DEV 패키지를 PRD로 이관하는 도구입니�
 - 이관 결과를 이력으로 남기고 화면에서 다시 볼 수 있습니다.
 
 아래 절차는 실제 테넌트 없이 localhost WireMock 스텁과 더미 자격증명만 사용합니다.
+
+알려진 한계: 실제 SAP CPI 테넌트 연동은 아직 검증하지 않았고 로컬 스텁으로만 확인했습니다.
 
 ## 화면
 
@@ -26,17 +88,6 @@ SAP Cloud Integration(CPI)의 DEV 패키지를 PRD로 이관하는 도구입니�
 ![오류 표시와 다시 시도](docs/images/error.png)
 
 오류가 나면 원인을 안내하고 다시 시도 버튼을 보여 줍니다.
-
-## 빠른 시작
-
-화면을 가장 짧게 띄우는 순서입니다. 저장소 루트에서 실행하며, 사전 조건은 아래 "사전 조건"과 [6-1절](#6-1-사전-조건)을 봅니다.
-
-1. 터미널 1에서 스텁을 기동합니다: `./gradlew runLocalStubs` (PowerShell은 `.\gradlew.bat runLocalStubs`). 상세는 [1절](#1-스텁-기동-터미널-1).
-2. 터미널 2에서 `CPI_*` 더미 환경 변수를 설정하고(2절 예시) `./gradlew bootJar`로 프론트 포함 JAR를 만듭니다. 상세는 [2절](#2-앱-기동-터미널-2)과 [6-3절](#6-3-배포-형태로-실행-실행형-jar).
-3. JDK 25의 `java -jar build/libs/cpi-transport-tool-0.0.1-SNAPSHOT.jar --cpi.transport.mapping-file=examples/mapping-example.yml --cpi.transport.history.file=build/local-stubs/history.jsonl --logging.file.name=build/local-stubs/app.log`로 실행합니다. `java` 경로와 PowerShell 명령은 6-3절을 따릅니다.
-4. 브라우저로 `http://localhost:8080/`을 엽니다. 정지는 [5절](#5-요청-저널시나리오-초기화와-정지)을 따릅니다.
-
-알려진 한계: 실제 SAP CPI 테넌트 연동은 아직 검증하지 않았고 로컬 스텁으로만 확인했습니다.
 
 ## 사전 조건
 
