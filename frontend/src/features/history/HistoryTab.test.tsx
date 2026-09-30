@@ -113,6 +113,39 @@ describe('이력 탭', () => {
     expect(document.activeElement).not.toBe(screen.getByRole('button', { name: 't-1' }));
   });
 
+  it('REQ-009 AC-2: 목록으로 복귀한 뒤 새로고침으로 목록이 다시 그려져도 포커스는 새로고침 버튼에 남고 행 버튼으로 옮겨 가지 않는다', async () => {
+    mockApi({ 'GET /transport/history': () => json([entry('t-1'), entry('t-2')]) });
+    render(<HistoryTab />);
+    (await screen.findByRole('button', { name: 't-2' })).focus();
+    await userEvent.keyboard('{Enter}');
+    await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 't-2' }));
+    const refresh = screen.getByRole('button', { name: '새로고침' });
+    await userEvent.click(refresh);
+    await screen.findByRole('button', { name: 't-2' });
+    await waitFor(() => expect(screen.getByRole('button', { name: '새로고침' })).toBeEnabled());
+    expect(screen.getByRole('button', { name: '새로고침' })).toBe(refresh);
+    expect(document.activeElement).toBe(refresh);
+  });
+
+  it('REQ-009 AC-2: 행을 열고 목록으로 돌아온 뒤 다른 탭을 거쳐 이력 탭을 다시 열면 어떤 행 버튼에도 포커스가 가지 않는다', async () => {
+    mockApi({
+      'GET /packages': () => json(PACKAGES),
+      'GET /transport/history': () => json([entry('t-1'), entry('t-2')]),
+    });
+    render(<App />);
+    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    await userEvent.click(await screen.findByRole('button', { name: 't-1' }));
+    await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
+    await userEvent.click(screen.getByRole('tab', { name: '이관' }));
+    const historyTab = screen.getByRole('tab', { name: '이력' });
+    await userEvent.click(historyTab);
+    await screen.findByRole('button', { name: 't-1' });
+    expect(document.activeElement).not.toBe(screen.getByRole('button', { name: 't-1' }));
+    expect(document.activeElement).not.toBe(screen.getByRole('button', { name: 't-2' }));
+    expect(document.activeElement).toBe(historyTab);
+  });
+
   it('REQ-008 AC-3: 조회 오류는 role=alert와 다시 시도로 보인다', async () => {
     mockApi({ 'GET /transport/history': () => json({ error: 'CPI_UNAVAILABLE', message: 'down' }, 502) });
     render(<HistoryTab />);

@@ -16,6 +16,9 @@ export function HistoryTab() {
   const rowButtons = useRef(new Map<number, HTMLButtonElement>());
   // 상세를 연 행. 목록으로 돌아왔을 때만 그 행에 포커스를 돌려주고, 새로고침·재진입 렌더에서는 포커스를 옮기지 않는다.
   const openedFrom = useRef<number | null>(null);
+  // AI-NOTE: 새로고침 중에는 버튼이 disabled가 되어 실제 브라우저에서 포커스가 body로 떨어지므로, 응답이 끝나면 새로고침 버튼으로 되돌린다 (근거: dev-ISS-104, run 20260929-frontend-ui EVD-070).
+  const refreshBtn = useRef<HTMLButtonElement>(null);
+  const refreshing = useRef(false);
 
   useEffect(() => {
     if (selected !== null) {
@@ -25,6 +28,13 @@ export function HistoryTab() {
       openedFrom.current = null;
     }
   }, [selected]);
+
+  useEffect(() => {
+    if (state.status !== 'loading' && refreshing.current) {
+      refreshing.current = false;
+      refreshBtn.current?.focus();
+    }
+  }, [state.status]);
 
   // 상세는 목록 응답의 항목을 그대로 쓴다(추가 API 호출 없음, REQ-007 AC-2).
   if (state.status === 'ok' && selected !== null && state.data[selected]) {
@@ -44,7 +54,9 @@ export function HistoryTab() {
     <div className="flex flex-col gap-4 min-w-0">
       <div>
         <Button
+          ref={refreshBtn}
           onClick={() => {
+            refreshing.current = true;
             setSelected(null);
             retry();
           }}
