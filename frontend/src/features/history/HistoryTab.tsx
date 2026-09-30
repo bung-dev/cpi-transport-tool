@@ -16,7 +16,7 @@ export function HistoryTab() {
   const rowButtons = useRef(new Map<number, HTMLButtonElement>());
   // 상세를 연 행. 목록으로 돌아왔을 때만 그 행에 포커스를 돌려주고, 새로고침·재진입 렌더에서는 포커스를 옮기지 않는다.
   const openedFrom = useRef<number | null>(null);
-  // AI-NOTE: 새로고침 중에는 버튼이 disabled가 되어 실제 브라우저에서 포커스가 body로 떨어지므로, 응답이 끝나면 새로고침 버튼으로 되돌린다 (근거: dev-ISS-104, run 20260929-frontend-ui EVD-070).
+  // AI-NOTE: 새로고침 중에는 버튼이 disabled가 되어 실제 브라우저에서 포커스가 body로 떨어지므로, 응답이 끝나면 새로고침 버튼으로 되돌린다 (근거: REQ-009 AC-2, run 20260929-frontend-ui, dev-ISS-104).
   const refreshBtn = useRef<HTMLButtonElement>(null);
   const refreshing = useRef(false);
 

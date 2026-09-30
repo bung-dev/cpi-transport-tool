@@ -146,6 +146,27 @@ describe('이력 탭', () => {
     expect(document.activeElement).toBe(historyTab);
   });
 
+  it('REQ-009 AC-2: 새로고침 중 브라우저가 포커스를 잃어도(disabled blur) 응답이 끝나면 새로고침 버튼으로 되돌린다', async () => {
+    let n = 0;
+    let release: (r: Response) => void = () => {};
+    mockApi({
+      'GET /transport/history': () =>
+        ++n === 1 ? json([entry('t-1')]) : new Promise<Response>((r) => (release = r)),
+    });
+    render(<HistoryTab />);
+    await screen.findByRole('table');
+    const refresh = screen.getByRole('button', { name: '새로고침' });
+    await userEvent.click(refresh);
+    expect(refresh).toBeDisabled();
+    // 실제 브라우저는 disabled가 된 버튼에서 포커스를 body로 떨어뜨린다(jsdom은 흉내 내지 않음).
+    refresh.blur();
+    expect(document.activeElement).toBe(document.body);
+    release(json([entry('t-3')]));
+    await screen.findByRole('button', { name: 't-3' });
+    await waitFor(() => expect(refresh).toBeEnabled());
+    expect(document.activeElement).toBe(refresh);
+  });
+
   it('REQ-008 AC-3: 조회 오류는 role=alert와 다시 시도로 보인다', async () => {
     mockApi({ 'GET /transport/history': () => json({ error: 'CPI_UNAVAILABLE', message: 'down' }, 502) });
     render(<HistoryTab />);
