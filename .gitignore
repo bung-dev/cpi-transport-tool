@@ -177,3 +177,8 @@ workflow/
 runs/
 wiki/
 .omc/
+
+### frontend ###
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/

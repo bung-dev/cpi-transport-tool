@@ -1,0 +1,52 @@
+/* AI-NOTE: source("./")로 유틸리티 클래스 탐색 범위를 src로 고정한다. 자동 감지는 빌드 위치(저장소 vs git archive 사본)에 따라 CSS가 달라진다 (근거: REQ-002 AC-3, run 20260929-frontend-ui) */
+@import "tailwindcss" source("./");
+
+/* AI-NOTE: static이 없으면 Tailwind v4가 사용되지 않은 테마 변수를 출력에서 뺀다. REQ-003 AC-1 토큰 전부를 빌드 CSS에 남기려면 필요하다 (근거: REQ-003 AC-1, run 20260929-frontend-ui) */
+@theme static {
+  --color-primary: #5645d4;
+  --color-primary-pressed: #4534b3;
+  --color-on-primary: #ffffff;
+  --color-canvas: #ffffff;
+  --color-surface: #f6f5f4;
+  --color-hairline: #e5e3df;
+  --color-hairline-strong: #c8c4be;
+  --color-link-blue: #0075de;
+
+  --color-ink-deep: #000000;
+  --color-ink: #1a1a1a;
+  --color-charcoal: #37352f;
+  --color-slate: #5d5b54;
+  --color-steel: #787671;
+  --color-stone: #a4a097;
+  --color-muted: #bbb8b1;
+
+  --color-card-tint-mint: #d9f3e1;
+  --color-card-tint-peach: #ffe8d4;
+  --color-card-tint-rose: #fde0ec;
+  --color-card-tint-lavender: #e6e0f5;
+  --color-card-tint-yellow: #fef7d6;
+  --color-card-tint-sky: #dcecfa;
+  --color-card-tint-gray: #f0eeec;
+
+  --color-semantic-success: #1aae39;
+  --color-semantic-warning: #dd5b00;
+  --color-semantic-error: #e03131;
+
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  --font-sans: Inter, -apple-system, system-ui, 'Segoe UI', Helvetica, sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background-color: var(--color-canvas);
+}
+
+/* REQ-009 AC-2: 모든 인터랙티브 요소의 키보드 포커스 표시 */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}

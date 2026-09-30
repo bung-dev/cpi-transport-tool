@@ -1,6 +1,42 @@
 # CPI Transport Tool
 
-DEV iFlow를 PRD로 이관하고 매핑 파일로 Content Modifier와 Externalized Parameter를 치환하는 REST 도구입니다. 아래 절차는 실제 테넌트 없이 localhost WireMock과 더미 자격증명만 사용합니다.
+SAP Cloud Integration(CPI)의 DEV 패키지를 PRD로 이관하는 도구입니다. 웹 화면과 REST API를 제공합니다.
+
+- 패키지와 아티팩트(iFlow)를 골라 DEV에서 PRD로 이관합니다.
+- 매핑 파일(YAML 또는 JSON)로 Content Modifier와 Externalized Parameter 값을 PRD 값으로 치환합니다.
+- 드라이런(기본값)으로 PRD를 건드리지 않고 결과를 먼저 확인한 뒤, 확인 대화상자를 거쳐 실제 이관을 실행합니다.
+- 이관 결과를 이력으로 남기고 화면에서 다시 볼 수 있습니다.
+
+아래 절차는 실제 테넌트 없이 localhost WireMock 스텁과 더미 자격증명만 사용합니다.
+
+## 화면
+
+![이관 탭: 패키지·아티팩트를 고르고 드라이런을 실행한 결과](docs/images/transport-result.png)
+
+이관 탭: 패키지·아티팩트를 선택하고 드라이런을 실행한 결과입니다.
+
+![실제 이관 확인 대화상자](docs/images/confirm-dialog.png)
+
+실제 이관을 실행하기 전에 뜨는 확인 대화상자입니다.
+
+![이력 탭](docs/images/history.png)
+
+이력 탭: 지난 이관 목록이며 transportId를 누르면 상세 결과를 봅니다.
+
+![오류 표시와 다시 시도](docs/images/error.png)
+
+오류가 나면 원인을 안내하고 다시 시도 버튼을 보여 줍니다.
+
+## 빠른 시작
+
+화면을 가장 짧게 띄우는 순서입니다. 저장소 루트에서 실행하며, 사전 조건은 아래 "사전 조건"과 [6-1절](#6-1-사전-조건)을 봅니다.
+
+1. 터미널 1에서 스텁을 기동합니다: `./gradlew runLocalStubs` (PowerShell은 `.\gradlew.bat runLocalStubs`). 상세는 [1절](#1-스텁-기동-터미널-1).
+2. 터미널 2에서 `CPI_*` 더미 환경 변수를 설정하고(2절 예시) `./gradlew bootJar`로 프론트 포함 JAR를 만듭니다. 상세는 [2절](#2-앱-기동-터미널-2)과 [6-3절](#6-3-배포-형태로-실행-실행형-jar).
+3. JDK 25의 `java -jar build/libs/cpi-transport-tool-0.0.1-SNAPSHOT.jar --cpi.transport.mapping-file=examples/mapping-example.yml --cpi.transport.history.file=build/local-stubs/history.jsonl --logging.file.name=build/local-stubs/app.log`로 실행합니다. `java` 경로와 PowerShell 명령은 6-3절을 따릅니다.
+4. 브라우저로 `http://localhost:8080/`을 엽니다. 정지는 [5절](#5-요청-저널시나리오-초기화와-정지)을 따릅니다.
+
+알려진 한계: 실제 SAP CPI 테넌트 연동은 아직 검증하지 않았고 로컬 스텁으로만 확인했습니다.
 
 ## 사전 조건
 
@@ -170,4 +206,77 @@ PowerShell:
 ```powershell
 netstat -ano | Select-String -Pattern ":8080|:18081|:18082"
 taskkill /PID <PID> /T /F
+```
+
+## 6. 화면(프론트엔드)
+
+웹 화면은 `frontend/`(Vite + React + TypeScript + Tailwind CSS v4)에 있고, 빌드 결과는 실행형 JAR 안에 들어가 `http://localhost:8080/`에서 열립니다. 화면은 같은 출처의 API(`/packages`, `/transport`, `/transport/history`)만 호출합니다.
+
+### 6-1. 사전 조건
+
+- Node.js 24 이상(확인한 버전 v24.14.0)과 npm.
+- `./gradlew bootJar`와 `./gradlew build`는 `frontend/`에서 `npm ci`와 `npm run build`를 실행하므로 Node와 npm 레지스트리 접근이 필요합니다.
+- `./gradlew test`와 `./gradlew bootRun`은 Node를 실행하지 않습니다.
+- PATH의 `java`가 25가 아니면 `./gradlew -q javaToolchains`에서 `Language Version: 25` 항목의 `Location`을 확인하고, 그 아래 `bin/java`(PowerShell은 `bin\java.exe`)를 씁니다.
+
+### 6-2. 개발 (개발 서버 5173)
+
+개발 서버는 `/packages`와 `/transport`로 시작하는 요청을 `http://localhost:8080`으로 프록시하므로, 백엔드를 2절대로 먼저 기동합니다.
+
+PowerShell 5.1:
+
+```powershell
+cd frontend
+npm.cmd ci
+npm.cmd run dev
+```
+
+다른 터미널에서 `npm.cmd test`(단위 테스트), `npm.cmd run build`(타입 검사 + 빌드)를 실행합니다. 개발 서버는 `http://localhost:5173/`에서 열립니다.
+
+Git Bash:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+다른 터미널에서 `npm test`, `npm run build`를 실행합니다.
+
+### 6-3. 배포 형태로 실행 (실행형 JAR)
+
+`bootJar`가 프론트 빌드를 포함해 JAR를 만듭니다. 환경 변수는 2절과 같고, 매핑·이력·로그는 아래처럼 인자로 지정합니다. 스텁(1절)을 먼저 띄웁니다.
+
+PowerShell 5.1 (환경 변수 `CPI_*`는 2절 PowerShell 예시대로 먼저 설정):
+
+```powershell
+.\gradlew.bat bootJar
+& "<JDK25 경로>\bin\java.exe" -jar build\libs\cpi-transport-tool-0.0.1-SNAPSHOT.jar --cpi.transport.mapping-file=examples/mapping-example.yml --cpi.transport.history.file=build/local-stubs/history.jsonl --logging.file.name=build/local-stubs/app.log
+```
+
+Git Bash (환경 변수 `CPI_*`는 2절 Git Bash 예시대로 먼저 설정):
+
+```bash
+./gradlew bootJar
+<JDK25 경로>/bin/java -jar build/libs/cpi-transport-tool-0.0.1-SNAPSHOT.jar --cpi.transport.mapping-file=examples/mapping-example.yml --cpi.transport.history.file=build/local-stubs/history.jsonl --logging.file.name=build/local-stubs/app.log
+```
+
+브라우저로 `http://localhost:8080/`을 엽니다. 정지는 5절을 따릅니다.
+
+### 6-4. bootRun으로 화면 보기
+
+`./gradlew bootRun`은 `frontend/dist`가 있을 때만 화면을 제공하고, 없으면 API만 제공합니다. 화면이 필요하면 먼저 프론트를 빌드합니다.
+
+PowerShell 5.1:
+
+```powershell
+.\gradlew.bat frontendBuild
+.\gradlew.bat bootRun
+```
+
+Git Bash:
+
+```bash
+./gradlew frontendBuild
+./gradlew bootRun
 ```
