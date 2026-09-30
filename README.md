@@ -1,6 +1,42 @@
 # CPI Transport Tool
 
-DEV iFlow를 PRD로 이관하고 매핑 파일로 Content Modifier와 Externalized Parameter를 치환하는 REST 도구입니다. 아래 절차는 실제 테넌트 없이 localhost WireMock과 더미 자격증명만 사용합니다.
+SAP Cloud Integration(CPI)의 DEV 패키지를 PRD로 이관하는 도구입니다. 웹 화면과 REST API를 제공합니다.
+
+- 패키지와 아티팩트(iFlow)를 골라 DEV에서 PRD로 이관합니다.
+- 매핑 파일(YAML 또는 JSON)로 Content Modifier와 Externalized Parameter 값을 PRD 값으로 치환합니다.
+- 드라이런(기본값)으로 PRD를 건드리지 않고 결과를 먼저 확인한 뒤, 확인 대화상자를 거쳐 실제 이관을 실행합니다.
+- 이관 결과를 이력으로 남기고 화면에서 다시 볼 수 있습니다.
+
+아래 절차는 실제 테넌트 없이 localhost WireMock 스텁과 더미 자격증명만 사용합니다.
+
+## 화면
+
+![이관 탭: 패키지·아티팩트를 고르고 드라이런을 실행한 결과](docs/images/transport-result.png)
+
+이관 탭: 패키지·아티팩트를 선택하고 드라이런을 실행한 결과입니다.
+
+![실제 이관 확인 대화상자](docs/images/confirm-dialog.png)
+
+실제 이관을 실행하기 전에 뜨는 확인 대화상자입니다.
+
+![이력 탭](docs/images/history.png)
+
+이력 탭: 지난 이관 목록이며 transportId를 누르면 상세 결과를 봅니다.
+
+![오류 표시와 다시 시도](docs/images/error.png)
+
+오류가 나면 원인을 안내하고 다시 시도 버튼을 보여 줍니다.
+
+## 빠른 시작
+
+화면을 가장 짧게 띄우는 순서입니다. 저장소 루트에서 실행하며, 사전 조건은 아래 "사전 조건"과 [6-1절](#6-1-사전-조건)을 봅니다.
+
+1. 터미널 1에서 스텁을 기동합니다: `./gradlew runLocalStubs` (PowerShell은 `.\gradlew.bat runLocalStubs`). 상세는 [1절](#1-스텁-기동-터미널-1).
+2. 터미널 2에서 `CPI_*` 더미 환경 변수를 설정하고(2절 예시) `./gradlew bootJar`로 프론트 포함 JAR를 만듭니다. 상세는 [2절](#2-앱-기동-터미널-2)과 [6-3절](#6-3-배포-형태로-실행-실행형-jar).
+3. JDK 25의 `java -jar build/libs/cpi-transport-tool-0.0.1-SNAPSHOT.jar --cpi.transport.mapping-file=examples/mapping-example.yml --cpi.transport.history.file=build/local-stubs/history.jsonl --logging.file.name=build/local-stubs/app.log`로 실행합니다. `java` 경로와 PowerShell 명령은 6-3절을 따릅니다.
+4. 브라우저로 `http://localhost:8080/`을 엽니다. 정지는 [5절](#5-요청-저널시나리오-초기화와-정지)을 따릅니다.
+
+알려진 한계: 실제 SAP CPI 테넌트 연동은 아직 검증하지 않았고 로컬 스텁으로만 확인했습니다.
 
 ## 사전 조건
 
