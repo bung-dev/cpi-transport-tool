@@ -56,11 +56,11 @@ describe('이관 결과', () => {
   it('REQ-006 AC-2: 아티팩트 카드에 id, 상태·action·deploy 배지(색은 매핑 모듈), error code/message', () => {
     render(<TransportResult result={BASE} />);
     expect(screen.getByRole('heading', { name: 'IF_Order_Sync' })).toBeInTheDocument();
-    expect(screen.getByText('SUCCESS').className).toContain('bg-card-tint-mint');
-    expect(screen.getByText('SKIPPED_DRY_RUN').className).toContain('bg-card-tint-lavender');
-    expect(screen.getByText('FAILED').className).toContain('bg-card-tint-rose');
-    expect(screen.getByText('ERROR').className).toContain('bg-card-tint-rose');
-    expect(screen.getByText('UPDATED').className).toContain('bg-card-tint-lavender');
+    expect(screen.getByText('SUCCESS').className).toContain('bg-success-bg');
+    expect(screen.getByText('SKIPPED_DRY_RUN').className).toContain('bg-accent-bg');
+    expect(screen.getByText('FAILED').className).toContain('bg-danger-bg');
+    expect(screen.getByText('ERROR').className).toContain('bg-danger-bg');
+    expect(screen.getByText('UPDATED').className).toContain('bg-accent-bg');
     expect(screen.getByText('CONFIGURATION_UPDATE_FAILED')).toBeInTheDocument();
     expect(screen.getByText(/update failed/)).toBeInTheDocument();
   });
@@ -71,9 +71,9 @@ describe('이관 결과', () => {
     const rows = within(table).getAllByRole('row');
     expect(rows).toHaveLength(3);
     expect(within(rows[1]).getByText('DEV_ERP')).toBeInTheDocument();
-    expect(within(rows[1]).getByText('PLANNED').className).toContain('bg-card-tint-lavender');
+    expect(within(rows[1]).getByText('PLANNED').className).toContain('bg-accent-bg');
     expect(within(rows[2]).getAllByText('—')).toHaveLength(2);
-    expect(within(rows[2]).getByText('KEY_NOT_FOUND').className).toContain('bg-card-tint-gray');
+    expect(within(rows[2]).getByText('KEY_NOT_FOUND').className).toContain('bg-neutral-bg');
     expect(screen.getByText('header / TraceId')).toBeInTheDocument();
     expect(screen.getByText('치환 항목 없음')).toBeInTheDocument();
     expect(screen.getByText('매핑되지 않은 키 없음')).toBeInTheDocument();

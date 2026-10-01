@@ -5,9 +5,9 @@ type Variant = 'primary' | 'secondary';
 const base = 'rounded-md px-[18px] py-[10px] text-sm font-medium cursor-pointer';
 const variants: Record<Variant, string> = {
   primary:
-    'bg-primary text-on-primary active:bg-primary-pressed disabled:bg-hairline disabled:text-muted disabled:cursor-not-allowed',
+    'bg-primary text-on-primary active:bg-primary-pressed disabled:bg-hairline disabled:text-ink-disabled disabled:cursor-not-allowed',
   secondary:
-    'bg-transparent text-ink border border-hairline-strong disabled:text-muted disabled:cursor-not-allowed',
+    'bg-transparent text-ink border border-hairline-strong disabled:text-ink-disabled disabled:cursor-not-allowed',
 };
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {

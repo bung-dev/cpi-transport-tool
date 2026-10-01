@@ -57,17 +57,17 @@ export function RunPanel({ packageId, artifactIds, onResult }: Props) {
     <div className="flex flex-col gap-4 min-w-0">
       <TransportOptions dryRun={dryRun} deploy={deploy} onDryRunChange={setDryRun} onDeployChange={setDeploy} />
       {packageId !== null && artifactIds.length === 0 && (
-        <p className="text-sm text-slate">패키지의 모든 아티팩트가 대상</p>
+        <p className="text-sm text-ink-secondary">패키지의 모든 아티팩트가 대상</p>
       )}
       {tooMany && (
-        <p className="text-sm text-semantic-error">한 번에 100개까지 선택할 수 있습니다</p>
+        <p className="text-sm text-danger-fg">한 번에 100개까지 선택할 수 있습니다</p>
       )}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <Button variant="primary" onClick={onRunClick} disabled={!canRun}>
           이관 실행
         </Button>
         {busy && !confirmOpen && (
-          <p role="status" className="text-sm text-slate">
+          <p role="status" className="text-sm text-ink-secondary">
             이관 실행 중
           </p>
         )}

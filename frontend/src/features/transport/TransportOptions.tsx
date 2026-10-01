@@ -13,7 +13,7 @@ export function TransportOptions({ dryRun, deploy, onDryRunChange, onDeployChang
       <Checkbox label="드라이런" checked={dryRun} onChange={(e) => onDryRunChange(e.target.checked)} />
       <Checkbox label="배포" checked={deploy} onChange={(e) => onDeployChange(e.target.checked)} />
       {dryRun && deploy && (
-        <p className="text-sm text-slate">드라이런에서는 배포하지 않습니다(SKIPPED_DRY_RUN)</p>
+        <p className="text-sm text-ink-secondary">드라이런에서는 배포하지 않습니다(SKIPPED_DRY_RUN)</p>
       )}
     </div>
   );

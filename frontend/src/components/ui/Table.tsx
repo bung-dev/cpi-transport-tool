@@ -13,7 +13,7 @@ export function Table({
 }
 
 export function Th({ className = '', ...rest }: ThHTMLAttributes<HTMLTableCellElement>) {
-  return <th scope="col" className={`px-3 py-2 font-medium text-charcoal bg-surface ${className}`} {...rest} />;
+  return <th scope="col" className={`px-3 py-2 font-medium text-ink bg-surface ${className}`} {...rest} />;
 }
 
 export function Td({ className = '', ...rest }: TdHTMLAttributes<HTMLTableCellElement>) {

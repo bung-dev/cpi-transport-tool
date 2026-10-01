@@ -46,7 +46,7 @@ export function Tabs({ tabs, activeId, onChange, children }: Props) {
               onClick={() => onChange(t.id)}
               onKeyDown={(e) => onKeyDown(e, i)}
               className={`px-4 py-2 text-sm font-medium cursor-pointer -mb-px border-b-2 ${
-                active ? 'text-ink border-ink' : 'text-steel border-transparent'
+                active ? 'text-ink border-ink' : 'text-ink-tertiary border-transparent'
               }`}
             >
               {t.label}
