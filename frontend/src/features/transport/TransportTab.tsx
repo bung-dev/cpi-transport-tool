@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { PageHeader } from '../../components/ui/PageHeader';
 import type { ArtifactSummary, TransportResponse } from '../../api/types';
@@ -14,6 +14,23 @@ export function TransportTab() {
   const [selectedArtifactIds, setSelectedArtifactIds] = useState<string[]>([]);
 
   const [result, setResult] = useState<TransportResponse | null>(null);
+  // 마지막 요청에 보낸 아티팩트 선택(보내지 않았으면 0개). "이 구성으로 실제 이관"이 이 선택으로 맞춘다(REQ-105 AC-6).
+  const [lastRequestIds, setLastRequestIds] = useState<string[]>([]);
+  const [realRequest, setRealRequest] = useState(0);
+  const resultRef = useRef<HTMLDivElement>(null);
+
+  // REQ-105 AC-7: 이 탭에서 응답을 받아 결과가 나타나면 결과 영역의 시작이 뷰포트 안에 들어오도록 스크롤한다. 포커스는 옮기지 않는다.
+  // 이력 상세는 TransportResult를 직접 쓰므로 스크롤하지 않는다(D-019 ③).
+  useEffect(() => {
+    if (result === null) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    resultRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  }, [result]);
+
+  function openRealTransport() {
+    setSelectedArtifactIds(lastRequestIds);
+    setRealRequest((n) => n + 1);
+  }
 
   function selectPackage(pkg: ArtifactSummary) {
     if (pkg.id === selectedPackageId) return;
@@ -48,11 +65,18 @@ export function TransportTab() {
                 packageName={selectedPackage?.name ?? null}
                 artifactIds={selectedArtifactIds}
                 onResult={setResult}
+                onRequest={(body) => setLastRequestIds(body.artifactIds ?? [])}
+                realRequest={realRequest}
               />
             </Card>
           </div>
         </div>
-        {result && <TransportResult result={result} />}
+        {/* AI-NOTE: scroll-mt는 sticky 상단 바(56px)와 여백 20px을 뺀 값이다. 없으면 scrollIntoView가 결과의 위쪽을 상단 바 밑에 가린다 (근거: REQ-105 AC-7) */}
+        {result && (
+          <div ref={resultRef} className="min-w-0 scroll-mt-[76px]">
+            <TransportResult result={result} onOpenReal={openRealTransport} />
+          </div>
+        )}
       </div>
     </div>
   );

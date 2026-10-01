@@ -18,6 +18,13 @@ interface Props {
   packageName?: string | null;
   artifactIds: string[];
   onResult: (r: TransportResponse | null) => void;
+  /** 전송 직전에 요청 본문을 알린다("이 구성으로 실제 이관"이 드라이런 요청의 선택을 되살리는 데 쓴다). */
+  onRequest?: (body: TransportRequest) => void;
+  /**
+   * "이 구성으로 실제 이관"의 요청 번호. 값이 바뀌면 실행 모드를 실제 이관으로, 배포를 꺼짐으로 맞추고 확인 대화상자를 연다(REQ-105 AC-6, D-018 ①).
+   * 확인 대화상자와 전송 경로는 이 컴포넌트의 것 하나만 쓴다(ADR-008, 중복 전송 방지).
+   */
+  realRequest?: number;
 }
 
 function SummaryRow({ label, children }: { label: string; children: ReactNode }) {
@@ -29,7 +36,7 @@ function SummaryRow({ label, children }: { label: string; children: ReactNode })
   );
 }
 
-export function RunPanel({ packageId, packageName, artifactIds, onResult }: Props) {
+export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequest, realRequest = 0 }: Props) {
   const [mode, setMode] = useState<RunMode>('dryRun');
   const [deploy, setDeploy] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,6 +44,17 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult }: Prop
   const [error, setError] = useState<ApiError | null>(null);
   // AI-NOTE: 상태 갱신(busy)은 비동기라 disabled만으로는 같은 틱의 연속 클릭을 막지 못한다. 동기 플래그로 중복 전송을 막는다 (근거: REQ-005 AC-4, run 20260929-frontend-ui)
   const inFlight = useRef(false);
+
+  // 요청 번호가 바뀌면(결과 머리의 "이 구성으로 실제 이관") 렌더 중에 상태를 맞춘다. 요청 중이면 무시한다.
+  const [handledRequest, setHandledRequest] = useState(realRequest);
+  if (realRequest !== handledRequest) {
+    setHandledRequest(realRequest);
+    if (!busy && packageId !== null) {
+      setMode('real');
+      setDeploy(false);
+      setConfirmOpen(true);
+    }
+  }
 
   const dryRun = mode === 'dryRun';
   const tooMany = artifactIds.length > MAX_ARTIFACTS;
@@ -56,6 +74,7 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult }: Prop
     // 선택 0개면 artifactIds 키 자체를 보내지 않는다(패키지 전체 대상). 드라이런 요청은 항상 deploy: false다(REQ-104 AC-5).
     const body: TransportRequest = { packageId, dryRun, deploy: dryRun ? false : deploy };
     if (artifactIds.length > 0) body.artifactIds = artifactIds;
+    onRequest?.(body);
     try {
       onResult(await postTransport(body));
     } catch (e) {

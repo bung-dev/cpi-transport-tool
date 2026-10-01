@@ -8,7 +8,13 @@ import { ArtifactCard } from './ArtifactCard';
 import { initialExpanded, isProblemArtifact, totalProblemCount } from './problems';
 
 // REQ-105 AC-8, REQ-012 AC-1: 서버 값은 모두 JSX 텍스트 노드로만 렌더링한다.
-export function TransportResult({ result }: { result: TransportResponse }) {
+interface Props {
+  result: TransportResponse;
+  /** 이관 탭이 넘긴다. 드라이런 결과의 머리에 "이 구성으로 실제 이관" 버튼을 보인다. 이력 상세는 넘기지 않는다(REQ-105 AC-6). */
+  onOpenReal?: () => void;
+}
+
+export function TransportResult({ result, onOpenReal }: Props) {
   const titleId = useId();
   const { total, succeeded, failed } = result.summary;
 
@@ -39,6 +45,11 @@ export function TransportResult({ result }: { result: TransportResponse }) {
         </h3>
         {result.dryRun ? <Badge tone="neutral">드라이런</Badge> : <Badge tone="accent">실제 이관</Badge>}
         {result.deploy && <Badge tone="info">배포</Badge>}
+        {onOpenReal && result.dryRun && (
+          <Button className="ml-auto" onClick={onOpenReal}>
+            이 구성으로 실제 이관
+          </Button>
+        )}
       </div>
       <div className="grid grid-cols-3 gap-3">
         <Stat label="전체" value={total} />
