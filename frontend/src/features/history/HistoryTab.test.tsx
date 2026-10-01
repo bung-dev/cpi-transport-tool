@@ -51,8 +51,8 @@ describe('이력 탭', () => {
     render(<HistoryTab />);
     await userEvent.click(await screen.findByRole('button', { name: 't-2' }));
     const region = screen.getByRole('region', { name: '이관 결과' });
-    expect(region).toHaveTextContent('transportId: t-2');
-    expect(region).toHaveTextContent('packageId: PkgZ');
+    expect(within(region).getByText('이관 ID').nextElementSibling).toHaveTextContent('t-2');
+    expect(within(region).getByText('패키지 ID').nextElementSibling).toHaveTextContent('PkgZ');
     expect(fn).toHaveBeenCalledTimes(1);
     await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
     expect(screen.getByRole('table')).toBeInTheDocument();

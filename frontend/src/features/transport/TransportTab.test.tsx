@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ARTIFACTS, PACKAGES, json, mockApi } from '../../test/mockFetch';
@@ -28,7 +28,7 @@ describe('이관 탭 통합', () => {
     await userEvent.click(await screen.findByRole('checkbox', { name: /IF_Customer_Push/ }));
     await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
     expect(await screen.findByRole('heading', { name: '이관 결과' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '이관 결과' })).toHaveTextContent('transportId: t-9');
+    expect(within(screen.getByRole('region', { name: '이관 결과' })).getByText('이관 ID').nextElementSibling).toHaveTextContent('t-9');
     const post = fn.mock.calls.find((c) => c[1]?.method === 'POST');
     expect(JSON.parse(post?.[1]?.body as string)).toEqual({
       packageId: 'PkgTransportDemo',
