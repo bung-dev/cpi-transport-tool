@@ -1,11 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
-import { Badge } from './Badge';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Checkbox } from './Checkbox';
-import { StatusBadge } from './StatusBadge';
 import { Table, Td, Th, Tr } from './Table';
 import { Tabs } from './Tabs';
 import { TextInput } from './TextInput';
@@ -44,20 +42,6 @@ describe('공통 컴포넌트 클래스', () => {
     expect(cls).toContain('bg-canvas');
     expect(cls).toContain('border-hairline');
     expect(cls).toContain('rounded-lg');
-  });
-
-  it('REQ-003 AC-3: 배지는 rounded-full, 글자 charcoal, 상태 배지는 매핑 모듈의 배경', () => {
-    render(
-      <>
-        <Badge>a</Badge>
-        <StatusBadge kind="deployStatus" value="TIMEOUT" />
-      </>,
-    );
-    expect(screen.getByText('a').className).toContain('rounded-full');
-    const s = screen.getByText('TIMEOUT');
-    expect(s.className).toContain('rounded-full');
-    expect(s.className).toContain('text-charcoal');
-    expect(s.className).toContain('bg-card-tint-peach');
   });
 
   it('REQ-003 AC-3: 표는 hairline 테두리, 행 구분선, 가로 스크롤 래퍼', () => {

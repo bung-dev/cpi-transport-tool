@@ -11,7 +11,7 @@ export function ErrorAlert({ error, onRetry }: Props) {
   return (
     <div
       role="alert"
-      className="rounded-lg border border-semantic-error bg-surface p-4 min-w-0 break-words text-ink"
+      className="rounded-lg border border-danger-fg bg-surface p-4 min-w-0 break-words text-ink"
     >
       <p className="font-medium">{error.title}</p>
       {error.message !== undefined && <p className="mt-1 text-sm">{error.message}</p>}

@@ -50,7 +50,7 @@ export function ConfirmDialog({ packageId, artifactCount, deploy, busy, onConfir
   }
 
   return (
-    <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-4" onKeyDown={onKeyDown}>
+    <div className="fixed inset-0 z-10 flex items-center justify-center bg-scrim p-4" onKeyDown={onKeyDown}>
       <div
         ref={dialogRef}
         role="dialog"
@@ -76,7 +76,7 @@ export function ConfirmDialog({ packageId, artifactCount, deploy, busy, onConfir
           </Button>
         </div>
         {busy && (
-          <p role="status" className="mt-3 text-sm text-slate">
+          <p role="status" className="mt-3 text-sm text-ink-secondary">
             이관 실행 중
           </p>
         )}

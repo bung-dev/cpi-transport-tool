@@ -9,7 +9,7 @@ export function TextInput({ label, id, className = '', ...rest }: Props) {
   const inputId = id ?? autoId;
   return (
     <div className="flex flex-col gap-1 min-w-0">
-      <label htmlFor={inputId} className="text-sm text-charcoal">
+      <label htmlFor={inputId} className="text-sm text-ink">
         {label}
       </label>
       <input

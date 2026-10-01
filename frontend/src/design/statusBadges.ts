@@ -1,35 +1,38 @@
-// REQ-003 AC-4: 상태 배지 배경색 매핑표. 상태별 tint 클래스는 이 모듈에서만 정한다.
+// REQ-103 AC-4: 상태 배지의 (분류, 값) → 상태 이름 매핑표. 이 매핑은 이 모듈에서만 정한다.
+// 상태 이름은 index.css의 `<상태>-bg`/`<상태>-fg` 토큰 이름과 같다. 색 클래스는 components/ui/Badge.tsx 가 정한다.
 export type StatusKind = 'artifactStatus' | 'replacementStatus' | 'deployStatus' | 'transportAction';
+export type StatusTone = 'success' | 'warning' | 'danger' | 'info' | 'accent' | 'caution' | 'neutral';
 
-const FALLBACK = 'bg-card-tint-gray';
+const FALLBACK: StatusTone = 'neutral';
 
-export const STATUS_BADGE_CLASSES: Record<StatusKind, Record<string, string>> = {
+export const STATUS_BADGE_TONES: Record<StatusKind, Record<string, StatusTone>> = {
   artifactStatus: {
-    SUCCESS: 'bg-card-tint-mint',
-    FAILED: 'bg-card-tint-rose',
+    SUCCESS: 'success',
+    FAILED: 'danger',
   },
   replacementStatus: {
-    APPLIED: 'bg-card-tint-mint',
-    PLANNED: 'bg-card-tint-lavender',
-    VALUE_MISMATCH: 'bg-card-tint-peach',
-    KEY_NOT_FOUND: 'bg-card-tint-gray',
-    SENSITIVE_SKIPPED: 'bg-card-tint-yellow',
-    FAILED: 'bg-card-tint-rose',
+    APPLIED: 'success',
+    PLANNED: 'accent',
+    VALUE_MISMATCH: 'warning',
+    KEY_NOT_FOUND: 'neutral',
+    SENSITIVE_SKIPPED: 'caution',
+    FAILED: 'danger',
   },
   deployStatus: {
-    STARTED: 'bg-card-tint-mint',
-    ERROR: 'bg-card-tint-rose',
-    TIMEOUT: 'bg-card-tint-peach',
-    NOT_REQUESTED: 'bg-card-tint-gray',
-    SKIPPED_DRY_RUN: 'bg-card-tint-lavender',
+    STARTED: 'success',
+    ERROR: 'danger',
+    TIMEOUT: 'warning',
+    NOT_REQUESTED: 'neutral',
+    SKIPPED_DRY_RUN: 'accent',
   },
   transportAction: {
-    CREATED: 'bg-card-tint-sky',
-    UPDATED: 'bg-card-tint-lavender',
-    NONE: 'bg-card-tint-gray',
+    CREATED: 'info',
+    UPDATED: 'accent',
+    NONE: 'neutral',
   },
 };
 
-export function badgeClass(kind: StatusKind, value: string): string {
-  return Object.hasOwn(STATUS_BADGE_CLASSES[kind], value) ? STATUS_BADGE_CLASSES[kind][value] : FALLBACK;
+// 표에 없는 값과 객체 prototype 이름(toString 등)은 neutral이다.
+export function badgeTone(kind: StatusKind, value: string): StatusTone {
+  return Object.hasOwn(STATUS_BADGE_TONES[kind], value) ? STATUS_BADGE_TONES[kind][value] : FALLBACK;
 }

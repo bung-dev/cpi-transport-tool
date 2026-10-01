@@ -36,8 +36,8 @@ export function PackagePicker({ selectedId, onSelect }: Props) {
               onChange={() => onSelect(p.id)}
             />
             <label htmlFor={`pkg-${p.id}`} className="text-sm break-all min-w-0">
-              <span className="font-medium">{p.name}</span> <span className="text-slate">{p.id}</span>{' '}
-              <span className="text-steel">{p.version}</span>
+              <span className="font-medium">{p.name}</span> <span className="text-ink-secondary">{p.id}</span>{' '}
+              <span className="text-ink-tertiary">{p.version}</span>
             </label>
           </li>
         ))}

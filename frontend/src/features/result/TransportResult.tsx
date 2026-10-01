@@ -20,14 +20,14 @@ function ArtifactCard({ r }: { r: ArtifactResult }) {
           <StatusBadge kind="deployStatus" value={r.deployStatus} />
         </div>
         {r.error && (
-          <p className="text-sm text-semantic-error break-words">
+          <p className="text-sm text-danger-fg break-words">
             <span className="font-medium">{r.error.code}</span>: {r.error.message}
           </p>
         )}
         <div>
           <h4 className="mb-1 text-sm font-medium">치환 항목</h4>
           {r.replacements.length === 0 ? (
-            <p className="text-sm text-slate">치환 항목 없음</p>
+            <p className="text-sm text-ink-secondary">치환 항목 없음</p>
           ) : (
             <Table>
               <thead>
@@ -60,7 +60,7 @@ function ArtifactCard({ r }: { r: ArtifactResult }) {
         <div>
           <h4 className="mb-1 text-sm font-medium">매핑되지 않은 키</h4>
           {r.unmappedKeys.length === 0 ? (
-            <p className="text-sm text-slate">매핑되지 않은 키 없음</p>
+            <p className="text-sm text-ink-secondary">매핑되지 않은 키 없음</p>
           ) : (
             <ul className="text-sm break-all">
               {r.unmappedKeys.map((u, i) => (
@@ -106,7 +106,7 @@ export function TransportResult({ result }: { result: TransportResponse }) {
 function Item({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-2 min-w-0">
-      <dt className="text-slate shrink-0">
+      <dt className="text-ink-secondary shrink-0">
         {label}:{' '}
       </dt>
       <dd className="break-all min-w-0">{value}</dd>

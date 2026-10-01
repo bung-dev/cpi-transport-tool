@@ -101,7 +101,7 @@ export function HistoryTab() {
                         openedFrom.current = i;
                         setSelected(i);
                       }}
-                      className="cursor-pointer text-left text-link-blue underline break-all"
+                      className="cursor-pointer text-left text-primary underline break-all"
                     >
                       {h.transportId}
                     </button>

@@ -40,8 +40,8 @@ export function ArtifactPicker({ packageId, selectedIds, onChange }: Props) {
               onChange={() => toggle(a.id)}
               label={
                 <>
-                  <span className="font-medium">{a.id}</span> <span className="text-slate">{a.name}</span>{' '}
-                  <span className="text-steel">{a.version}</span>
+                  <span className="font-medium">{a.id}</span> <span className="text-ink-secondary">{a.name}</span>{' '}
+                  <span className="text-ink-tertiary">{a.version}</span>
                 </>
               }
             />
