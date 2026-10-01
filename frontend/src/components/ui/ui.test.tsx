@@ -12,7 +12,7 @@ import { Skeleton } from './Skeleton';
 import { Spinner } from './Spinner';
 import { Switch, SwitchControl } from './Switch';
 import { Table, Td, Th, Tr } from './Table';
-import { Tabs } from './Tabs';
+import { TabList, TabPanel } from './Tabs';
 import { TextInput } from './TextInput';
 
 describe('Button', () => {
@@ -442,29 +442,69 @@ describe('글자 크기·전환·포커스 클래스', () => {
   });
 });
 
+const TAB_ITEMS = [
+  { id: 'a', label: '이관' },
+  { id: 'b', label: '이력' },
+];
+
 describe('Tabs', () => {
-  it('REQ-003 AC-3: 탭은 tablist/tab/aria-selected/tabpanel과 활성 탭 ink 밑줄, 화살표 키 이동', async () => {
-    const onChange = vi.fn();
+  it('REQ-102 AC-2: 탭 목록·탭 패널은 tablist/tab/aria-selected/tabpanel과 aria-controls/aria-labelledby로 연결된다', () => {
     render(
-      <Tabs
-        tabs={[
-          { id: 'a', label: '이관' },
-          { id: 'b', label: '이력' },
-        ]}
-        activeId="a"
-        onChange={onChange}
-      >
-        내용
-      </Tabs>,
+      <>
+        <TabList idBase="t" tabs={TAB_ITEMS} activeId="a" onChange={vi.fn()} />
+        <TabPanel idBase="t" activeId="a">
+          내용
+        </TabPanel>
+      </>,
     );
     expect(screen.getByRole('tablist')).toBeInTheDocument();
     const a = screen.getByRole('tab', { name: '이관' });
+    const b = screen.getByRole('tab', { name: '이력' });
     expect(a).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: '이력' })).toHaveAttribute('aria-selected', 'false');
-    expect(a.className).toContain('border-ink');
-    expect(screen.getByRole('tabpanel')).toHaveTextContent('내용');
+    expect(b).toHaveAttribute('aria-selected', 'false');
+    const panel = screen.getByRole('tabpanel');
+    expect(panel).toHaveTextContent('내용');
+    expect(a).toHaveAttribute('aria-controls', panel.id);
+    expect(panel).toHaveAttribute('aria-labelledby', a.id);
+  });
+
+  it('REQ-102 AC-2: 세그먼트 컨트롤 모양 — surface 컨테이너, 선택된 탭 canvas·shadow-xs·ink, 선택되지 않은 탭 배경 없음·ink-secondary·hover ink', () => {
+    render(<TabList idBase="t" tabs={TAB_ITEMS} activeId="a" onChange={vi.fn()} />);
+    const list = screen.getByRole('tablist').className;
+    expect(list).toContain('bg-surface');
+    expect(list).toContain('rounded-lg');
+    expect(list).not.toContain('overflow-hidden');
+    const on = screen.getByRole('tab', { name: '이관' }).className;
+    expect(on).toContain('bg-canvas');
+    expect(on).toContain('shadow-xs');
+    expect(on).toContain('text-ink');
+    const off = screen.getByRole('tab', { name: '이력' }).className;
+    expect(off).toContain('bg-transparent');
+    expect(off).toContain('text-ink-secondary');
+    expect(off).toContain('hover:text-ink');
+    expect(off).not.toContain('shadow-xs');
+  });
+
+  it('REQ-102 AC-2: 선택된 탭만 Tab 정지이고 좌우 화살표로 이동한다', async () => {
+    const onChange = vi.fn();
+    render(<TabList idBase="t" tabs={TAB_ITEMS} activeId="a" onChange={onChange} />);
+    const a = screen.getByRole('tab', { name: '이관' });
+    expect(a).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('tab', { name: '이력' })).toHaveAttribute('tabindex', '-1');
     a.focus();
     await userEvent.keyboard('{ArrowRight}');
-    expect(onChange).toHaveBeenCalledWith('b');
+    expect(onChange).toHaveBeenLastCalledWith('b');
+    // ArrowRight로 포커스가 b로 옮겨졌으므로 ArrowLeft는 a로 돌아간다.
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(onChange).toHaveBeenLastCalledWith('a');
+  });
+
+  it('REQ-101 AC-6: 탭의 배경·글자색·그림자 변화에 150ms 전환이 있고 포커스 외곽선을 지우지 않는다', () => {
+    render(<TabList idBase="t" tabs={TAB_ITEMS} activeId="a" onChange={vi.fn()} />);
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab.className).toMatch(/(^|\s)transition(\s|$)/);
+      expect(tab.className).toContain('duration-150');
+      expect(tab.className).not.toMatch(/outline-(none|0|hidden)/);
+    }
   });
 });

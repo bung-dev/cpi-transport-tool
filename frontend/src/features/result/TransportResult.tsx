@@ -13,7 +13,7 @@ function ArtifactCard({ r }: { r: ArtifactResult }) {
   return (
     <Card>
       <div className="flex flex-col gap-2 min-w-0">
-        <h3 className="font-medium break-all">{r.artifactId}</h3>
+        <h4 className="font-medium break-all">{r.artifactId}</h4>
         <div className="flex flex-wrap gap-2">
           <StatusBadge kind="artifactStatus" value={r.status} />
           <StatusBadge kind="transportAction" value={r.action} />
@@ -25,7 +25,7 @@ function ArtifactCard({ r }: { r: ArtifactResult }) {
           </p>
         )}
         <div>
-          <h4 className="mb-1 text-sm font-medium">치환 항목</h4>
+          <h5 className="mb-1 text-sm font-medium">치환 항목</h5>
           {r.replacements.length === 0 ? (
             <p className="text-sm text-ink-secondary">치환 항목 없음</p>
           ) : (
@@ -58,7 +58,7 @@ function ArtifactCard({ r }: { r: ArtifactResult }) {
           )}
         </div>
         <div>
-          <h4 className="mb-1 text-sm font-medium">매핑되지 않은 키</h4>
+          <h5 className="mb-1 text-sm font-medium">매핑되지 않은 키</h5>
           {r.unmappedKeys.length === 0 ? (
             <p className="text-sm text-ink-secondary">매핑되지 않은 키 없음</p>
           ) : (
@@ -80,9 +80,9 @@ export function TransportResult({ result }: { result: TransportResponse }) {
   const titleId = useId();
   return (
     <section aria-labelledby={titleId} className="flex flex-col gap-4 min-w-0">
-      <h2 id={titleId} className="text-lg font-semibold">
+      <h3 id={titleId} className="text-lg font-semibold">
         이관 결과
-      </h2>
+      </h3>
       <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2 min-w-0">
         <Item label="transportId" value={result.transportId} />
         <Item label="packageId" value={result.packageId} />

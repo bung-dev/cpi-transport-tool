@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Card } from '../../components/ui/Card';
+import { PageHeader } from '../../components/ui/PageHeader';
 import type { TransportResponse } from '../../api/types';
 import { TransportResult } from '../result/TransportResult';
 import { ArtifactPicker } from './ArtifactPicker';
@@ -21,26 +22,29 @@ export function TransportTab() {
   }
 
   return (
-    <div className="flex flex-col gap-6 min-w-0">
-      <Card>
-        <h2 className="mb-3 text-lg font-semibold">패키지</h2>
-        <PackagePicker selectedId={selectedPackageId} onSelect={selectPackage} />
-      </Card>
-      {selectedPackageId !== null && (
-        <Card>
-          <h2 className="mb-3 text-lg font-semibold">아티팩트</h2>
-          <ArtifactPicker
-            packageId={selectedPackageId}
-            selectedIds={selectedArtifactIds}
-            onChange={setSelectedArtifactIds}
-          />
+    <div className="min-w-0">
+      <PageHeader
+        title="패키지 이관"
+        description="DEV 테넌트의 패키지를 PRD 테넌트로 이관합니다. 드라이런으로 변경 내용을 먼저 확인할 수 있습니다."
+      />
+      <div className="flex flex-col gap-6 min-w-0">
+        <Card title="패키지">
+          <PackagePicker selectedId={selectedPackageId} onSelect={selectPackage} />
         </Card>
-      )}
-      <Card>
-        <h2 className="mb-3 text-lg font-semibold">실행</h2>
-        <RunPanel packageId={selectedPackageId} artifactIds={selectedArtifactIds} onResult={setResult} />
-      </Card>
-      {result && <TransportResult result={result} />}
+        {selectedPackageId !== null && (
+          <Card title="아티팩트">
+            <ArtifactPicker
+              packageId={selectedPackageId}
+              selectedIds={selectedArtifactIds}
+              onChange={setSelectedArtifactIds}
+            />
+          </Card>
+        )}
+        <Card title="실행">
+          <RunPanel packageId={selectedPackageId} artifactIds={selectedArtifactIds} onResult={setResult} />
+        </Card>
+        {result && <TransportResult result={result} />}
+      </div>
     </div>
   );
 }

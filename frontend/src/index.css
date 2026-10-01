@@ -63,7 +63,7 @@ body {
   font-size: 14px;
   line-height: 1.5;
   color: var(--color-ink);
-  background-color: var(--color-canvas);
+  background-color: var(--color-surface);
 }
 
 /* REQ-101 AC-7: 모든 인터랙티브 요소의 키보드 포커스 표시 */
