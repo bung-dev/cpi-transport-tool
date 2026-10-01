@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '../../components/ui/Button';
 
 interface Props {
@@ -19,9 +20,10 @@ export function ConfirmDialog({ packageId, artifactCount, deploy, busy, onConfir
 
   useEffect(() => {
     // 열기 전에 포커스가 있던 요소(이관 실행 버튼)를 기억했다가 닫힐 때 돌려준다.
+    // AI-NOTE: 포커스 복귀는 preventScroll로 한다. 닫히는 순간 결과가 나타나므로, 복귀가 화면을 스크롤하면 결과 영역의 시작이 뷰포트 밖으로 밀린다 (근거: REQ-105 AC-7, REQ-107 AC-5, D-018 ③)
     const opener = document.activeElement as HTMLElement | null;
     cancelRef.current?.focus();
-    return () => opener?.focus();
+    return () => opener?.focus({ preventScroll: true });
   }, []);
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
@@ -49,7 +51,8 @@ export function ConfirmDialog({ packageId, artifactCount, deploy, busy, onConfir
     }
   }
 
-  return (
+  // AI-NOTE: 대화상자는 document.body에 포털로 그린다. 폭 1024px 이상에서 실행 카드 열이 sticky라 자체 쌓임 맥락을 만들고, 그 안의 z-10은 뒤따르는 결과 카드(relative)보다 위로 올라가지 못한다 (근거: REQ-107 AC-4, 개발 중 브라우저 확인)
+  return createPortal(
     <div className="fixed inset-0 z-10 flex items-center justify-center bg-scrim p-4" onKeyDown={onKeyDown}>
       <div
         ref={dialogRef}
@@ -83,6 +86,7 @@ export function ConfirmDialog({ packageId, artifactCount, deploy, busy, onConfir
           </p>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

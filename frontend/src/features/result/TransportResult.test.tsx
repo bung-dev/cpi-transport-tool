@@ -1,6 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { HistoryTab } from '../history/HistoryTab';
+import { json, mockApi } from '../../test/mockFetch';
 import type { ArtifactResult, ReplacementStatus, TransportResponse } from '../../api/types';
 import { formatTime } from '../../lib/formatTime';
 import { TransportResult } from './TransportResult';
@@ -37,6 +39,8 @@ const BASE: TransportResponse = {
     },
   ],
 };
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe('이관 결과', () => {
   it('REQ-006 AC-1: 머리 정보(transportId, packageId, 드라이런/배포 예·아니오, 시각, 요약)', () => {
@@ -442,5 +446,37 @@ describe('이관 결과', () => {
     expect(expandedOf('A_Clean')).toBe('false');
     expect(expandedOf('B_Mismatch')).toBe('true');
     expect(screen.getByRole('button', { name: 'D_Planned' })).toBeInTheDocument();
+  });
+
+  it('REQ-105 AC-6: 이력 상세의 결과에는 드라이런 결과여도 "이 구성으로 실제 이관" 버튼이 없다', async () => {
+    mockApi({ 'GET /transport/history': () => json([{ ...BASE, transportId: 't-1', dryRun: true }, { ...BASE, transportId: 't-2', dryRun: false }]) });
+    render(<HistoryTab />);
+    await userEvent.click(await screen.findByRole('button', { name: 't-1' }));
+    expect(screen.getByRole('heading', { name: '이관 결과' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '이 구성으로 실제 이관' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
+    await userEvent.click(screen.getByRole('button', { name: 't-2' }));
+    expect(screen.queryByRole('button', { name: '이 구성으로 실제 이관' })).toBeNull();
+  });
+
+  it('REQ-105 AC-7: 이력 상세를 열 때는 결과로 스크롤하지 않는다', async () => {
+    const spy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+    mockApi({ 'GET /transport/history': () => json([{ ...BASE, transportId: 't-1' }]) });
+    render(<HistoryTab />);
+    await userEvent.click(await screen.findByRole('button', { name: 't-1' }));
+    expect(screen.getByRole('heading', { name: '이관 결과' })).toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('REQ-105 AC-6: onOpenReal을 넘기지 않으면 드라이런 결과여도 버튼이 없고, 넘기면 드라이런 결과에만 버튼이 있다', async () => {
+    const onOpenReal = vi.fn();
+    const { rerender } = render(<TransportResult result={BASE} />);
+    expect(screen.queryByRole('button', { name: '이 구성으로 실제 이관' })).toBeNull();
+    rerender(<TransportResult result={BASE} onOpenReal={onOpenReal} />);
+    await userEvent.click(screen.getByRole('button', { name: '이 구성으로 실제 이관' }));
+    expect(onOpenReal).toHaveBeenCalledTimes(1);
+    rerender(<TransportResult result={{ ...BASE, dryRun: false }} onOpenReal={onOpenReal} />);
+    expect(screen.queryByRole('button', { name: '이 구성으로 실제 이관' })).toBeNull();
   });
 });
