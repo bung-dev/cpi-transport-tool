@@ -44,6 +44,7 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
   const [error, setError] = useState<ApiError | null>(null);
   // AI-NOTE: 상태 갱신(busy)은 비동기라 disabled만으로는 같은 틱의 연속 클릭을 막지 못한다. 동기 플래그로 중복 전송을 막는다 (근거: REQ-005 AC-4, run 20260929-frontend-ui)
   const inFlight = useRef(false);
+  const runBtn = useRef<HTMLButtonElement>(null);
 
   // 요청 번호가 바뀌면(결과 머리의 "이 구성으로 실제 이관") 렌더 중에 상태를 맞춘다. 요청 중이면 무시한다.
   const [handledRequest, setHandledRequest] = useState(realRequest);
@@ -126,7 +127,7 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
       )}
       {!dryRun && <Callout tone="warning">실제 이관입니다. PRD에 업로드합니다.</Callout>}
       {tooMany && <p className="text-sm text-danger-fg">한 번에 100개까지 선택할 수 있습니다</p>}
-      <Button variant="primary" fullWidth loading={busy} onClick={onRunClick} disabled={!canRun}>
+      <Button ref={runBtn} variant="primary" fullWidth loading={busy} onClick={onRunClick} disabled={!canRun}>
         {dryRun ? '드라이런 실행' : 'PRD로 이관'}
       </Button>
       {busy && !confirmOpen && (
@@ -143,6 +144,7 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
           busy={busy}
           onConfirm={() => void submit()}
           onCancel={() => setConfirmOpen(false)}
+          fallbackFocusRef={runBtn}
         />
       )}
     </div>

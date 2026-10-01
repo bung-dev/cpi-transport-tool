@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { json, mockApi } from '../../test/mockFetch';
 import { RunPanel } from './RunPanel';
 
+// 확인 대화상자 요약은 라벨(dt)과 값(dd)으로 나뉘어 있다(REQ-107 AC-4).
+const summaryValue = (dialog: HTMLElement, label: string) => within(dialog).getByText(label).nextElementSibling;
+
 afterEach(() => vi.unstubAllGlobals());
 
 const RESULT = { transportId: 't-1' };
@@ -218,9 +221,9 @@ describe('확인 대화상자', () => {
   it('REQ-005 AC-3: 실제 이관이면 대화상자가 대상 패키지·수·배포·PRD 업로드를 보이고 요청은 아직 없다', async () => {
     const { fn } = await openDialog();
     const dialog = screen.getByRole('dialog', { name: '실제 이관 확인' });
-    expect(dialog).toHaveTextContent('대상 패키지: PkgA');
-    expect(dialog).toHaveTextContent('아티팩트 수: 2');
-    expect(dialog).toHaveTextContent('배포: 예');
+    expect(summaryValue(dialog, '대상 패키지')).toHaveTextContent('PkgA');
+    expect(summaryValue(dialog, '아티팩트 수')).toHaveTextContent('2');
+    expect(summaryValue(dialog, '배포')).toHaveTextContent('예');
     expect(dialog).toHaveTextContent('PRD에 업로드합니다');
     expect(postCount(fn)).toBe(0);
   });
@@ -230,8 +233,8 @@ describe('확인 대화상자', () => {
     await chooseReal();
     await userEvent.click(realBtn());
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveTextContent('아티팩트 수: 전체');
-    expect(dialog).toHaveTextContent('배포: 아니오');
+    expect(summaryValue(dialog, '아티팩트 수')).toHaveTextContent('전체');
+    expect(summaryValue(dialog, '배포')).toHaveTextContent('아니오');
   });
 
   it('REQ-005 AC-3: 취소 버튼과 Esc는 요청 없이 닫기만 한다', async () => {
