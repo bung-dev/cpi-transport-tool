@@ -226,15 +226,22 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     const spy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
     setupFlow();
     await pickDemo();
+    // 클릭은 포커스를 대상으로 옮기므로, 키보드(Enter)로 실행해 "코드가 포커스를 옮기지 않음"만 따로 확인한다.
     const run = screen.getByRole('button', { name: '드라이런 실행' });
-    await userEvent.click(run);
+    run.focus();
+    const focusedBefore = document.activeElement;
+    expect(focusedBefore).toBe(run);
+    await userEvent.keyboard('{Enter}');
     const heading = await screen.findByRole('heading', { name: '이관 결과' });
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
     const target = spy.mock.contexts[0] as HTMLElement;
     expect(target).toContainElement(heading);
     expect(target.className).toContain('scroll-mt-[76px]');
-    expect(document.body.contains(document.activeElement) ? screen.getByRole('region', { name: '이관 결과' }).contains(document.activeElement) : false).toBe(false);
+    // 결과가 나타난 뒤에도 포커스는 실행 전과 같은 요소이고 결과 영역 안으로 옮겨지지 않았다.
+    // jsdom 한계: 요청 중 disabled가 된 버튼을 브라우저는 blur(body로 이동)하지만 jsdom은 포커스를 그대로 둔다. 그래서 이 단언은 "스크립트가 포커스를 옮기지 않음"만 보증하고, 실제 브라우저의 포커스 위치는 QA가 본다.
+    expect(document.activeElement).toBe(focusedBefore);
+    expect(screen.getByRole('region', { name: '이관 결과' }).contains(document.activeElement)).toBe(false);
   });
 
   it('REQ-105 AC-7: prefers-reduced-motion: reduce이면 부드러운 스크롤 없이 바로 이동한다', async () => {

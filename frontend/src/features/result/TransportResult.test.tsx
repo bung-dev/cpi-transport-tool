@@ -40,6 +40,21 @@ const BASE: TransportResponse = {
   ],
 };
 
+/**
+ * 서버 문자열이 만든 요소가 없는지 "위치"로 확인한다. 아이콘 SVG는 속성(aria-hidden)이 아니라 컴포넌트가 그리는 자리
+ * (접기 버튼 안, Callout 박스 바로 아래)에 있는 것만 허용하고 개수도 고정한다. on* 이벤트 속성을 가진 요소는 0개여야 한다.
+ */
+function expectOnlyComponentIcons(container: HTMLElement, expectedIcons: number) {
+  const svgs = Array.from(container.querySelectorAll('svg'));
+  expect(svgs).toHaveLength(expectedIcons);
+  for (const svg of svgs) {
+    const host = svg.parentElement as HTMLElement;
+    expect(host.matches('button[aria-expanded], div[class*="bg-danger-bg"]'), host.outerHTML.slice(0, 80)).toBe(true);
+  }
+  const withHandlers = Array.from(container.querySelectorAll('*')).filter((el) => el.getAttributeNames().some((n) => n.startsWith('on')));
+  expect(withHandlers).toEqual([]);
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('이관 결과', () => {
@@ -111,8 +126,9 @@ describe('이관 결과', () => {
     expect(container).toHaveTextContent('"><svg onload=alert(3)>');
     expect(container).toHaveTextContent('<b>bold</b>');
     expect(container).toHaveTextContent('<iframe src=about:blank>');
-    // 아이콘(aria-hidden SVG)은 화면 구성 요소다. 서버 문자열이 만든 요소(속성 없는 svg 등)만 없어야 한다.
-    expect(container.querySelector('script, img, svg:not([aria-hidden="true"]), iframe, b, i')).toBeNull();
+    expect(container.querySelector('script, img, iframe, b, i')).toBeNull();
+    // 아이콘 SVG는 컴포넌트가 그린 자리(접기 버튼, 오류 Callout)의 2개뿐이다: 서버 문자열이 svg 요소를 만들지 않는다.
+    expectOnlyComponentIcons(container, 2);
   });
 
   it('REQ-105 AC-1: 모드 배지 — dryRun이면 neutral "드라이런", 실제 이관이면 accent "실제 이관", deploy가 true일 때만 info "배포" 배지를 더 보인다', () => {
@@ -252,7 +268,8 @@ describe('이관 결과', () => {
     for (const t of ['<script>alert(1)</script>', '<img src=x onerror=alert(2)>', '<script>alert(3)</script>', '<b>code</b>', '<iframe src=about:blank></iframe>', '<i>k</i>', '<script>b</script>', '"><svg onload=alert(4)>']) {
       expect(container).toHaveTextContent(t);
     }
-    expect(container.querySelector('script, img, iframe, b, i, svg:not([aria-hidden="true"])')).toBeNull();
+    expect(container.querySelector('script, img, iframe, b, i')).toBeNull();
+    expectOnlyComponentIcons(container, 2);
   });
 
   it('REQ-101 AC-4: 결과 값(ID·키·변경 전·후·칩)은 고정폭이고 통계 숫자와 횟수 열은 tabular-nums다', () => {

@@ -118,7 +118,7 @@ export function HistoryTab() {
               <tbody>
                 {state.data.map((h, i) => (
                   // 행의 어느 곳을 눌러도 상세가 열린다(마우스 편의). 키보드 경로는 행마다 이관 ID 버튼 하나이고 행에는 tabindex를 주지 않는다(ADR-012).
-                  // 이관 ID 버튼의 클릭은 행으로 올라가 같은 핸들러가 처리한다.
+                  // 이관 ID 버튼의 클릭은 행으로 올라가 같은 핸들러가 처리한다. 셀은 줄바꿈하지 않고, 좁은 폭에서는 표 래퍼 안에서 가로로 스크롤한다(REQ-108 AC-1).
                   <Tr
                     key={`${h.transportId}-${i}`}
                     className="cursor-pointer"
@@ -128,18 +128,18 @@ export function HistoryTab() {
                     }}
                   >
                     <Td className="whitespace-nowrap">{formatTime(h.startedAt)}</Td>
-                    <Td className="font-mono text-[13px]">{h.packageId}</Td>
-                    <Td>{h.dryRun ? <Badge tone="neutral">드라이런</Badge> : <Badge tone="accent">실제 이관</Badge>}</Td>
-                    <Td>
+                    <Td className="whitespace-nowrap font-mono text-[13px]">{h.packageId}</Td>
+                    <Td className="whitespace-nowrap">{h.dryRun ? <Badge tone="neutral">드라이런</Badge> : <Badge tone="accent">실제 이관</Badge>}</Td>
+                    <Td className="whitespace-nowrap">
                       {h.deploy ? <Badge tone="info">배포</Badge> : <span className="text-ink-tertiary">배포 안 함</span>}
                     </Td>
-                    <Td>
-                      <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <Td className="whitespace-nowrap">
+                      <span className="inline-flex items-center gap-2">
                         <span className="tabular-nums">{`성공 ${h.summary.succeeded} / 전체 ${h.summary.total}`}</span>
                         {h.summary.failed >= 1 && <Badge tone="danger">{`실패 ${h.summary.failed}`}</Badge>}
                       </span>
                     </Td>
-                    <Td>
+                    <Td className="whitespace-nowrap">
                       <button
                         type="button"
                         ref={(el) => {
