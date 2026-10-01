@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { getPackages } from '../../api/client';
+import type { ArtifactSummary } from '../../api/types';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { SearchIcon } from '../../components/ui/icons';
@@ -10,7 +11,8 @@ import { useRemote } from '../../lib/useRemote';
 
 interface Props {
   selectedId: string | null;
-  onSelect: (id: string) => void;
+  /** 선택한 패키지의 id와 name(실행 카드 요약에 쓴다) */
+  onSelect: (pkg: ArtifactSummary) => void;
 }
 
 // 행 전체를 label로 감싸 어디를 눌러도 선택된다(REQ-104 AC-2). 선택된 행은 primary-soft, 아니면 hover surface-hover.
@@ -53,7 +55,7 @@ export function PackagePicker({ selectedId, onSelect }: Props) {
           {shown.map((p) => (
             <li key={p.id} className="min-w-0">
               <label className={`${ROW_BASE} ${selectedId === p.id ? ROW_ON : ROW_OFF}`}>
-                <RadioControl name="package" checked={selectedId === p.id} onChange={() => onSelect(p.id)} />
+                <RadioControl name="package" checked={selectedId === p.id} onChange={() => onSelect(p)} />
                 <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="font-medium break-all">{p.name}</span>
                   <span className="font-mono text-[13px] text-ink-secondary break-all">{p.id}</span>

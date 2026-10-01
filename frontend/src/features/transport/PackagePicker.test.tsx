@@ -6,6 +6,9 @@ import { TransportTab } from './TransportTab';
 
 afterEach(() => vi.unstubAllGlobals());
 
+// 실행 카드의 실행 모드 라디오와 구분하려고 패키지 목록 안의 라디오만 센다.
+const pkgRadios = () => within(screen.getByRole('list', { name: '패키지 목록' })).queryAllByRole('radio');
+
 describe('패키지 목록', () => {
   it('REQ-004 AC-1: 조회 중에는 불러오는 중(role=status)을 보인다', async () => {
     let release: (r: Response) => void = () => {};
@@ -23,7 +26,7 @@ describe('패키지 목록', () => {
     const radio = await screen.findByRole('radio', { name: /Transport Demo/ });
     expect(radio).toHaveAttribute('name', 'package');
     expect(screen.getByRole('radio', { name: /PkgTransportDemo/ })).toBeInTheDocument();
-    expect(screen.getAllByRole('radio')).toHaveLength(3);
+    expect(pkgRadios()).toHaveLength(3);
     expect(screen.getAllByText('1.0.0')).toHaveLength(3);
     expect(fn).toHaveBeenCalledTimes(1);
   });
@@ -39,12 +42,12 @@ describe('패키지 목록', () => {
     render(<TransportTab />);
     const input = await screen.findByLabelText('패키지 검색');
     await userEvent.type(input, 'FAULT');
-    expect(screen.getAllByRole('radio')).toHaveLength(1);
+    expect(pkgRadios()).toHaveLength(1);
     expect(screen.getByRole('radio', { name: /PkgFaultDemo/ })).toBeInTheDocument();
     await userEvent.clear(input);
     await userEvent.type(input, 'not in');
     expect(screen.getByRole('radio', { name: /PkgNotInPrd/ })).toBeInTheDocument();
-    expect(screen.getAllByRole('radio')).toHaveLength(1);
+    expect(pkgRadios()).toHaveLength(1);
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
@@ -53,7 +56,7 @@ describe('패키지 목록', () => {
     render(<TransportTab />);
     const input = await screen.findByLabelText('패키지 검색');
     await userEvent.type(input, '([[');
-    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+    expect(screen.queryByRole('list', { name: '패키지 목록' })).toBeNull();
     expect(input).toBeInTheDocument();
   });
 
@@ -68,7 +71,8 @@ describe('패키지 목록', () => {
     expect(alert).toHaveTextContent('CPI에 연결할 수 없습니다');
     expect(alert).toHaveTextContent('CPI unavailable');
     await userEvent.click(screen.getByRole('button', { name: '다시 시도' }));
-    expect(await screen.findAllByRole('radio')).toHaveLength(3);
+    await screen.findByRole('list', { name: '패키지 목록' });
+    expect(pkgRadios()).toHaveLength(3);
     expect(fn.mock.calls.map((c) => String(c[0]))).toEqual(['/packages', '/packages']);
   });
 
@@ -107,7 +111,7 @@ describe('패키지 목록', () => {
     mockApi({ 'GET /packages': () => json(PACKAGES), 'GET /packages/PkgFaultDemo/artifacts': () => json([]) });
     render(<TransportTab />);
     const list = await screen.findByRole('list', { name: '패키지 목록' });
-    const rowOf = (text: string) => screen.getByText(text).closest('label') as HTMLElement;
+    const rowOf = (text: string) => within(list).getByText(text).closest('label') as HTMLElement;
     await userEvent.click(within(list).getByText('Fault Demo'));
     expect(screen.getByRole('radio', { name: /Fault Demo/ })).toBeChecked();
     expect(rowOf('Fault Demo').className).toContain('bg-primary-soft');
@@ -115,7 +119,7 @@ describe('패키지 목록', () => {
     await userEvent.click(within(list).getByText('PkgNotInPrd'));
     expect(screen.getByRole('radio', { name: /Not In PRD/ })).toBeChecked();
     expect(screen.getByRole('radio', { name: /Fault Demo/ })).not.toBeChecked();
-    expect(screen.getAllByRole('radio').filter((r) => (r as HTMLInputElement).checked)).toHaveLength(1);
+    expect(pkgRadios().filter((r) => (r as HTMLInputElement).checked)).toHaveLength(1);
   });
 
   it('REQ-104 AC-2: 라디오의 접근 가능한 이름에 name, id, version이 모두 들어가고 행은 40px 이상·hover surface-hover·목록은 360px 안쪽 스크롤이다', async () => {

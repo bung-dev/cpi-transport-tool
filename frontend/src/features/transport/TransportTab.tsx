@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { PageHeader } from '../../components/ui/PageHeader';
-import type { TransportResponse } from '../../api/types';
+import type { ArtifactSummary, TransportResponse } from '../../api/types';
 import { TransportResult } from '../result/TransportResult';
 import { ArtifactPicker } from './ArtifactPicker';
 import { PackagePicker } from './PackagePicker';
@@ -9,14 +9,15 @@ import { RunPanel } from './RunPanel';
 
 export function TransportTab() {
   // 선택 상태는 여기서 들고 있고, 옵션·실행(TODO-007)이 같은 값을 쓴다.
-  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<ArtifactSummary | null>(null);
+  const selectedPackageId = selectedPackage?.id ?? null;
   const [selectedArtifactIds, setSelectedArtifactIds] = useState<string[]>([]);
 
   const [result, setResult] = useState<TransportResponse | null>(null);
 
-  function selectPackage(id: string) {
-    if (id === selectedPackageId) return;
-    setSelectedPackageId(id);
+  function selectPackage(pkg: ArtifactSummary) {
+    if (pkg.id === selectedPackageId) return;
+    setSelectedPackage(pkg);
     setSelectedArtifactIds([]);
     setResult(null);
   }
@@ -42,7 +43,12 @@ export function TransportTab() {
           </div>
           <div className="min-w-0 lg:sticky lg:top-[76px]">
             <Card title="실행">
-              <RunPanel packageId={selectedPackageId} artifactIds={selectedArtifactIds} onResult={setResult} />
+              <RunPanel
+                packageId={selectedPackageId}
+                packageName={selectedPackage?.name ?? null}
+                artifactIds={selectedArtifactIds}
+                onResult={setResult}
+              />
             </Card>
           </div>
         </div>
