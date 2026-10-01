@@ -213,4 +213,8 @@ describe('기반 규칙', () => {
     expect(rule).toContain('outline: 2px solid var(--color-primary)');
     expect(rule).toContain('outline-offset: 2px');
   });
+
+  it('REQ-101 AC-7: 평상시에도 외곽선 색이 primary라 전환 유틸리티가 포커스 색을 ink에서 서서히 바꾸지 않는다', () => {
+    expect(css).toMatch(/:where\([^)]*\)\s*\{\s*outline-color:\s*var\(--color-primary\);\s*\}/);
+  });
 });

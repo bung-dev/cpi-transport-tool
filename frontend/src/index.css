@@ -66,6 +66,11 @@ body {
   background-color: var(--color-surface);
 }
 
+/* AI-NOTE: 평상시에도 외곽선 색을 primary로 둔다. 외곽선 색을 기본값(currentcolor)으로 두면 Tailwind의 transition 유틸리티(outline-color 포함)가 포커스를 받는 순간 ink에서 primary로 150ms 동안 서서히 바꿔, 그 사이에 읽은 포커스 색이 primary가 아니다 (근거: REQ-101 AC-7, 개발 중 브라우저 확인) */
+:where(button, a, input, select, textarea, [tabindex]) {
+  outline-color: var(--color-primary);
+}
+
 /* REQ-101 AC-7: 모든 인터랙티브 요소의 키보드 포커스 표시 */
 :where(button, a, input, select, textarea, [tabindex]):focus-visible {
   outline: 2px solid var(--color-primary);
