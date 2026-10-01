@@ -102,4 +102,119 @@ describe('패키지 목록', () => {
     );
     expect(screen.queryByRole('checkbox', { name: /IF_Order_Sync/ })).toBeNull();
   });
+
+  it('REQ-104 AC-2: 행의 어느 곳(이름·ID·버전)을 눌러도 그 패키지가 선택되고 선택된 행은 primary-soft다', async () => {
+    mockApi({ 'GET /packages': () => json(PACKAGES), 'GET /packages/PkgFaultDemo/artifacts': () => json([]) });
+    render(<TransportTab />);
+    const list = await screen.findByRole('list', { name: '패키지 목록' });
+    const rowOf = (text: string) => screen.getByText(text).closest('label') as HTMLElement;
+    await userEvent.click(within(list).getByText('Fault Demo'));
+    expect(screen.getByRole('radio', { name: /Fault Demo/ })).toBeChecked();
+    expect(rowOf('Fault Demo').className).toContain('bg-primary-soft');
+    expect(rowOf('Transport Demo').className).not.toContain('bg-primary-soft');
+    await userEvent.click(within(list).getByText('PkgNotInPrd'));
+    expect(screen.getByRole('radio', { name: /Not In PRD/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Fault Demo/ })).not.toBeChecked();
+    expect(screen.getAllByRole('radio').filter((r) => (r as HTMLInputElement).checked)).toHaveLength(1);
+  });
+
+  it('REQ-104 AC-2: 라디오의 접근 가능한 이름에 name, id, version이 모두 들어가고 행은 40px 이상·hover surface-hover·목록은 360px 안쪽 스크롤이다', async () => {
+    mockApi({ 'GET /packages': () => json(PACKAGES) });
+    render(<TransportTab />);
+    const radio = await screen.findByRole('radio', { name: /Transport Demo/ });
+    expect(radio).toHaveAccessibleName(/Transport Demo/);
+    expect(radio).toHaveAccessibleName(/PkgTransportDemo/);
+    expect(radio).toHaveAccessibleName(/1\.0\.0/);
+    const row = radio.closest('label') as HTMLElement;
+    expect(row.className).toContain('min-h-10');
+    expect(row.className).toContain('hover:bg-surface-hover');
+    expect(row.className).toContain('cursor-pointer');
+    const list = screen.getByRole('list', { name: '패키지 목록' });
+    expect(list.className).toContain('max-h-[360px]');
+    expect(list.className).toContain('overflow-y-auto');
+    expect(screen.getByText('Transport Demo').className).toContain('font-medium');
+    expect(screen.getByText('PkgTransportDemo').className).toContain('text-ink-secondary');
+    expect(within(list).getAllByText('1.0.0')[0].className).toContain('text-ink-tertiary');
+    expect(within(list).getAllByText('1.0.0')[0].className).toContain('text-xs');
+  });
+
+  it('REQ-104 AC-3: 검색 입력은 돋보기 아이콘·placeholder·연결된 label이 있고 개수 문구가 "전체 N개" → "N개 중 M개"로 바뀐다', async () => {
+    mockApi({ 'GET /packages': () => json(PACKAGES) });
+    render(<TransportTab />);
+    const input = await screen.findByLabelText('패키지 검색');
+    expect(input).toHaveAttribute('placeholder', '이름 또는 ID로 검색');
+    expect(input.parentElement?.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(screen.getByText('전체 3개')).toBeInTheDocument();
+    await userEvent.type(input, 'fault');
+    expect(screen.getByText('3개 중 1개')).toBeInTheDocument();
+    expect(screen.queryByText('전체 3개')).toBeNull();
+    await userEvent.clear(input);
+    expect(screen.getByText('전체 3개')).toBeInTheDocument();
+  });
+
+  it('REQ-104 AC-3: 검색 결과가 0개면 목록 대신 "검색 결과가 없습니다"를 보인다', async () => {
+    mockApi({ 'GET /packages': () => json(PACKAGES) });
+    render(<TransportTab />);
+    await userEvent.type(await screen.findByLabelText('패키지 검색'), 'zzz');
+    expect(screen.getByText('검색 결과가 없습니다')).toBeInTheDocument();
+    expect(screen.getByText('3개 중 0개')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: '패키지 목록' })).toBeNull();
+  });
+
+  it('REQ-107 AC-1: 패키지 조회 중에는 목록 행 모양의 스켈레톤 3개 이상과 role=status "불러오는 중"을 보인다', async () => {
+    let release: (r: Response) => void = () => {};
+    mockApi({ 'GET /packages': () => new Promise<Response>((r) => (release = r)) });
+    render(<TransportTab />);
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('불러오는 중');
+    expect(status.querySelectorAll('.animate-pulse').length).toBeGreaterThanOrEqual(3);
+    expect(status.querySelectorAll('div.h-10').length).toBeGreaterThanOrEqual(3);
+    release(json(PACKAGES));
+    await screen.findByLabelText('패키지 검색');
+  });
+
+  it('REQ-107 AC-2: 빈 상태 "패키지가 없습니다", "검색 결과가 없습니다"는 EmptyState(아이콘 + 글자, 가운데 정렬, ink-secondary)다', async () => {
+    mockApi({ 'GET /packages': () => json([]) });
+    const { unmount } = render(<TransportTab />);
+    const empty = (await screen.findByText('패키지가 없습니다')).parentElement as HTMLElement;
+    expect(empty.className).toContain('text-center');
+    expect(empty.className).toContain('text-ink-secondary');
+    expect(empty.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    unmount();
+    mockApi({ 'GET /packages': () => json(PACKAGES) });
+    render(<TransportTab />);
+    await userEvent.type(await screen.findByLabelText('패키지 검색'), 'zzz');
+    const none = screen.getByText('검색 결과가 없습니다').parentElement as HTMLElement;
+    expect(none.className).toContain('text-center');
+    expect(none.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+  });
+
+  it('REQ-101 AC-4: 패키지 id 값은 고정폭 글꼴이다', async () => {
+    mockApi({ 'GET /packages': () => json(PACKAGES) });
+    render(<TransportTab />);
+    await screen.findByLabelText('패키지 검색');
+    expect(screen.getByText('PkgTransportDemo').className).toContain('font-mono');
+    expect(screen.getByText('Transport Demo').className).not.toContain('font-mono');
+  });
+
+  it('REQ-101 AC-6: 패키지 행의 배경(hover·선택) 변화에 150ms 전환이 있다', async () => {
+    mockApi({ 'GET /packages': () => json(PACKAGES) });
+    render(<TransportTab />);
+    const row = (await screen.findByRole('radio', { name: /Transport Demo/ })).closest('label') as HTMLElement;
+    expect(row.className).toContain('transition-colors');
+    expect(row.className).toContain('duration-150');
+  });
+
+  it('REQ-101 AC-7: 패키지 행의 라디오는 input 자체를 그린 모양이고 외곽선을 지우지 않으며 검색 입력도 잘리지 않는다', async () => {
+    mockApi({ 'GET /packages': () => json(PACKAGES) });
+    render(<TransportTab />);
+    const radio = await screen.findByRole('radio', { name: /Transport Demo/ });
+    expect(radio.className).toContain('appearance-none');
+    const row = radio.closest('label') as HTMLElement;
+    expect(row.className).toContain('px-2.5');
+    expect(`${row.className} ${radio.className}`).not.toMatch(/outline-(none|0|hidden)/);
+    const input = screen.getByLabelText('패키지 검색');
+    expect(input.className).not.toMatch(/outline-(none|0|hidden)/);
+    expect(input.parentElement?.className).not.toContain('overflow-hidden');
+  });
 });
