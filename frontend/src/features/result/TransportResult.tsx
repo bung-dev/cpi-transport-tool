@@ -1,13 +1,36 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import type { TransportResponse } from '../../api/types';
 import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
+import { Switch } from '../../components/ui/Switch';
 import { formatTime } from '../../lib/formatTime';
 import { ArtifactCard } from './ArtifactCard';
+import { initialExpanded, isProblemArtifact, totalProblemCount } from './problems';
 
 // REQ-105 AC-8, REQ-012 AC-1: 서버 값은 모두 JSX 텍스트 노드로만 렌더링한다.
 export function TransportResult({ result }: { result: TransportResponse }) {
   const titleId = useId();
   const { total, succeeded, failed } = result.summary;
+
+  // 접기·펼치기와 "문제 항목만 보기" 상태. 새 결과가 나타나면 그 결과의 처음 상태로 초기화한다(REQ-105 AC-5).
+  // 렌더 중 이전 결과와 비교해 상태를 맞추는 방식이라 결과가 바뀐 같은 렌더에서 옛 상태가 한 번도 보이지 않는다.
+  const [seen, setSeen] = useState(result);
+  const [expanded, setExpanded] = useState<boolean[]>(() => initialExpanded(result.results));
+  const [onlyProblems, setOnlyProblems] = useState(false);
+  let expandedNow = expanded;
+  let onlyNow = onlyProblems;
+  if (seen !== result) {
+    setSeen(result);
+    expandedNow = initialExpanded(result.results);
+    onlyNow = false;
+    setExpanded(expandedNow);
+    setOnlyProblems(false);
+  }
+
+  const problemTotal = totalProblemCount(result.results);
+  const hasProblemArtifact = result.results.some(isProblemArtifact);
+  const setAll = (value: boolean) => setExpanded(result.results.map(() => value));
+
   return (
     <section aria-labelledby={titleId} className="flex flex-col gap-4 min-w-0">
       <div className="flex flex-wrap items-center gap-2">
@@ -32,10 +55,39 @@ export function TransportResult({ result }: { result: TransportResponse }) {
         <Meta label="시작">{formatTime(result.startedAt)}</Meta>
         <Meta label="종료">{formatTime(result.finishedAt)}</Meta>
       </dl>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex items-center gap-3">
+          <Switch
+            label="문제 항목만 보기"
+            checked={onlyNow}
+            disabled={!hasProblemArtifact}
+            onChange={(e) => setOnlyProblems(e.target.checked)}
+          />
+          <span className="text-xs text-ink-tertiary">문제 항목 {problemTotal}건</span>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          <Button variant="ghost" size="sm" disabled={onlyNow} onClick={() => setAll(true)}>
+            모두 펼치기
+          </Button>
+          <Button variant="ghost" size="sm" disabled={onlyNow} onClick={() => setAll(false)}>
+            모두 접기
+          </Button>
+        </div>
+      </div>
       <div className="flex flex-col gap-3 min-w-0">
-        {result.results.map((r, i) => (
-          <ArtifactCard key={`${r.artifactId}-${i}`} r={r} />
-        ))}
+        {result.results.map((r, i) => {
+          // 켜진 동안에는 문제 아티팩트의 카드만 남고 모두 펼쳐진 채 고정된다. 끄면 켜기 직전 상태(expanded)로 돌아간다.
+          if (onlyNow && !isProblemArtifact(r)) return null;
+          return (
+            <ArtifactCard
+              key={`${r.artifactId}-${i}`}
+              r={r}
+              expanded={onlyNow || (expandedNow[i] ?? false)}
+              onToggle={() => setExpanded(expandedNow.map((v, j) => (j === i ? !v : v)))}
+              onlyProblems={onlyNow}
+            />
+          );
+        })}
       </div>
     </section>
   );
