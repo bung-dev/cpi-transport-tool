@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import type { TransportResponse } from '../../api/types';
+import type { ArtifactResult, ReplacementStatus, TransportResponse } from '../../api/types';
 import { formatTime } from '../../lib/formatTime';
 import { TransportResult } from './TransportResult';
 
@@ -267,5 +268,179 @@ describe('이관 결과', () => {
     expect(row.className).toContain('hover:bg-surface-hover');
     expect(row.className).toContain('transition-colors');
     expect(row.className).toContain('duration-150');
+  });
+
+  // REQ-105 AC-3·AC-5용 결과: A(문제 없음, 접힘) / B(VALUE_MISMATCH 1건, 펼침) / C(FAILED·치환 없음, 펼침) / D(PLANNED만, 접힘)
+  const art = (artifactId: string, over: Partial<ArtifactResult>): ArtifactResult => ({
+    artifactId,
+    status: 'SUCCESS',
+    action: 'NONE',
+    deployStatus: 'NOT_REQUESTED',
+    error: null,
+    replacements: [],
+    unmappedKeys: [],
+    ...over,
+  });
+  const rep = (key: string, status: ReplacementStatus): ArtifactResult['replacements'][number] => ({
+    targetType: 'header',
+    key,
+    status,
+    before: 'a',
+    after: 'b',
+    occurrences: 1,
+  });
+  const MIXED: TransportResponse = {
+    ...BASE,
+    summary: { total: 4, succeeded: 3, failed: 1 },
+    results: [
+      art('A_Clean', { replacements: [rep('K1', 'APPLIED'), rep('K2', 'SENSITIVE_SKIPPED')] }),
+      art('B_Mismatch', {
+        replacements: [rep('K3', 'VALUE_MISMATCH'), rep('K4', 'APPLIED')],
+        unmappedKeys: [{ targetType: 'property', key: 'Mode' }],
+      }),
+      art('C_Failed', { status: 'FAILED', error: { code: 'ERR_C', message: 'failed c' } }),
+      art('D_Planned', { replacements: [rep('K5', 'PLANNED')], unmappedKeys: [{ targetType: 'header', key: 'T1' }, { targetType: 'header', key: 'T2' }] }),
+    ],
+  };
+  const toggle = (id: string) => screen.getByRole('button', { name: id });
+  const expandedOf = (id: string) => toggle(id).getAttribute('aria-expanded');
+  const onlySwitch = () => screen.getByRole('switch', { name: '문제 항목만 보기' });
+
+  it('REQ-105 AC-3: 처음 상태 — 문제 아티팩트는 펼침, 그 밖은 접힘이고 artifactId 버튼이 aria-expanded로 알린다', () => {
+    render(<TransportResult result={MIXED} />);
+    expect(expandedOf('A_Clean')).toBe('false');
+    expect(expandedOf('B_Mismatch')).toBe('true');
+    expect(expandedOf('C_Failed')).toBe('true');
+    expect(expandedOf('D_Planned')).toBe('false');
+    expect(screen.getByRole('heading', { level: 4, name: 'B_Mismatch' })).toContainElement(toggle('B_Mismatch'));
+    // 펼친 카드만 치환 표 소제목을 보인다
+    expect(screen.getAllByRole('heading', { level: 5, name: '치환 항목' })).toHaveLength(2);
+  });
+
+  it('REQ-105 AC-3: 아티팩트가 1개뿐이면 문제가 없어도 펼침이다', () => {
+    render(<TransportResult result={{ ...MIXED, results: [MIXED.results[0]] }} />);
+    expect(expandedOf('A_Clean')).toBe('true');
+    expect(screen.getByRole('table')).toBeInTheDocument();
+  });
+
+  it('REQ-105 AC-3: Enter와 Space로 접기·펼치기가 전환된다', async () => {
+    render(<TransportResult result={MIXED} />);
+    toggle('A_Clean').focus();
+    await userEvent.keyboard('{Enter}');
+    expect(expandedOf('A_Clean')).toBe('true');
+    await userEvent.keyboard(' ');
+    expect(expandedOf('A_Clean')).toBe('false');
+    await userEvent.click(toggle('B_Mismatch'));
+    expect(expandedOf('B_Mismatch')).toBe('false');
+    expect(expandedOf('C_Failed')).toBe('true');
+  });
+
+  it('REQ-105 AC-3: 접힌 카드에는 머리와 요약 한 줄 "치환 n건 · 문제 m건 · 매핑되지 않은 키 k개"만 보이고 펼치면 요약 줄이 없다', async () => {
+    render(<TransportResult result={MIXED} />);
+    expect(screen.getByText('치환 2건 · 문제 0건 · 매핑되지 않은 키 0개')).toBeInTheDocument();
+    expect(screen.getByText('치환 1건 · 문제 0건 · 매핑되지 않은 키 2개')).toBeInTheDocument();
+    expect(screen.queryByText(/치환 2건 · 문제 1건/)).toBeNull();
+    // 접힌 카드 A에는 표·소제목·칩이 없다. 머리(h4, 배지)만 있다
+    const cardA = toggle('A_Clean').closest('div[class*="rounded-lg"]') as HTMLElement;
+    expect(cardA.querySelector('table, h5, ul')).toBeNull();
+    expect(within(cardA).getByText('SUCCESS')).toBeInTheDocument();
+    await userEvent.click(toggle('A_Clean'));
+    expect(screen.queryByText('치환 2건 · 문제 0건 · 매핑되지 않은 키 0개')).toBeNull();
+    await userEvent.click(toggle('B_Mismatch'));
+    expect(screen.getByText('치환 2건 · 문제 1건 · 매핑되지 않은 키 1개')).toBeInTheDocument();
+  });
+
+  it('REQ-105 AC-3: 결과 머리에 sm ghost 버튼 "모두 펼치기"·"모두 접기"가 있고 전체를 바꾼다', async () => {
+    render(<TransportResult result={MIXED} />);
+    const all = screen.getByRole('button', { name: '모두 펼치기' });
+    const none = screen.getByRole('button', { name: '모두 접기' });
+    for (const b of [all, none]) {
+      expect(b.className).toContain('h-7');
+      expect(b.className).toContain('bg-transparent');
+    }
+    await userEvent.click(all);
+    for (const id of ['A_Clean', 'B_Mismatch', 'C_Failed', 'D_Planned']) expect(expandedOf(id)).toBe('true');
+    await userEvent.click(none);
+    for (const id of ['A_Clean', 'B_Mismatch', 'C_Failed', 'D_Planned']) expect(expandedOf(id)).toBe('false');
+  });
+
+  it('REQ-101 AC-6: artifactId 접기 버튼은 글자색 전환 150ms가 있고 포커스 외곽선을 지우지 않는다', () => {
+    render(<TransportResult result={MIXED} />);
+    const b = toggle('A_Clean');
+    expect(b.className).toContain('transition-colors');
+    expect(b.className).toContain('duration-150');
+    expect(b.className).not.toMatch(/outline-(none|0|hidden)/);
+  });
+
+  it('REQ-105 AC-5: 결과 머리에 스위치 "문제 항목만 보기"와 결과 전체의 "문제 항목 m건"이 있다', () => {
+    render(<TransportResult result={MIXED} />);
+    expect(onlySwitch()).not.toBeChecked();
+    expect(onlySwitch()).toBeEnabled();
+    expect(screen.getByText('문제 항목 1건')).toBeInTheDocument();
+  });
+
+  it('REQ-105 AC-5: 켜면 문제 아티팩트의 카드만 남고 모두 펼쳐지며 치환 표에는 문제 항목 행만 보이고 문제 항목이 없는 FAILED 카드는 "문제 항목 없음"이다', async () => {
+    render(<TransportResult result={MIXED} />);
+    await userEvent.click(onlySwitch());
+    expect(onlySwitch()).toBeChecked();
+    expect(screen.queryByRole('button', { name: 'A_Clean' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'D_Planned' })).toBeNull();
+    expect(expandedOf('B_Mismatch')).toBe('true');
+    expect(expandedOf('C_Failed')).toBe('true');
+    const rows = within(screen.getByRole('table')).getAllByRole('row');
+    expect(rows).toHaveLength(2);
+    expect(within(rows[1]).getByText('K3')).toBeInTheDocument();
+    expect(screen.queryByText('K4')).toBeNull();
+    expect(screen.getByText('문제 항목 없음')).toBeInTheDocument();
+  });
+
+  it('REQ-105 AC-5: 켜진 동안에도 남은 카드의 오류 Callout과 매핑되지 않은 키 목록은 그대로 보인다', async () => {
+    render(<TransportResult result={MIXED} />);
+    await userEvent.click(onlySwitch());
+    expect(screen.getByText('ERR_C')).toBeInTheDocument();
+    expect(screen.getByText('failed c')).toBeInTheDocument();
+    expect(screen.getByText('property / Mode')).toBeInTheDocument();
+    expect(screen.getByText('매핑되지 않은 키 없음')).toBeInTheDocument();
+  });
+
+  it('REQ-105 AC-5: 켜진 동안 개별 접기 버튼과 모두 펼치기·모두 접기는 비활성이고 끄면 켜기 직전의 접기·펼치기 상태로 돌아간다', async () => {
+    render(<TransportResult result={MIXED} />);
+    await userEvent.click(toggle('B_Mismatch')); // B 접기
+    await userEvent.click(toggle('A_Clean')); // A 펼치기
+    await userEvent.click(onlySwitch());
+    expect(toggle('B_Mismatch')).toBeDisabled();
+    expect(toggle('C_Failed')).toBeDisabled();
+    expect(screen.getByRole('button', { name: '모두 펼치기' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '모두 접기' })).toBeDisabled();
+    expect(expandedOf('B_Mismatch')).toBe('true');
+    await userEvent.click(onlySwitch());
+    expect(onlySwitch()).not.toBeChecked();
+    expect(expandedOf('A_Clean')).toBe('true');
+    expect(expandedOf('B_Mismatch')).toBe('false');
+    expect(expandedOf('C_Failed')).toBe('true');
+    expect(expandedOf('D_Planned')).toBe('false');
+    expect(toggle('B_Mismatch')).toBeEnabled();
+    expect(screen.getByRole('button', { name: '모두 펼치기' })).toBeEnabled();
+    // 필터 중 걸러졌던 행도 다시 보인다: A는 펼쳐져 K1·K2 전체 행, B는 접혀 있어 표가 없다
+    expect(within(screen.getByRole('table')).getByText('K2')).toBeInTheDocument();
+    expect(screen.queryByText('K4')).toBeNull();
+  });
+
+  it('REQ-105 AC-5: 문제 아티팩트가 하나도 없으면 스위치는 비활성이고 건수는 0건이다', () => {
+    render(<TransportResult result={{ ...MIXED, results: [MIXED.results[0], MIXED.results[3]] }} />);
+    expect(onlySwitch()).toBeDisabled();
+    expect(screen.getByText('문제 항목 0건')).toBeInTheDocument();
+  });
+
+  it('REQ-105 AC-5: 새 결과가 나타나면 스위치는 꺼지고 접기·펼치기는 그 결과의 처음 상태다', async () => {
+    const { rerender } = render(<TransportResult result={MIXED} />);
+    await userEvent.click(toggle('A_Clean'));
+    await userEvent.click(onlySwitch());
+    expect(onlySwitch()).toBeChecked();
+    rerender(<TransportResult result={{ ...MIXED, transportId: 't-next' }} />);
+    expect(onlySwitch()).not.toBeChecked();
+    expect(expandedOf('A_Clean')).toBe('false');
+    expect(expandedOf('B_Mismatch')).toBe('true');
+    expect(screen.getByRole('button', { name: 'D_Planned' })).toBeInTheDocument();
   });
 });
