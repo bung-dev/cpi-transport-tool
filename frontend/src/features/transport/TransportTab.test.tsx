@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ARTIFACTS, PACKAGES, json, mockApi } from '../../test/mockFetch';
 import { TransportTab } from './TransportTab';
 
+// 확인 대화상자 요약은 라벨(dt)과 값(dd)으로 나뉘어 있다(REQ-107 AC-4).
+const summaryValue = (dialog: HTMLElement, label: string) => within(dialog).getByText(label).nextElementSibling;
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('이관 탭 통합', () => {
@@ -154,9 +157,9 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     expect(screen.getByRole('switch', { name: '배포' })).toBeChecked();
     await userEvent.click(openRealBtn());
     const dialog = screen.getByRole('dialog', { name: '실제 이관 확인' });
-    expect(dialog).toHaveTextContent('대상 패키지: PkgTransportDemo');
-    expect(dialog).toHaveTextContent('아티팩트 수: 1');
-    expect(dialog).toHaveTextContent('배포: 아니오');
+    expect(summaryValue(dialog, '대상 패키지')).toHaveTextContent('PkgTransportDemo');
+    expect(summaryValue(dialog, '아티팩트 수')).toHaveTextContent('1');
+    expect(summaryValue(dialog, '배포')).toHaveTextContent('아니오');
     expect(screen.getByRole('radio', { name: '실제 이관' })).toBeChecked();
     expect(screen.getByRole('switch', { name: '배포' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: /IF_Customer_Push/ })).toBeChecked();
@@ -184,7 +187,7 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     await screen.findByRole('heading', { name: '이관 결과' });
     await userEvent.click(screen.getByRole('checkbox', { name: /IF_Order_Sync/ }));
     await userEvent.click(openRealBtn());
-    expect(screen.getByRole('dialog')).toHaveTextContent('아티팩트 수: 전체');
+    expect(summaryValue(screen.getByRole('dialog'), '아티팩트 수')).toHaveTextContent('전체');
     expect(screen.getByRole('checkbox', { name: /IF_Order_Sync/ })).not.toBeChecked();
     await userEvent.click(screen.getByRole('button', { name: '실행' }));
     await waitFor(() => expect(posts(fn)).toHaveLength(2));
@@ -203,7 +206,7 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     expect(screen.getByRole('radio', { name: '실제 이관' })).toBeChecked();
     await userEvent.click(screen.getByRole('switch', { name: '배포' }));
     await userEvent.click(screen.getByRole('button', { name: 'PRD로 이관' }));
-    expect(screen.getByRole('dialog')).toHaveTextContent('배포: 예');
+    expect(summaryValue(screen.getByRole('dialog'), '배포')).toHaveTextContent('예');
     await userEvent.click(screen.getByRole('button', { name: '실행' }));
     await waitFor(() => expect(posts(fn)).toHaveLength(2));
     expect(posts(fn)[1]).toMatchObject({ dryRun: false, deploy: true });
@@ -275,5 +278,36 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     const restore = focusCalls.find(([el]) => el === run);
     expect(restore).toBeDefined();
     expect(restore?.[1]).toEqual({ preventScroll: true });
+  });
+
+  it('REQ-107 AC-5: "이 구성으로 실제 이관"으로 연 대화상자가 닫혀 연 버튼이 사라지면 포커스가 실행 카드의 실행 버튼으로 가고 결과 시작은 스크롤로 밀리지 않는 옵션을 쓴다', async () => {
+    const focusCalls: Array<[HTMLElement, FocusOptions | undefined]> = [];
+    const original = HTMLElement.prototype.focus;
+    vi.spyOn(HTMLElement.prototype, 'focus').mockImplementation(function (this: HTMLElement, options?: FocusOptions) {
+      focusCalls.push([this, options]);
+      return original.call(this, options);
+    });
+    setupFlow();
+    await pickDemo(['IF_Customer_Push']);
+    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+    await screen.findByRole('heading', { name: '이관 결과' });
+    await userEvent.click(openRealBtn());
+    focusCalls.length = 0;
+    await userEvent.click(screen.getByRole('button', { name: '실행' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('button', { name: '이 구성으로 실제 이관' })).toBeNull());
+    const runBtn = screen.getByRole('button', { name: 'PRD로 이관' });
+    expect(runBtn).toHaveFocus();
+    expect(focusCalls.filter(([el]) => el === runBtn).pop()?.[1]).toEqual({ preventScroll: true });
+  });
+
+  it('REQ-107 AC-5: 실행 카드의 실행 버튼으로 연 대화상자를 취소하면 그 실행 버튼으로 돌아온다', async () => {
+    setupFlow();
+    await pickDemo();
+    await userEvent.click(screen.getByRole('radio', { name: '실제 이관' }));
+    const run = screen.getByRole('button', { name: 'PRD로 이관' });
+    await userEvent.click(run);
+    await userEvent.click(screen.getByRole('button', { name: '취소' }));
+    expect(run).toHaveFocus();
   });
 });
