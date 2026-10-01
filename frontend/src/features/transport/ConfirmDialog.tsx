@@ -62,7 +62,9 @@ export function ConfirmDialog({ packageId, artifactCount, deploy, busy, onConfir
           실제 이관 확인
         </h2>
         <div className="mt-3 flex flex-col gap-1 text-sm break-all">
-          <p>대상 패키지: {packageId}</p>
+          <p>
+            대상 패키지: <span className="font-mono">{packageId}</span>
+          </p>
           <p>아티팩트 수: {artifactCount === 0 ? '전체' : artifactCount}</p>
           <p>배포: {deploy ? '예' : '아니오'}</p>
           <p className="mt-2 font-medium">PRD에 업로드합니다</p>

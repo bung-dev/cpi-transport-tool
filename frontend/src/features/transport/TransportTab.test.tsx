@@ -26,7 +26,7 @@ describe('이관 탭 통합', () => {
     render(<TransportTab />);
     await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
     await userEvent.click(await screen.findByRole('checkbox', { name: /IF_Customer_Push/ }));
-    await userEvent.click(screen.getByRole('button', { name: '이관 실행' }));
+    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
     expect(await screen.findByRole('heading', { name: '이관 결과' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: '이관 결과' })).toHaveTextContent('transportId: t-9');
     const post = fn.mock.calls.find((c) => c[1]?.method === 'POST');
@@ -57,7 +57,7 @@ describe('이관 탭 통합', () => {
     render(<TransportTab />);
     await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
     await screen.findByRole('checkbox', { name: /IF_Order_Sync/ });
-    await userEvent.click(screen.getByRole('button', { name: '이관 실행' }));
+    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
     const resultHeading = await screen.findByRole('heading', { name: '이관 결과' });
     const order = ['패키지', '아티팩트', '실행'].map((name) => screen.getByRole('heading', { name }));
     order.push(resultHeading);
