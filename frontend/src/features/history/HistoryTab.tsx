@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getHistory } from '../../api/client';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Button } from '../../components/ui/Button';
+import { PageHeader } from '../../components/ui/PageHeader';
 import { Table, Td, Th, Tr } from '../../components/ui/Table';
 import { formatTime } from '../../lib/formatTime';
 import { useRemote } from '../../lib/useRemote';
@@ -39,78 +40,87 @@ export function HistoryTab() {
   // 상세는 목록 응답의 항목을 그대로 쓴다(추가 API 호출 없음, REQ-007 AC-2).
   if (state.status === 'ok' && selected !== null && state.data[selected]) {
     return (
-      <div className="flex flex-col gap-4 min-w-0">
-        <div>
-          <Button ref={backRef} onClick={() => setSelected(null)}>
-            목록으로
-          </Button>
+      <div className="min-w-0">
+        <PageHeader title="이관 이력" description="지난 이관 기록을 확인합니다." />
+        <div className="flex flex-col gap-4 min-w-0">
+          <div>
+            <Button ref={backRef} onClick={() => setSelected(null)}>
+              목록으로
+            </Button>
+          </div>
+          <TransportResult result={state.data[selected]} />
         </div>
-        <TransportResult result={state.data[selected]} />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4 min-w-0">
-      <div>
-        <Button
-          ref={refreshBtn}
-          onClick={() => {
-            refreshing.current = true;
-            setSelected(null);
-            retry();
-          }}
-          disabled={state.status === 'loading'}
-        >
-          새로고침
-        </Button>
-      </div>
-      {state.status === 'loading' && <p role="status">불러오는 중</p>}
-      {state.status === 'error' && <ErrorAlert error={state.error} onRetry={retry} />}
-      {state.status === 'ok' &&
-        (state.data.length === 0 ? (
-          <p>이관 이력이 없습니다</p>
-        ) : (
-          <Table>
-            <thead>
-              <Tr>
-                <Th>시작 시각</Th>
-                <Th>packageId</Th>
-                <Th>드라이런</Th>
-                <Th>배포</Th>
-                <Th>요약</Th>
-                <Th>transportId</Th>
-              </Tr>
-            </thead>
-            <tbody>
-              {state.data.map((h, i) => (
-                <Tr key={`${h.transportId}-${i}`}>
-                  <Td>{formatTime(h.startedAt)}</Td>
-                  <Td>{h.packageId}</Td>
-                  <Td>{yesNo(h.dryRun)}</Td>
-                  <Td>{yesNo(h.deploy)}</Td>
-                  <Td>{`${h.summary.succeeded}/${h.summary.total}, 실패 ${h.summary.failed}`}</Td>
-                  <Td>
-                    <button
-                      type="button"
-                      ref={(el) => {
-                        if (el) rowButtons.current.set(i, el);
-                        else rowButtons.current.delete(i);
-                      }}
-                      onClick={() => {
-                        openedFrom.current = i;
-                        setSelected(i);
-                      }}
-                      className="cursor-pointer text-left text-primary underline break-all"
-                    >
-                      {h.transportId}
-                    </button>
-                  </Td>
+    <div className="min-w-0">
+      <PageHeader
+        title="이관 이력"
+        description="지난 이관 기록을 확인합니다."
+        actions={
+          <Button
+            ref={refreshBtn}
+            onClick={() => {
+              refreshing.current = true;
+              setSelected(null);
+              retry();
+            }}
+            disabled={state.status === 'loading'}
+          >
+            새로고침
+          </Button>
+        }
+      />
+      <div className="flex flex-col gap-4 min-w-0">
+        {state.status === 'loading' && <p role="status">불러오는 중</p>}
+        {state.status === 'error' && <ErrorAlert error={state.error} onRetry={retry} />}
+        {state.status === 'ok' &&
+          (state.data.length === 0 ? (
+            <p>이관 이력이 없습니다</p>
+          ) : (
+            <Table>
+              <thead>
+                <Tr>
+                  <Th>시작 시각</Th>
+                  <Th>packageId</Th>
+                  <Th>드라이런</Th>
+                  <Th>배포</Th>
+                  <Th>요약</Th>
+                  <Th>transportId</Th>
                 </Tr>
-              ))}
-            </tbody>
-          </Table>
-        ))}
+              </thead>
+              <tbody>
+                {state.data.map((h, i) => (
+                  <Tr key={`${h.transportId}-${i}`}>
+                    <Td>{formatTime(h.startedAt)}</Td>
+                    <Td className="font-mono">{h.packageId}</Td>
+                    <Td>{yesNo(h.dryRun)}</Td>
+                    <Td>{yesNo(h.deploy)}</Td>
+                    <Td>{`${h.summary.succeeded}/${h.summary.total}, 실패 ${h.summary.failed}`}</Td>
+                    <Td>
+                      <button
+                        type="button"
+                        ref={(el) => {
+                          if (el) rowButtons.current.set(i, el);
+                          else rowButtons.current.delete(i);
+                        }}
+                        onClick={() => {
+                          openedFrom.current = i;
+                          setSelected(i);
+                        }}
+                        className="cursor-pointer text-left font-mono text-primary underline break-all transition-colors duration-150 hover:text-primary-hover"
+                      >
+                        {h.transportId}
+                      </button>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          ))}
+      </div>
     </div>
   );
 }
