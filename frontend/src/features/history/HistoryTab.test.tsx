@@ -24,7 +24,7 @@ function entry(id: string, over: Partial<TransportResponse> = {}): TransportResp
 }
 
 describe('이력 탭', () => {
-  it('REQ-007 AC-1: API 순서 그대로 행을 보이고 열은 시작 시각·packageId·드라이런·배포·요약·transportId', async () => {
+  it('REQ-007 AC-1: API 순서 그대로 행을 보이고 열은 시작 시각·패키지·모드·배포·결과·이관 ID', async () => {
     mockApi({
       'GET /transport/history': () =>
         json([entry('t-new', { dryRun: false, deploy: true, packageId: 'PkgB' }), entry('t-old')]),
@@ -33,17 +33,103 @@ describe('이력 탭', () => {
     await screen.findByRole('table');
     expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
       '시작 시각',
-      'packageId',
-      '드라이런',
+      '패키지',
+      '모드',
       '배포',
-      '요약',
-      'transportId',
+      '결과',
+      '이관 ID',
     ]);
     const rows = screen.getAllByRole('row').slice(1);
     expect(rows).toHaveLength(2);
     const cells = within(rows[0]).getAllByRole('cell').map((c) => c.textContent);
-    expect(cells).toEqual([formatTime('2026-09-29T07:05:05.351940500Z'), 'PkgB', '아니오', '예', '1/2, 실패 1', 't-new']);
+    expect(cells).toEqual([formatTime('2026-09-29T07:05:05.351940500Z'), 'PkgB', '실제 이관', '배포', '성공 1 / 전체 2실패 1', 't-new']);
     expect(within(rows[1]).getByRole('button', { name: 't-old' })).toBeInTheDocument();
+  });
+
+  it('REQ-106 AC-1: 모드는 neutral "드라이런"/accent "실제 이관" 배지, 배포는 info "배포" 배지 또는 ink-tertiary "배포 안 함"', async () => {
+    mockApi({
+      'GET /transport/history': () => json([entry('t-real', { dryRun: false, deploy: true }), entry('t-dry', { dryRun: true, deploy: false })]),
+    });
+    render(<HistoryTab />);
+    await screen.findByRole('table');
+    const [real, dry] = screen.getAllByRole('row').slice(1).map((r) => within(r));
+    expect(real.getByText('실제 이관').className).toContain('bg-accent-bg');
+    expect(real.getByText('배포').className).toContain('bg-info-bg');
+    expect(real.queryByText('배포 안 함')).toBeNull();
+    expect(dry.getByText('드라이런').className).toContain('bg-neutral-bg');
+    expect(dry.getByText('배포 안 함').className).toContain('text-ink-tertiary');
+    expect(dry.queryByText('배포', { selector: 'span.rounded-full' })).toBeNull();
+  });
+
+  it('REQ-106 AC-1: 결과는 "성공 s / 전체 t"이고 실패가 1 이상일 때만 danger "실패 f" 배지를 더하며 패키지·이관 ID는 고정폭이다', async () => {
+    mockApi({
+      'GET /transport/history': () =>
+        json([entry('t-bad', { summary: { total: 3, succeeded: 1, failed: 2 } }), entry('t-ok', { summary: { total: 2, succeeded: 2, failed: 0 } })]),
+    });
+    render(<HistoryTab />);
+    await screen.findByRole('table');
+    expect(screen.getByText('성공 1 / 전체 3')).toBeInTheDocument();
+    expect(screen.getByText('실패 2').className).toContain('bg-danger-bg');
+    expect(screen.getByText('성공 2 / 전체 2')).toBeInTheDocument();
+    expect(screen.getAllByText(/^실패 \d+$/)).toHaveLength(1);
+    expect(screen.getAllByText('PkgTransportDemo')[0].className).toContain('font-mono');
+    expect(screen.getByRole('button', { name: 't-bad' }).className).toContain('font-mono');
+  });
+
+  it('REQ-106 AC-2: 이관 ID 버튼은 primary 글자에 hover 밑줄이고 행 어디를 눌러도 상세가 열리며 행에 cursor-pointer가 있고 행에 tabindex가 없다', async () => {
+    mockApi({ 'GET /transport/history': () => json([entry('t-1'), entry('t-2', { packageId: 'PkgZ' })]) });
+    render(<HistoryTab />);
+    const btn = await screen.findByRole('button', { name: 't-2' });
+    expect(btn.className).toContain('text-primary');
+    expect(btn.className).toContain('hover:underline');
+    expect(btn.className).not.toMatch(/(^|\s)underline(\s|$)/);
+    const rows = screen.getAllByRole('row').slice(1);
+    for (const r of rows) {
+      expect(r.className).toContain('cursor-pointer');
+      expect(r).not.toHaveAttribute('tabindex');
+    }
+    expect(screen.getAllByRole('button').filter((b) => b.textContent?.startsWith('t-'))).toHaveLength(2);
+    await userEvent.click(within(rows[1]).getByText('PkgZ'));
+    const region = screen.getByRole('region', { name: '이관 결과' });
+    expect(within(region).getByText('이관 ID').nextElementSibling).toHaveTextContent('t-2');
+  });
+
+  it('REQ-106 AC-3: 상세는 페이지 머리(새로고침 없음) 아래에 화살표 아이콘이 있는 ghost "목록으로"와 결과 화면이다', async () => {
+    mockApi({ 'GET /transport/history': () => json([entry('t-1')]) });
+    render(<HistoryTab />);
+    await userEvent.click(await screen.findByRole('button', { name: 't-1' }));
+    expect(screen.getByRole('heading', { level: 2, name: '이관 이력' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '새로고침' })).toBeNull();
+    const back = screen.getByRole('button', { name: '목록으로' });
+    expect(back.className).toContain('bg-transparent');
+    expect(back.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(screen.getByRole('region', { name: '이관 결과' })).toBeInTheDocument();
+  });
+
+  it('REQ-106 AC-4: 조회 중에는 표 자리에 스켈레톤 행과 role=status "불러오는 중"을 보이고 새로고침은 비활성이다', async () => {
+    let release: (r: Response) => void = () => {};
+    mockApi({ 'GET /transport/history': () => new Promise<Response>((r) => (release = r)) });
+    render(<HistoryTab />);
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('불러오는 중');
+    expect(status.querySelectorAll('.animate-pulse').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByRole('button', { name: '새로고침' })).toBeDisabled();
+    release(json([entry('t-1')]));
+    await screen.findByRole('table');
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('button', { name: '새로고침' })).toBeEnabled();
+  });
+
+  it('REQ-106 AC-4: 빈 목록은 EmptyState로 "이관 이력이 없습니다"와 설명 "이관을 실행하면 여기에 기록됩니다."를 보이고 새로고침은 아이콘이 있는 secondary 버튼이다', async () => {
+    mockApi({ 'GET /transport/history': () => json([]) });
+    render(<HistoryTab />);
+    const title = await screen.findByText('이관 이력이 없습니다');
+    expect(screen.getByText('이관을 실행하면 여기에 기록됩니다.')).toBeInTheDocument();
+    expect((title.parentElement as HTMLElement).className).toContain('text-center');
+    expect(title.parentElement?.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    const refresh = screen.getByRole('button', { name: '새로고침' });
+    expect(refresh.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(refresh.className).toContain('border-hairline-strong');
   });
 
   it('REQ-007 AC-2: transportId 버튼으로 상세(REQ-006 결과 화면)를 열고 추가 fetch 없이 목록으로 돌아온다', async () => {
