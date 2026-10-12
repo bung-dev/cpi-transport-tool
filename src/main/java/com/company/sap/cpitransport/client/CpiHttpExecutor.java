@@ -1,5 +1,9 @@
 package com.company.sap.cpitransport.client;
 
+import com.company.sap.cpitransport.tenant.TenantRegistry;
+import com.company.sap.cpitransport.model.ErrorResponse.ApiException;
+import com.company.sap.cpitransport.model.ErrorResponse.Code;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -19,7 +23,7 @@ import org.springframework.web.client.RestClient;
 
 @Component
 public class CpiHttpExecutor {
-    private final CpiProperties properties;
+    private final TenantRegistry tenants;
     private final OAuthTokenProvider tokens;
     private final CsrfTokenStore csrf;
     private final TransportProperties.Retry retry;
@@ -28,7 +32,12 @@ public class CpiHttpExecutor {
 
     public CpiHttpExecutor(CpiProperties properties, OAuthTokenProvider tokens, CsrfTokenStore csrf,
                            TransportProperties transport, Sleeper sleeper) {
-        this.properties = properties;
+        this(TenantRegistry.initial(properties), tokens, csrf, transport, sleeper);
+    }
+
+    @Autowired
+    public CpiHttpExecutor(TenantRegistry tenants, OAuthTokenProvider tokens, CsrfTokenStore csrf, TransportProperties transport, Sleeper sleeper) {
+        this.tenants = tenants;
         this.tokens = tokens;
         this.csrf = csrf;
         this.retry = transport.retry();
@@ -41,13 +50,17 @@ public class CpiHttpExecutor {
 
     public ResponseEntity<byte[]> execute(CpiEnvironment environment, HttpMethod method,
                                            String path, byte[] body, boolean acceptJson) {
+        return execute(environment.name(), method, path, body, acceptJson);
+    }
+
+    public ResponseEntity<byte[]> execute(String environment, HttpMethod method, String path, byte[] body, boolean acceptJson) {
         if (!path.startsWith("/") || path.startsWith("//")) {
             throw new IllegalArgumentException("CPI path must be relative to the configured API");
         }
         return send(environment, method, path, body, acceptJson, false);
     }
 
-    private ResponseEntity<byte[]> send(CpiEnvironment environment, HttpMethod method, String path,
+    private ResponseEntity<byte[]> send(String environment, HttpMethod method, String path,
                                          byte[] body, boolean acceptJson, boolean fetch) {
         boolean write = HttpMethod.POST.equals(method) || HttpMethod.PUT.equals(method);
         boolean refreshedAuth = false;
@@ -55,16 +68,24 @@ public class CpiHttpExecutor {
         int transientFailures = 0;
         Duration delay = retry.initialBackoff();
         List<String> secrets = new ArrayList<>();
-        for (var connection : List.of(properties.dev(), properties.prd())) {
-            secrets.add(connection.clientSecret());
+        var connection = tenants.find(environment).orElseThrow(() -> new ApiException(Code.TENANT_NOT_FOUND)).connection();
+        var connections = new ArrayList<CpiProperties.Connection>();
+        connections.add(connection);
+        // Preserve legacy initial-tenant masking while covering the selected registered tenant.
+        for (String initialId : List.of("DEV", "PRD")) {
+            tenants.find(initialId).ifPresent(t -> connections.add(t.connection()));
+        }
+        for (var credentials : connections) {
+            secrets.add(credentials.clientId());
+            secrets.add(credentials.clientSecret());
             secrets.add(Base64.getEncoder().encodeToString(
-                    (connection.clientId() + ":" + connection.clientSecret()).getBytes(StandardCharsets.UTF_8)));
+                    (credentials.clientId() + ":" + credentials.clientSecret()).getBytes(StandardCharsets.UTF_8)));
         }
         while (true) {
             CsrfTokenStore.Token session = write ? csrf.getOrFetch(environment, () -> fetchCsrf(environment)) : null;
             String bearer;
             try {
-                bearer = tokens.getToken(environment.configurationEnvironment());
+                bearer = tokens.getToken(environment);
             } catch (OAuthTokenProvider.TokenRequestException failure) {
                 throw new CpiCallException(failure.httpStatus(), "CPI authentication failed", true);
             }
@@ -79,7 +100,7 @@ public class CpiHttpExecutor {
             }
             ResponseEntity<byte[]> response;
             try {
-                String base = properties.connection(environment.configurationEnvironment()).apiUrl().replaceAll("/+$", "");
+                String base = connection.apiUrl().replaceAll("/+$", "");
                 var request = client.method(method).uri(URI.create(base + path))
                         .headers(headers -> {
                             headers.setBearerAuth(bearer);
@@ -108,7 +129,7 @@ public class CpiHttpExecutor {
             if (response.getStatusCode().is2xxSuccessful()) return response;
             if (status == 401 && !refreshedAuth) {
                 refreshedAuth = true;
-                tokens.invalidate(environment.configurationEnvironment());
+                tokens.invalidate(environment);
                 continue;
             }
             if (status == 403 && write && !refreshedCsrf
@@ -128,7 +149,7 @@ public class CpiHttpExecutor {
         }
     }
 
-    private CsrfTokenStore.Token fetchCsrf(CpiEnvironment environment) {
+    private CsrfTokenStore.Token fetchCsrf(String environment) {
         var response = send(environment, HttpMethod.GET, "/api/v1/", null, true, true);
         String token = response.getHeaders().getFirst("X-CSRF-Token");
         if (token == null || token.isBlank() || "Required".equalsIgnoreCase(token)) {

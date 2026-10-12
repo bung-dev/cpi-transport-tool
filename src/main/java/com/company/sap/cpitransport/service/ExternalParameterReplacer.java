@@ -2,7 +2,6 @@ package com.company.sap.cpitransport.service;
 
 import com.company.sap.cpitransport.client.CpiApiClient;
 import com.company.sap.cpitransport.client.CpiCallException;
-import com.company.sap.cpitransport.client.CpiEnvironment;
 import com.company.sap.cpitransport.model.*;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -34,7 +33,10 @@ public class ExternalParameterReplacer {
     }
 
     public Result process(String artifactId, List<MappingEntry> mappings, boolean dryRun) {
-        var environment = dryRun ? CpiEnvironment.DEV : CpiEnvironment.PRD;
+        return process(dryRun ? "DEV" : "PRD", artifactId, mappings, dryRun);
+    }
+
+    public Result process(String environment, String artifactId, List<MappingEntry> mappings, boolean dryRun) {
         var configurations = new LinkedHashMap<String, CpiConfiguration>();
         for (var configuration : api.getConfigurations(environment, artifactId)) {
             configurations.put(configuration.parameterKey(), configuration);

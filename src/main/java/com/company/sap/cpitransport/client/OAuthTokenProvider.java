@@ -1,5 +1,11 @@
 package com.company.sap.cpitransport.client;
 
+import com.company.sap.cpitransport.tenant.TenantRegistry;
+import com.company.sap.cpitransport.tenant.TenantChangedEvent;
+import com.company.sap.cpitransport.model.ErrorResponse.ApiException;
+import com.company.sap.cpitransport.model.ErrorResponse.Code;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,24 +24,32 @@ import tools.jackson.databind.JsonNode;
 
 @Component
 public class OAuthTokenProvider {
-    private final CpiProperties properties;
+    private final TenantRegistry tenants;
     private final Clock clock;
     private final RestClient client;
     private final RetryExecutor retry;
-    private final ConcurrentHashMap<Environment, AccessToken> tokens = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Environment, Object> locks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, AccessToken> tokens = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Object> locks = new ConcurrentHashMap<>();
 
     public OAuthTokenProvider(CpiProperties properties, TransportProperties transport,
                               Clock clock, Sleeper sleeper) {
-        this.properties = properties;
+        this(TenantRegistry.initial(properties), transport, clock, sleeper);
+    }
+
+    @Autowired
+    public OAuthTokenProvider(TenantRegistry tenants, TransportProperties transport, Clock clock, Sleeper sleeper) {
+        this.tenants = tenants;
         this.clock = clock;
         this.retry = new RetryExecutor(transport.retry(), sleeper);
         this.client = RestClient.builder().requestFactory(new JdkClientHttpRequestFactory()).build();
     }
 
-    public String getToken(Environment environment) {
+    public String getToken(Environment environment) { return getToken(environment.name()); }
+
+    public String getToken(String environment) {
         synchronized (locks.computeIfAbsent(environment, ignored -> new Object())) {
-            var missing = new EnvironmentGuard(properties).missingKeys(environment);
+            var missing = EnvironmentGuard.reserved(environment)
+                    ? tenants.missingKeys(Environment.valueOf(environment)) : java.util.List.<String>of();
             if (!missing.isEmpty()) {
                 throw new EnvironmentNotConfiguredException(missing);
             }
@@ -49,14 +63,19 @@ public class OAuthTokenProvider {
         }
     }
 
-    public void invalidate(Environment environment) {
+    public void invalidate(Environment environment) { invalidate(environment.name()); }
+
+    @EventListener
+    public void changed(TenantChangedEvent event) { invalidate(event.tenantId()); }
+
+    public void invalidate(String environment) {
         synchronized (locks.computeIfAbsent(environment, ignored -> new Object())) {
             tokens.remove(environment);
         }
     }
 
-    private AccessToken requestToken(Environment environment) {
-        var connection = properties.connection(environment);
+    private AccessToken requestToken(String environment) {
+        var connection = tenants.find(environment).orElseThrow(() -> new ApiException(Code.TENANT_NOT_FOUND)).connection();
         // AI-NOTE: Request-start time conservatively avoids extending validity by network latency. (근거: REQ-002 AC-4, run 20260928-cpi-transport)
         var issuedAt = clock.instant();
         try {

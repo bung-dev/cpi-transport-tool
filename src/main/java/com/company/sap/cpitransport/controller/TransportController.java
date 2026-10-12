@@ -3,7 +3,6 @@ package com.company.sap.cpitransport.controller;
 import java.util.ArrayList;
 import com.company.sap.cpitransport.config.ReadOnlyProperties;
 import org.springframework.beans.factory.annotation.Autowired;
-import com.company.sap.cpitransport.config.CpiProperties.Environment;
 import com.company.sap.cpitransport.model.*;
 import com.company.sap.cpitransport.service.EnvironmentGuard;
 import com.company.sap.cpitransport.service.TransportService;
@@ -48,11 +47,16 @@ public class TransportController {
         }
         boolean dryRun = flag(body, "dryRun");
         boolean deploy = flag(body, "deploy");
+        String sourceId = tenantId(body, "sourceTenantId", "DEV");
+        String targetId = tenantId(body, "targetTenantId", "PRD");
+        if (sourceId.equals(targetId)) invalid();
         if (!dryRun && readOnly.readOnly()) throw new ErrorResponse.ApiException(ErrorResponse.Code.READ_ONLY_MODE);
-        var missing = new ArrayList<>(guard.missingKeys(Environment.DEV));
-        if (!dryRun) missing.addAll(guard.missingKeys(Environment.PRD));
+        var source = guard.resolve(sourceId);
+        var target = guard.resolve(targetId);
+        var missing = new ArrayList<>(guard.missingKeys(sourceId));
+        if (!dryRun) missing.addAll(guard.missingKeys(targetId));
         if (!missing.isEmpty()) throw new EnvironmentNotConfiguredException(missing);
-        var response = service.preflightAndExecute(new TransportRequest(body.get("packageId").asString(), ids, dryRun, deploy));
+        var response = service.preflightAndExecute(new TransportRequest(body.get("packageId").asString(), ids, dryRun, deploy, source, target));
         history.append(response);
         return response;
     }
@@ -60,6 +64,13 @@ public class TransportController {
     @GetMapping("/transport/history")
     public java.util.List<TransportResponse> history() {
         return history.findAll();
+    }
+
+    private static String tenantId(JsonNode body, String key, String fallback) {
+        var value = body.get(key);
+        if (value == null) return fallback;
+        if (!value.isString() || value.asString().isBlank()) invalid();
+        return value.asString();
     }
 
     private static boolean validId(JsonNode value) {

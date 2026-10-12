@@ -2,7 +2,6 @@ package com.company.sap.cpitransport.service;
 
 import com.company.sap.cpitransport.client.CpiApiClient;
 import com.company.sap.cpitransport.client.CpiCallException;
-import com.company.sap.cpitransport.client.CpiEnvironment;
 import com.company.sap.cpitransport.client.Sleeper;
 import com.company.sap.cpitransport.config.TransportProperties;
 import com.company.sap.cpitransport.model.DeployStatus;
@@ -28,9 +27,11 @@ public class DeployService {
         }
     }
 
-    public DeployStatus deployAndWait(String id) {
+    public DeployStatus deployAndWait(String id) { return deployAndWait("PRD", id); }
+
+    public DeployStatus deployAndWait(String targetTenantId, String id) {
         try {
-            api.deploy(CpiEnvironment.PRD, id);
+            api.deploy(targetTenantId, id);
             var deadline = clock.instant().plus(settings.timeout());
             // Poll first after one interval; the deadline is exclusive.
             // Cap the last wait when timeout is not divisible by the interval.
@@ -40,7 +41,7 @@ public class DeployService {
                 sleeper.sleep(remaining.compareTo(settings.pollInterval()) < 0
                         ? remaining : settings.pollInterval());
                 if (!clock.instant().isBefore(deadline)) break;
-                String status = api.getRuntimeStatus(CpiEnvironment.PRD, id).orElse("");
+                String status = api.getRuntimeStatus(targetTenantId, id).orElse("");
                 if (!clock.instant().isBefore(deadline)) break;
                 if ("STARTED".equals(status)) return DeployStatus.STARTED;
                 if ("ERROR".equals(status)) return DeployStatus.ERROR;

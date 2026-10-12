@@ -70,7 +70,7 @@ public class TenantRegistry {
     }
 
     public List<String> missingKeys(CpiProperties.Environment environment) {
-        return new EnvironmentGuard(properties).missingKeys(environment);
+        return EnvironmentGuard.missingKeys(properties, environment);
     }
 
     public synchronized StoreStatus storeStatus() { return status; }
@@ -105,7 +105,14 @@ public class TenantRegistry {
 
     public TenantView update(String id, JsonNode body) { return update(id, () -> body); }
 
-    public synchronized TenantView update(String id, Supplier<JsonNode> bodyReader) {
+    public TenantView update(String id, Supplier<JsonNode> bodyReader) {
+        TenantView view = updateStored(id, bodyReader);
+        // AI-NOTE: publish outside the registry monitor; cache fetches resolve tenants while locked (REQ-301 AC-4).
+        events.publishEvent(new TenantChangedEvent(id));
+        return view;
+    }
+
+    private synchronized TenantView updateStored(String id, Supplier<JsonNode> bodyReader) {
         StoredTenant previous = mutable(id);
         // AI-NOTE: defer reading PUT bodies until env/store/id checks (REQ-301 AC-4·AC-6).
         JsonNode body = bodyReader.get();
@@ -120,16 +127,19 @@ public class TenantRegistry {
         List<StoredTenant> next = new ArrayList<>(registered);
         next.set(next.indexOf(previous), replacement);
         persist(next);
-        events.publishEvent(new TenantChangedEvent(id));
         return find(id).orElseThrow().view();
     }
 
-    public synchronized void delete(String id) {
+    public void delete(String id) {
+        deleteStored(id);
+        events.publishEvent(new TenantChangedEvent(id));
+    }
+
+    private synchronized void deleteStored(String id) {
         StoredTenant previous = mutable(id);
         List<StoredTenant> next = new ArrayList<>(registered);
         next.remove(previous);
         persist(next);
-        events.publishEvent(new TenantChangedEvent(id));
     }
 
     private StoredTenant mutable(String id) {
