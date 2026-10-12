@@ -1,11 +1,12 @@
 // REQ-103 AC-4: 상태 배지의 (분류, 값) → 상태 이름 매핑표. 이 매핑은 이 모듈에서만 정한다.
 // 상태 이름은 index.css의 `<상태>-bg`/`<상태>-fg` 토큰 이름과 같다. 색 클래스는 components/ui/Badge.tsx 가 정한다.
-export type StatusKind = 'artifactStatus' | 'replacementStatus' | 'deployStatus' | 'transportAction';
+export type StatusKind = 'artifactStatus' | 'replacementStatus' | 'deployStatus' | 'transportAction' | 'tenantCheck';
 export type StatusTone = 'success' | 'warning' | 'danger' | 'info' | 'accent' | 'caution' | 'neutral';
 
 const FALLBACK: StatusTone = 'neutral';
 
 export const STATUS_BADGE_TONES: Record<StatusKind, Record<string, StatusTone>> = {
+  tenantCheck: { OK: 'success', TOKEN_FAILED: 'danger', API_FORBIDDEN: 'danger', UNREACHABLE: 'danger', ERROR: 'danger', REQUEST_FAILED: 'danger' },
   artifactStatus: {
     SUCCESS: 'success',
     FAILED: 'danger',
