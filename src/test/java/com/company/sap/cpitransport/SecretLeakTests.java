@@ -44,6 +44,7 @@ class SecretLeakTests {
     }
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) throws Exception {
+        registry.add("cpi.transport.read-only", () -> "false");
         stubs = new LocalCpiStubs(temporary.resolve("dev-zips"));
         stubs.start(0, 0);
         for (String env : List.of("dev", "prd")) {

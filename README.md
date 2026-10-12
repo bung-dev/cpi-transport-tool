@@ -20,6 +20,8 @@ Git Bash:
 
 **터미널 2: 더미 환경 변수 설정, 프론트 빌드, 앱 기동**
 
+스텁으로 실제 이관까지 해 보려면 `CPI_TRANSPORT_READ_ONLY=false`를 함께 줍니다(PowerShell: `$env:CPI_TRANSPORT_READ_ONLY = 'false'`).
+
 PowerShell 5.1:
 
 ```powershell

@@ -39,13 +39,14 @@ public class ApiExceptionHandler {
             case PACKAGE_NOT_FOUND, TENANT_NOT_FOUND -> 404;
             case CPI_UNAVAILABLE -> 502;
             case TENANT_NAME_DUPLICATE, TENANT_READ_ONLY, TENANT_STORE_NOT_CONFIGURED,
-                    TENANT_STORE_UNREADABLE -> 409;
+                    TENANT_STORE_UNREADABLE, READ_ONLY_MODE -> 409;
         };
         return ResponseEntity.status(status).body(new ErrorResponse(code.name(), message(code)));
     }
 
     private String message(Code code) {
         return switch (code) {
+            case READ_ONLY_MODE -> "Read-only mode: real transport is disabled";
             case INVALID_REQUEST -> "Invalid request";
             case ENVIRONMENT_NOT_CONFIGURED -> "Environment not configured";
             case MAPPING_INVALID -> "Invalid mapping";
