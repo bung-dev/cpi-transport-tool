@@ -1,3 +1,4 @@
+import { TENANTS_OK, TENANT_STATUS_OK } from './test/tenantFixtures';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { render, screen, within } from '@testing-library/react';
@@ -31,6 +32,8 @@ const HISTORY_ENTRY: TransportResponse = {
 describe('App', () => {
   beforeEach(() => {
     mockApi({
+      'GET /tenants': () => json(TENANTS_OK),
+      'GET /tenants/status': () => json(TENANT_STATUS_OK),
       'GET /packages': () => json(PACKAGES),
       'GET /packages/PkgTransportDemo/artifacts': () => json([]),
       'GET /transport/history': () => json([HISTORY_ENTRY]),
@@ -47,7 +50,7 @@ describe('App', () => {
     render(<App />);
     expect(screen.getByRole('tablist')).toBeInTheDocument();
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['이관', '이력']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['이관', '이력', '테넌트']);
     expect(screen.getByRole('tab', { name: '이관' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: '이력' })).toHaveAttribute('aria-selected', 'false');
   });

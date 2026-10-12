@@ -5,6 +5,12 @@ export interface ApiError {
 }
 
 const TITLES: Record<string, string> = {
+  INVALID_SERVICE_KEY: '서비스 키가 올바르지 않습니다',
+  TENANT_NAME_DUPLICATE: '같은 이름의 테넌트가 이미 있습니다',
+  TENANT_NOT_FOUND: '테넌트를 찾을 수 없습니다',
+  TENANT_READ_ONLY: '환경 변수로 등록한 테넌트는 바꿀 수 없습니다',
+  TENANT_STORE_NOT_CONFIGURED: '테넌트 저장소가 설정되지 않았습니다',
+  TENANT_STORE_UNREADABLE: '테넌트 저장 파일을 읽지 못했습니다',
   INVALID_REQUEST: '요청 값이 올바르지 않습니다',
   ENVIRONMENT_NOT_CONFIGURED: '서버 연결 설정이 없습니다',
   MAPPING_INVALID: '매핑 파일이 올바르지 않습니다',

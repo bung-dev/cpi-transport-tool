@@ -1,3 +1,4 @@
+import { TENANTS_OK, TENANT_STATUS_OK } from './tenantFixtures';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -39,6 +40,8 @@ const RESULT: TransportResponse = {
 function setupApp(historyError = false) {
   let historyCalls = 0;
   mockApi({
+      'GET /tenants': () => json(TENANTS_OK),
+      'GET /tenants/status': () => json(TENANT_STATUS_OK),
     'GET /packages': () => json(PACKAGES),
     'GET /packages/PkgTransportDemo/artifacts': () => json(ARTIFACTS),
     'GET /transport/history': () =>

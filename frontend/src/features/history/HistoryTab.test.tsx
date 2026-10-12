@@ -1,3 +1,4 @@
+import { TENANTS_OK, TENANT_STATUS_OK } from '../../test/tenantFixtures';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -169,6 +170,8 @@ describe('이력 탭', () => {
 
   it('REQ-007 AC-3: 탭을 다시 열 때마다 재조회한다', async () => {
     const fn = mockApi({
+      'GET /tenants': () => json(TENANTS_OK),
+      'GET /tenants/status': () => json(TENANT_STATUS_OK),
       'GET /packages': () => json(PACKAGES),
       'GET /transport/history': () => json([entry('t-1')]),
     });
@@ -216,6 +219,8 @@ describe('이력 탭', () => {
 
   it('REQ-009 AC-2: 행을 열고 목록으로 돌아온 뒤 다른 탭을 거쳐 이력 탭을 다시 열면 어떤 행 버튼에도 포커스가 가지 않는다', async () => {
     mockApi({
+      'GET /tenants': () => json(TENANTS_OK),
+      'GET /tenants/status': () => json(TENANT_STATUS_OK),
       'GET /packages': () => json(PACKAGES),
       'GET /transport/history': () => json([entry('t-1'), entry('t-2')]),
     });

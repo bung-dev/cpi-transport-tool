@@ -1,4 +1,4 @@
-// 백엔드 응답 계약 (model/*.java @250367e). 백엔드는 이 run에서 바꾸지 않는다.
+// 백엔드 model/*.java의 테넌트 및 이관 응답 계약.
 export interface ArtifactSummary {
   id: string;
   name: string;
@@ -53,6 +53,8 @@ export interface TransportSummary {
 }
 
 export interface TransportResponse {
+  sourceTenant?: TenantRef;
+  targetTenant?: TenantRef;
   transportId: string;
   packageId: string;
   dryRun: boolean;
@@ -64,8 +66,19 @@ export interface TransportResponse {
 }
 
 export interface TransportRequest {
+  sourceTenantId?: string;
+  targetTenantId?: string;
   packageId: string;
   artifactIds?: string[];
   dryRun?: boolean;
   deploy?: boolean;
 }
+
+export type TenantSource = 'env' | 'registered';
+export interface Tenant { id: string; name: string; source: TenantSource; apiHost: string; createdAt: string | null }
+export type TenantStore = 'OK' | 'NOT_CONFIGURED' | 'UNREADABLE';
+export interface TenantsResponse { store: TenantStore; tenants: Tenant[] }
+export type TenantCheck = 'OK' | 'TOKEN_FAILED' | 'API_FORBIDDEN' | 'UNREACHABLE' | 'ERROR';
+export interface TenantStatusItem { id: string; name: string; source: TenantSource; apiHost: string; check: TenantCheck }
+export interface TenantStatusResponse { readOnly: boolean; tenants: TenantStatusItem[] }
+export interface TenantRef { id: string; name: string }
