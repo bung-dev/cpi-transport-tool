@@ -3,8 +3,6 @@ package com.company.sap.cpitransport.service;
 import java.util.List;
 import com.company.sap.cpitransport.client.CpiApiClient;
 import com.company.sap.cpitransport.client.CpiCallException;
-import com.company.sap.cpitransport.client.CpiEnvironment;
-import com.company.sap.cpitransport.config.CpiProperties.Environment;
 import com.company.sap.cpitransport.model.ArtifactSummary;
 import com.company.sap.cpitransport.model.EnvironmentNotConfiguredException;
 import com.company.sap.cpitransport.model.ErrorResponse.ApiException;
@@ -21,18 +19,26 @@ public class PackageQueryService {
     }
 
     public List<ArtifactSummary> packages() {
-        requireDev();
-        return client.listPackages(CpiEnvironment.DEV).stream()
+        return packages("DEV");
+    }
+
+    public List<ArtifactSummary> packages(String tenantId) {
+        requireTenant(tenantId);
+        return client.listPackages(tenantId).stream()
                 .map(p -> new ArtifactSummary(p.id(), p.name(), p.version())).toList();
     }
 
     public List<ArtifactSummary> artifacts(String packageId) {
-        requireDev();
+        return artifacts("DEV", packageId);
+    }
+
+    public List<ArtifactSummary> artifacts(String tenantId, String packageId) {
+        requireTenant(tenantId);
         try {
-            if (client.getPackage(CpiEnvironment.DEV, packageId).isEmpty()) {
+            if (client.getPackage(tenantId, packageId).isEmpty()) {
                 throw new ApiException(Code.PACKAGE_NOT_FOUND);
             }
-            return client.listArtifacts(CpiEnvironment.DEV, packageId).stream()
+            return client.listArtifacts(tenantId, packageId).stream()
                     .map(a -> new ArtifactSummary(a.id(), a.name(), a.version())).toList();
         } catch (CpiCallException failure) {
             // A token-endpoint 404 is an authentication failure, not a missing package.
@@ -44,8 +50,9 @@ public class PackageQueryService {
         }
     }
 
-    private void requireDev() {
-        var missing = guard.missingKeys(Environment.DEV);
+    private void requireTenant(String tenantId) {
+        guard.resolve(tenantId);
+        var missing = guard.missingKeys(tenantId);
         if (!missing.isEmpty()) throw new EnvironmentNotConfiguredException(missing);
     }
 }

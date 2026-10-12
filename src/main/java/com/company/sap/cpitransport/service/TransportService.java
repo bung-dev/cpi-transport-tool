@@ -31,7 +31,7 @@ public class TransportService {
 
     public TransportResponse execute(TransportRequest request) {
         var loaded = mappings.load();
-        return execute(request, api.listArtifacts(CpiEnvironment.DEV, request.packageId()), loaded);
+        return execute(request, api.listArtifacts(request.source().id(), request.packageId()), loaded);
     }
 
     // Request validation and environment checks are performed by the controller.
@@ -39,10 +39,10 @@ public class TransportService {
         var loaded = mappings.load();
         List<CpiArtifact> artifacts;
         try {
-            if (api.getPackage(CpiEnvironment.DEV, request.packageId()).isEmpty()) {
+            if (api.getPackage(request.source().id(), request.packageId()).isEmpty()) {
                 throw new ErrorResponse.ApiException(ErrorResponse.Code.PACKAGE_NOT_FOUND);
             }
-            artifacts = api.listArtifacts(CpiEnvironment.DEV, request.packageId());
+            artifacts = api.listArtifacts(request.source().id(), request.packageId());
         } catch (CpiCallException failure) {
             // A token-endpoint 404 is an authentication failure, not a missing package.
             if (Integer.valueOf(404).equals(failure.httpStatus())
@@ -74,7 +74,7 @@ public class TransportService {
         }
         int succeeded = (int) results.stream().filter(r -> r.status() == ArtifactStatus.SUCCESS).count();
         return new TransportResponse(transportId, request.packageId(), request.dryRun(), request.deploy(),
-                started, clock.instant(), new TransportSummary(results.size(), succeeded, results.size() - succeeded), results);
+                started, clock.instant(), new TransportSummary(results.size(), succeeded, results.size() - succeeded), results, request.source(), request.target());
     }
 
     private ArtifactResult process(String transportId, TransportRequest request, String id,
@@ -93,7 +93,7 @@ public class TransportService {
                 error = new ArtifactError(stage.code, "LOOKUP: artifact absent from DEV package");
             } else {
                 stage = next(transportId, id, stage, Stage.DOWNLOAD);
-                byte[] zip = api.downloadArtifact(CpiEnvironment.DEV, id);
+                byte[] zip = api.downloadArtifact(request.source().id(), id);
                 stage = next(transportId, id, stage, Stage.IFLW);
                 var applicable = loadedMappings.stream().filter(m -> id.equals(m.artifactId())).toList();
                 var replaced = iflw.process(zip, applicable, request.dryRun());
@@ -102,21 +102,21 @@ public class TransportService {
                 if (request.dryRun()) skipped(transportId, id, Stage.UPLOAD, "SKIPPED_DRY_RUN");
                 if (!request.dryRun()) {
                     stage = next(transportId, id, stage, Stage.TARGET);
-                    if (api.getPackage(CpiEnvironment.PRD, request.packageId()).isEmpty()) {
+                    if (api.getPackage(request.target().id(), request.packageId()).isEmpty()) {
                         error = new ArtifactError("PACKAGE_NOT_FOUND_IN_TARGET", "TARGET: HTTP 404; CPI package not found");
                     } else {
-                        boolean exists = api.artifactExists(CpiEnvironment.PRD, id);
+                        boolean exists = api.artifactExists(request.target().id(), id);
                         stage = next(transportId, id, stage, Stage.UPLOAD);
                         String content = Base64.getEncoder().encodeToString(replaced.zipBytes());
-                        if (exists) api.updateArtifact(CpiEnvironment.PRD, id, artifact.get().name(), content);
-                        else api.createArtifact(CpiEnvironment.PRD, artifact.get().name(), id, request.packageId(), content);
+                        if (exists) api.updateArtifact(request.target().id(), id, artifact.get().name(), content);
+                        else api.createArtifact(request.target().id(), artifact.get().name(), id, request.packageId(), content);
                         action = exists ? TransportAction.UPDATED : TransportAction.CREATED;
                     }
                 }
                 if (error == null) {
                     stage = next(transportId, id, stage, Stage.CONFIGURATION_READ);
                     // Existing replacer owns stages 6 and 7: PUT failures returned, GET failures thrown.
-                    var external = parameters.process(id, applicable, request.dryRun());
+                    var external = parameters.process(request.dryRun() ? request.source().id() : request.target().id(), id, applicable, request.dryRun());
                     replacements.addAll(external.replacements());
                     unmapped.addAll(external.unmappedKeys());
                     stage = next(transportId, id, stage, Stage.CONFIGURATION_UPDATE);
@@ -124,7 +124,7 @@ public class TransportService {
                         error = new ArtifactError(stage.code, "CONFIGURATION_UPDATE: " + external.error().message());
                     } else if (request.deploy() && !request.dryRun()) {
                         stage = next(transportId, id, stage, Stage.DEPLOY);
-                        deployStatus = deployment.deployAndWait(id);
+                        deployStatus = deployment.deployAndWait(request.target().id(), id);
                         if (deployStatus != DeployStatus.STARTED) {
                             error = new ArtifactError(deployStatus == DeployStatus.TIMEOUT ? "DEPLOY_TIMEOUT" : stage.code,
                                     "DEPLOY: CPI deployment " + deployStatus);
