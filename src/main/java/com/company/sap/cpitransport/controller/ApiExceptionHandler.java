@@ -24,24 +24,39 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> api(ApiException failure) {
+        if (failure.status() != null) {
+            return ResponseEntity.status(failure.status()).body(new ErrorResponse(failure.code().name(),
+                    failure.responseMessage() == null ? message(failure.code()) : failure.responseMessage()));
+        }
         return response(failure.code());
     }
 
     private ResponseEntity<ErrorResponse> response(Code code) {
         int status = switch (code) {
-            case INVALID_REQUEST -> 400;
+            case INVALID_REQUEST, INVALID_SERVICE_KEY -> 400;
             case ENVIRONMENT_NOT_CONFIGURED -> 503;
             case MAPPING_INVALID -> 422;
-            case PACKAGE_NOT_FOUND -> 404;
+            case PACKAGE_NOT_FOUND, TENANT_NOT_FOUND -> 404;
             case CPI_UNAVAILABLE -> 502;
+            case TENANT_NAME_DUPLICATE, TENANT_READ_ONLY, TENANT_STORE_NOT_CONFIGURED,
+                    TENANT_STORE_UNREADABLE -> 409;
         };
-        String message = switch (code) {
+        return ResponseEntity.status(status).body(new ErrorResponse(code.name(), message(code)));
+    }
+
+    private String message(Code code) {
+        return switch (code) {
             case INVALID_REQUEST -> "Invalid request";
             case ENVIRONMENT_NOT_CONFIGURED -> "Environment not configured";
             case MAPPING_INVALID -> "Invalid mapping";
             case PACKAGE_NOT_FOUND -> "Package not found";
             case CPI_UNAVAILABLE -> "CPI request failed";
+            case INVALID_SERVICE_KEY -> "Invalid service key";
+            case TENANT_NAME_DUPLICATE -> "Tenant name already exists";
+            case TENANT_NOT_FOUND -> "Tenant not found";
+            case TENANT_READ_ONLY -> "Tenant is read only";
+            case TENANT_STORE_NOT_CONFIGURED -> "Tenant store not configured";
+            case TENANT_STORE_UNREADABLE -> "Tenant store unreadable";
         };
-        return ResponseEntity.status(status).body(new ErrorResponse(code.name(), message));
     }
 }
