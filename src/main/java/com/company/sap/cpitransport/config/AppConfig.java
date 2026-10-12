@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({CpiProperties.class, TransportProperties.class, TenantProperties.class})
+@EnableConfigurationProperties({CpiProperties.class, TransportProperties.class, TenantProperties.class, ReadOnlyProperties.class})
 public class AppConfig {
     @Bean
     public EncryptedTenantStore encryptedTenantStore(TenantProperties properties,

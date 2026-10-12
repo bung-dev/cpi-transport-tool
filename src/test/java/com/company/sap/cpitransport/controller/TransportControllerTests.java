@@ -69,7 +69,7 @@ class TransportControllerTests {
         mvc = mvc(service);
     }
     private MockMvc mvc(TransportService service) {
-        return MockMvcBuilders.standaloneSetup(new TransportController(service, guard, history))
+        return MockMvcBuilders.standaloneSetup(new TransportController(service, guard, history, new ReadOnlyProperties(false)))
                 .setControllerAdvice(new ApiExceptionHandler()).build();
     }
     private void stub(String path, String body) {

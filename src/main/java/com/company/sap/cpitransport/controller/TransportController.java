@@ -1,6 +1,8 @@
 package com.company.sap.cpitransport.controller;
 
 import java.util.ArrayList;
+import com.company.sap.cpitransport.config.ReadOnlyProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.company.sap.cpitransport.config.CpiProperties.Environment;
 import com.company.sap.cpitransport.model.*;
 import com.company.sap.cpitransport.service.EnvironmentGuard;
@@ -17,10 +19,19 @@ public class TransportController {
     private final EnvironmentGuard guard;
     private final TransportHistoryStore history;
 
+    private final ReadOnlyProperties readOnly;
+
     public TransportController(TransportService service, EnvironmentGuard guard, TransportHistoryStore history) {
+        this(service, guard, history, new ReadOnlyProperties(true));
+    }
+
+    @Autowired
+    public TransportController(TransportService service, EnvironmentGuard guard, TransportHistoryStore history,
+                               ReadOnlyProperties readOnly) {
         this.service = service;
         this.guard = guard;
         this.history = history;
+        this.readOnly = readOnly;
     }
 
     @PostMapping("/transport")
@@ -37,6 +48,7 @@ public class TransportController {
         }
         boolean dryRun = flag(body, "dryRun");
         boolean deploy = flag(body, "deploy");
+        if (!dryRun && readOnly.readOnly()) throw new ErrorResponse.ApiException(ErrorResponse.Code.READ_ONLY_MODE);
         var missing = new ArrayList<>(guard.missingKeys(Environment.DEV));
         if (!dryRun) missing.addAll(guard.missingKeys(Environment.PRD));
         if (!missing.isEmpty()) throw new EnvironmentNotConfiguredException(missing);
