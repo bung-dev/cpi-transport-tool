@@ -48,7 +48,7 @@ export function TenantTab() {
                 <Button size="sm" onClick={() => { setDeleting(t); setError(undefined); }}>삭제</Button>
               </div>}
             </div>
-            {editing === t.id && <div className="mt-3"><TenantForm tenantId={t.id} disabled={store !== 'OK'} onCancel={() => setEditing(null)} onSuccess={async () => { setEditing(null); await reload(); }} /></div>}
+            {editing === t.id && <div className="mt-3"><TenantForm tenantId={t.id} initialName={t.name} disabled={store !== 'OK'} onCancel={() => setEditing(null)} onSuccess={async () => { setEditing(null); await reload(); }} /></div>}
           </li>)}
         </ul>}
     </Card>
