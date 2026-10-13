@@ -81,15 +81,38 @@ it.each([
   await userEvent.click(screen.getByRole('button', { name: '등록' }));
   expect(await screen.findByRole('alert')).toHaveTextContent(title); expect(screen.getByRole('alert')).toHaveTextContent('fixed server message');
 });
-it.each(['name', 'serviceKey'])('REQ-301 AC-8·AC-9: 수정은 빈 입력과 준 %s 필드만 PUT', async field => {
+it.each(['name', 'serviceKey'])('REQ-301 AC-8·AC-9: 수정은 현재 이름과 빈 키 입력으로 열리고 변경한 %s 필드만 PUT', async field => {
   let body: unknown;
   mockApi({ 'PUT /tenants/t-new': init => { body = JSON.parse(init?.body as string); return json(REGISTERED); } }); fixed();
   await userEvent.click(screen.getByRole('button', { name: '수정' })); const form = screen.getByText('새 테넌트').closest('li')!;
-  expect(within(form).getByLabelText('이름')).toHaveValue(''); expect(within(form).getByLabelText('서비스 키 붙여넣기')).toHaveValue('');
-  if (field === 'name') await userEvent.type(within(form).getByLabelText('이름'), '바꾼 이름');
+  expect(within(form).getByLabelText('이름')).toHaveValue(REGISTERED.name); expect(within(form).getByLabelText('서비스 키 붙여넣기')).toHaveValue('');
+  expect(within(form).getByLabelText('서비스 키 파일')).toHaveValue('');
+  if (field === 'name') { await userEvent.clear(within(form).getByLabelText('이름')); await userEvent.type(within(form).getByLabelText('이름'), '바꾼 이름'); }
   else { await userEvent.click(within(form).getByLabelText('서비스 키 붙여넣기')); await userEvent.paste(JSON.stringify(KEY)); }
   await userEvent.click(within(form).getByRole('button', { name: '저장' }));
   await waitFor(() => expect(body).toEqual(field === 'name' ? { name: '바꾼 이름' } : { serviceKey: KEY }));
+  await waitFor(() => expect(within(form).queryByRole('button', { name: '저장' })).toBeNull());
+  expect(screen.queryByDisplayValue(/test-dummy/)).toBeNull(); expect(document.body.textContent).not.toContain(KEY.oauth.clientsecret);
+});
+it('REQ-301 AC-8·AC-9: 수정 취소는 요청 없이 값을 버리고 다시 열거나 다른 행을 열면 그 행의 현재 이름과 빈 키 입력', async () => {
+  const other: Tenant = { ...REGISTERED, id: 't-other', name: '다른 테넌트' };
+  const reload = vi.fn(async () => {}); const fn = mockApi({});
+  render(<TestTenantProvider value={{ reload, tenants: { state: 'success', data: { store: 'OK', tenants: [REGISTERED, other] } } }}><TenantTab /></TestTenantProvider>);
+  const first = screen.getByText(REGISTERED.name).closest('li')!; const second = screen.getByText(other.name).closest('li')!;
+  await userEvent.click(within(first).getByRole('button', { name: '수정' }));
+  expect(within(first).getByLabelText('이름')).toHaveValue(REGISTERED.name);
+  await userEvent.clear(within(first).getByLabelText('이름')); await userEvent.type(within(first).getByLabelText('이름'), '취소할 이름');
+  await userEvent.click(within(first).getByLabelText('서비스 키 붙여넣기')); await userEvent.paste(JSON.stringify(KEY));
+  await userEvent.click(within(first).getByRole('button', { name: '취소' }));
+  expect(within(first).queryByRole('button', { name: '저장' })).toBeNull(); expect(within(first).getByText(REGISTERED.name)).toBeInTheDocument();
+  await userEvent.click(within(first).getByRole('button', { name: '수정' }));
+  expect(within(first).getByLabelText('이름')).toHaveValue(REGISTERED.name); expect(within(first).getByLabelText('서비스 키 붙여넣기')).toHaveValue('');
+  await userEvent.click(within(second).getByRole('button', { name: '수정' }));
+  expect(within(first).queryByRole('button', { name: '저장' })).toBeNull();
+  expect(within(second).getByLabelText('이름')).toHaveValue(other.name); expect(within(second).getByLabelText('서비스 키 붙여넣기')).toHaveValue('');
+  expect(within(second).getByLabelText('서비스 키 파일')).toHaveValue('');
+  await userEvent.click(within(second).getByRole('button', { name: '취소' }));
+  expect(within(second).getByText(other.name)).toBeInTheDocument(); expect(fn).not.toHaveBeenCalled(); expect(reload).not.toHaveBeenCalled();
 });
 it('REQ-301 AC-8·AC-9: 삭제 포털, Esc·취소·포커스 복귀와 확인 후 DELETE 및 재조회', async () => {
   const reload = vi.fn(async () => {}); const fn = mockApi({ 'DELETE /tenants/t-new': () => new Response(null, { status: 204 }) });

@@ -4,9 +4,9 @@ import { toApiError, type ApiError } from '../../api/errors';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Button } from '../../components/ui/Button';
 import { TextInput } from '../../components/ui/TextInput';
-interface Props { tenantId?: string; disabled?: boolean; onSuccess: () => Promise<void>; onCancel?: () => void }
-export function TenantForm({ tenantId, disabled = false, onSuccess, onCancel }: Props) {
-  const [name, setName] = useState('');
+interface Props { tenantId?: string; initialName?: string; disabled?: boolean; onSuccess: () => Promise<void>; onCancel?: () => void }
+export function TenantForm({ tenantId, initialName = '', disabled = false, onSuccess, onCancel }: Props) {
+  const [name, setName] = useState(initialName);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError>();
@@ -31,7 +31,8 @@ export function TenantForm({ tenantId, disabled = false, onSuccess, onCancel }: 
         }
       }
       if (tenantId) {
-        await updateTenant(tenantId, { ...(name.trim() ? { name: name.trim() } : {}), ...(serviceKey ? { serviceKey } : {}) });
+        const updatedName = name.trim();
+        await updateTenant(tenantId, { ...(updatedName && updatedName !== initialName.trim() ? { name: updatedName } : {}), ...(serviceKey ? { serviceKey } : {}) });
       } else {
         await registerTenant(name.trim(), serviceKey!);
       }
