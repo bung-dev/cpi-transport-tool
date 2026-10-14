@@ -21,36 +21,56 @@ public final class RealSampleStub {
     public static final String ARTIFACT = ROOT + "IntegrationDesigntimeArtifacts(Id='" + ID + "',Version='active')";
     public static final Path SAMPLE = Path.of("samples/real-transport/" + ID);
     private final Path directory;
+    private final String variant;
+    private final String artifactId;
+    private final String artifactPath;
     private WireMockServer dev;
 
-    public RealSampleStub() { this(Path.of(System.getProperty("real.sample.dir", SAMPLE.toString()))); }
-    public RealSampleStub(Path directory) { this.directory = directory; }
+    public RealSampleStub() { this(System.getProperty("sample.variant", "")); }
+    public RealSampleStub(Path directory) { this(directory, System.getProperty("sample.variant", "")); }
+    public RealSampleStub(String variant) {
+        this(Path.of(System.getProperty("real.sample.dir", "samples/real-transport/" + variantId(variant))), variant);
+    }
+    public RealSampleStub(Path directory, String variant) {
+        this.artifactId = variantId(variant);
+        this.directory = directory;
+        this.variant = variant == null ? "" : variant;
+        this.artifactPath = ROOT + "IntegrationDesigntimeArtifacts(Id='" + artifactId + "',Version='active')";
+    }
+    private static String variantId(String variant) {
+        if (variant == null || variant.isEmpty()) return ID;
+        if (variant.equals("deployFail")) return "CPITT_Sample_DeployFail";
+        throw new IllegalArgumentException("Unknown sample variant");
+    }
     public WireMockServer dev() { return dev; }
 
     public void start(int port) throws IOException {
         if (dev != null) throw new IllegalStateException("Already started");
         byte[] bundle = bundle();
         String version;
+        String name;
         try (var in = Files.newInputStream(directory.resolve("META-INF/MANIFEST.MF"))) {
-            version = new Manifest(in).getMainAttributes().getValue("Bundle-Version");
+            var attributes = new Manifest(in).getMainAttributes();
+            version = attributes.getValue("Bundle-Version");
+            name = attributes.getValue("Bundle-Name");
         }
         var parameters = new Properties();
         try (var in = Files.newBufferedReader(directory.resolve("src/main/resources/parameters.prop"))) { parameters.load(in); }
-        if (version == null || parameters.size() != 1) throw new IOException("Invalid sample metadata");
+        if (version == null || name == null || parameters.size() != 1) throw new IOException("Invalid sample metadata");
         dev = new WireMockServer(options().bindAddress("localhost").port(port));
         try {
             dev.start();
             common();
             var json = new JsonMapper();
             var pkg = Map.of("Id", PACKAGE, "Name", PACKAGE, "Version", "1.0.0");
-            var artifact = Map.of("Id", ID, "Name", ID, "Version", version);
+            var artifact = Map.of("Id", artifactId, "Name", name, "Version", version);
             getJson(ROOT + "IntegrationPackages", json.writeValueAsString(Map.of("d", Map.of("results", List.of(pkg)))));
             getJson(ROOT + "IntegrationPackages('" + PACKAGE + "')", json.writeValueAsString(Map.of("d", pkg)));
             getJson(ROOT + "IntegrationPackages('" + PACKAGE + "')/IntegrationDesigntimeArtifacts",
                     json.writeValueAsString(Map.of("d", Map.of("results", List.of(artifact)))));
-            dev.stubFor(get(urlPathEqualTo(ARTIFACT + "/$value")).willReturn(ok().withHeader("Content-Type", "application/zip").withBody(bundle)));
+            dev.stubFor(get(urlPathEqualTo(artifactPath + "/$value")).willReturn(ok().withHeader("Content-Type", "application/zip").withBody(bundle)));
             String key = parameters.stringPropertyNames().iterator().next();
-            getJson(ARTIFACT + "/Configurations", json.writeValueAsString(Map.of("d", Map.of("results", List.of(
+            getJson(artifactPath + "/Configurations", json.writeValueAsString(Map.of("d", Map.of("results", List.of(
                     Map.of("ParameterKey", key, "ParameterValue", parameters.getProperty(key), "DataType", "xsd:string"))))));
         } catch (RuntimeException failure) { stop(); throw failure; }
     }
@@ -98,6 +118,7 @@ public final class RealSampleStub {
     public static void main(String[] args) throws Exception {
         var stub = new RealSampleStub();
         Runtime.getRuntime().addShutdownHook(new Thread(stub::stop));
+        if (stub.variant.equals("deployFail")) System.out.println("Real sample variant: deployFail");
         stub.start(args.length > 0 ? Integer.parseInt(args[0]) : Integer.getInteger("dev.port", 18081));
         System.out.println("Real sample DEV stub: DEV=http://localhost:" + stub.dev().port());
         new CountDownLatch(1).await();

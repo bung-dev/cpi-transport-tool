@@ -41,6 +41,7 @@ tasks.register('runLocalStubs', JavaExec) {
 tasks.register('runRealSampleStub', JavaExec) {
 	classpath = sourceSets.test.runtimeClasspath
 	mainClass = 'com.company.sap.cpitransport.stub.RealSampleStub'
+	if (project.hasProperty('sampleVariant')) { systemProperty 'sample.variant', project.property('sampleVariant') }
 }
 
 tasks.register('extractUploadedArtifacts', JavaExec) {
