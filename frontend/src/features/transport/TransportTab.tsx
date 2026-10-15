@@ -6,8 +6,16 @@ import { TransportResult } from '../result/TransportResult';
 import { ArtifactPicker } from './ArtifactPicker';
 import { PackagePicker } from './PackagePicker';
 import { RunPanel } from './RunPanel';
+import { TenantSelect } from './TenantSelect';
+import { useTenants } from '../tenants/TenantContext';
 
 export function TransportTab() {
+  const { sourceTenantId } = useTenants();
+  // AI-NOTE: 원본마다 폼을 분리해 선택·결과·마지막 요청과 진행 중인 이전 원본의 응답을 격리한다(REQ-308 AC-5).
+  return <TransportForm key={sourceTenantId} />;
+}
+
+function TransportForm() {
   // 선택 상태는 여기서 들고 있고, 옵션·실행(TODO-007)이 같은 값을 쓴다.
   const [selectedPackage, setSelectedPackage] = useState<ArtifactSummary | null>(null);
   const selectedPackageId = selectedPackage?.id ?? null;
@@ -58,7 +66,8 @@ export function TransportTab() {
               onChange={setSelectedArtifactIds}
             />
           </div>
-          <div className="min-w-0 lg:sticky lg:top-[76px]">
+          <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[76px] lg:gap-5">
+            <TenantSelect />
             <Card title="실행">
               <RunPanel
                 packageId={selectedPackageId}

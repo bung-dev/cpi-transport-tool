@@ -42,8 +42,8 @@ function setupApp(historyError = false) {
   mockApi({
       'GET /tenants': () => json(TENANTS_OK),
       'GET /tenants/status': () => json(TENANT_STATUS_OK),
-    'GET /packages': () => json(PACKAGES),
-    'GET /packages/PkgTransportDemo/artifacts': () => json(ARTIFACTS),
+    'GET /packages?tenantId=DEV': () => json(PACKAGES),
+    'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json(ARTIFACTS),
     'GET /transport/history': () =>
       historyError && ++historyCalls === 1 ? json({ error: 'CPI_UNAVAILABLE', message: 'down' }, 502) : json([RESULT]),
     'POST /transport': (init) => json({ ...RESULT, dryRun: JSON.parse(init?.body as string).dryRun }),

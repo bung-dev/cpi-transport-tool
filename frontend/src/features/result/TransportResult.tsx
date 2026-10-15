@@ -65,6 +65,8 @@ export function TransportResult({ result, onOpenReal }: Props) {
         </Meta>
         <Meta label="시작">{formatTime(result.startedAt)}</Meta>
         <Meta label="종료">{formatTime(result.finishedAt)}</Meta>
+        <Meta label="원본 테넌트">{result.sourceTenant?.name ?? '-'}</Meta>
+        <Meta label="대상 테넌트">{result.targetTenant?.name ?? '-'}</Meta>
       </dl>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-3">
@@ -115,7 +117,7 @@ function Stat({ label, value, valueClass = 'text-ink' }: { label: string; value:
 
 function Meta({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-2 lg:grid-cols-1 lg:gap-0.5">
+    <div className="grid min-w-0 grid-cols-[88px_minmax(0,1fr)] gap-2 lg:grid-cols-1 lg:gap-0.5">
       <dt className="pt-px text-xs text-ink-tertiary">{label}</dt>
       <dd className="min-w-0 break-all">{children}</dd>
     </div>

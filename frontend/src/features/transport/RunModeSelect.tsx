@@ -9,9 +9,9 @@ interface Option {
   description: string;
 }
 
-const OPTIONS: Option[] = [
-  { mode: 'dryRun', title: '드라이런', description: 'PRD에 요청을 보내지 않고 변경 내용만 확인합니다' },
-  { mode: 'real', title: '실제 이관', description: 'PRD에 업로드합니다' },
+const options = (targetName: string): Option[] => [
+  { mode: 'dryRun', title: '드라이런', description: `${targetName}에 요청을 보내지 않고 변경 내용만 확인합니다` },
+  { mode: 'real', title: '실제 이관', description: `${targetName}에 업로드합니다` },
 ];
 
 // 선택지 상자: 1px hairline-strong 테두리, 선택된 쪽은 primary 테두리와 primary-soft 배경(REQ-104 AC-5).
@@ -22,11 +22,12 @@ const BOX_ON = 'border-primary bg-primary-soft';
 const BOX_OFF = 'border-hairline-strong bg-canvas hover:bg-surface-hover';
 
 interface Props {
+  targetName?: string;
   mode: RunMode;
   onChange: (mode: RunMode) => void;
 }
 
-export function RunModeSelect({ mode, onChange }: Props) {
+export function RunModeSelect({ mode, onChange, targetName = 'PRD' }: Props) {
   const base = useId();
   const groupId = `${base}-group`;
   return (
@@ -36,7 +37,7 @@ export function RunModeSelect({ mode, onChange }: Props) {
       </p>
       {/* AI-NOTE: 같은 name의 네이티브 radio라 화살표 키 이동은 브라우저가 처리한다. 선택지 상자 전체를 label로 감싸 어디를 눌러도 선택되고, 접근 가능한 이름은 제목(aria-labelledby)만, 설명은 aria-describedby로 분리한다 (근거: REQ-104 AC-5, wiki/decisions/ADR-012) */}
       <div role="radiogroup" aria-labelledby={groupId} className="flex flex-col gap-2">
-        {OPTIONS.map((o) => {
+        {options(targetName).map((o) => {
           const titleId = `${base}-${o.mode}-title`;
           const descId = `${base}-${o.mode}-desc`;
           return (

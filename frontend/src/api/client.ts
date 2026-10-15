@@ -26,12 +26,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
-export function getPackages(): Promise<ArtifactSummary[]> {
-  return request('/packages');
+export function getPackages(tenantId?: string): Promise<ArtifactSummary[]> {
+  return request(`/packages${tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : ''}`);
 }
 
-export function getArtifacts(packageId: string): Promise<ArtifactSummary[]> {
-  return request(`/packages/${encodeURIComponent(packageId)}/artifacts`);
+export function getArtifacts(packageId: string, tenantId?: string): Promise<ArtifactSummary[]> {
+  return request(`/packages/${encodeURIComponent(packageId)}/artifacts${tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : ''}`);
 }
 
 export function postTransport(body: TransportRequest): Promise<TransportResponse> {

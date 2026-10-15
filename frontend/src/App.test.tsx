@@ -34,8 +34,8 @@ describe('App', () => {
     mockApi({
       'GET /tenants': () => json(TENANTS_OK),
       'GET /tenants/status': () => json(TENANT_STATUS_OK),
-      'GET /packages': () => json(PACKAGES),
-      'GET /packages/PkgTransportDemo/artifacts': () => json([]),
+      'GET /packages?tenantId=DEV': () => json(PACKAGES),
+      'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json([]),
       'GET /transport/history': () => json([HISTORY_ENTRY]),
     });
   });
