@@ -88,6 +88,11 @@ public class CpiApiClient {
                 .map(node -> field(node, "Status"));
     }
 
+    public CpiHttpExecutor.OnceResponse getDeployErrorInformation(String tenantId, String id) {
+        return http.executeOnce(tenantId, ROOT + "/IntegrationRuntimeArtifacts('" + identifier(id)
+                + "')/ErrorInformation/$value");
+    }
+
     public List<CpiPackage> listPackages(CpiEnvironment environment) { return listPackages(environment.name()); }
 
     public Optional<CpiPackage> getPackage(CpiEnvironment environment, String id) { return getPackage(environment.name(), id); }

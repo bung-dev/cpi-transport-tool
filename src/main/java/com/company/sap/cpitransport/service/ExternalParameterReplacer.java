@@ -23,6 +23,17 @@ public class ExternalParameterReplacer {
         this.sensitiveKeys = sensitiveKeys;
     }
 
+    public List<String> sensitiveValues(List<MappingEntry> mappings) {
+        var values = new ArrayList<String>();
+        for (var mapping : mappings) {
+            if (sensitiveKeys.isSensitive(mapping.key())) {
+                if (mapping.devValue() != null && !mapping.devValue().isEmpty()) values.add(mapping.devValue());
+                if (mapping.prdValue() != null && !mapping.prdValue().isEmpty()) values.add(mapping.prdValue());
+            }
+        }
+        return List.copyOf(values);
+    }
+
     public record Error(String code, String message) {}
 
     public record Result(List<Replacement> replacements, List<UnmappedKey> unmappedKeys, Error error) {

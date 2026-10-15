@@ -86,6 +86,7 @@ public class TransportService {
         var replacements = new ArrayList<Replacement>();
         var unmapped = new ArrayList<UnmappedKey>();
         ArtifactError error = null;
+        var deployFailure = DeployOutcome.DeployFailure.NONE;
         event(transportId, id, stage, "started");
         try {
             var artifact = artifacts.stream().filter(a -> id.equals(a.id())).findFirst();
@@ -124,10 +125,15 @@ public class TransportService {
                         error = new ArtifactError(stage.code, "CONFIGURATION_UPDATE: " + external.error().message());
                     } else if (request.deploy() && !request.dryRun()) {
                         stage = next(transportId, id, stage, Stage.DEPLOY);
-                        deployStatus = deployment.deployAndWait(request.target().id(), id);
+                        var outcome = deployment.deployAndWaitOutcome(request.target().id(), id);
+                        deployStatus = outcome.status();
+                        deployFailure = outcome.failure();
                         if (deployStatus != DeployStatus.STARTED) {
                             error = new ArtifactError(deployStatus == DeployStatus.TIMEOUT ? "DEPLOY_TIMEOUT" : stage.code,
                                     "DEPLOY: CPI deployment " + deployStatus);
+                            if (deployFailure == DeployOutcome.DeployFailure.RUNTIME_ERROR) {
+                                error = deployment.errorDetail(request.target().id(), id, parameters.sensitiveValues(loadedMappings));
+                            }
                         }
                     } else if (external.error() == null) {
                         skipped(transportId, id, Stage.DEPLOY,
@@ -136,18 +142,31 @@ public class TransportService {
                 }
             }
         } catch (RuntimeException failure) {
-            if (stage == Stage.DEPLOY) deployStatus = DeployStatus.ERROR;
+            if (stage == Stage.DEPLOY) {
+                deployStatus = DeployStatus.ERROR;
+                deployFailure = DeployOutcome.DeployFailure.CALL_FAILED;
+            }
             // AI-NOTE: CPI bodies can echo unknown sensitive values; use a categorical summary. (근거: REQ-012 AC-3, run 20260928-cpi-transport)
-            // DeployService returns only status, so HTTP details are unavailable for returned failures.
+            // REQ-309 permits only masked ErrorInformation in ArtifactError.detail; other failures remain categorical.
             String detail = failure instanceof CpiCallException call
                     ? "HTTP " + call.httpStatus() + "; CPI call failed" : "CPI processing failed";
-            error = new ArtifactError(stage.code, stage + ": " + detail);
+            error = stage == Stage.DEPLOY
+                    ? new ArtifactError(stage.code, "DEPLOY: CPI deployment ERROR")
+                    : new ArtifactError(stage.code, stage + ": " + detail);
         }
         if (action == TransportAction.NONE) {
             replacements.replaceAll(r -> r.status() == ReplacementStatus.APPLIED
                     ? new Replacement(r.targetType(), r.key(), ReplacementStatus.PLANNED, r.before(), r.after(), r.occurrences()) : r);
         }
-        event(transportId, id, stage, error == null ? "succeeded" : "failed " + error.code());
+        String logFields = "";
+        if (stage == Stage.DEPLOY && deployStatus == DeployStatus.ERROR) {
+            logFields = " deployFailure=" + deployFailure;
+            if (deployFailure == DeployOutcome.DeployFailure.RUNTIME_ERROR) {
+                int length = error.detail() == null ? 0 : error.detail().codePointCount(0, error.detail().length());
+                logFields += " detailHttpStatus=" + error.detailHttpStatus() + " detailLength=" + length;
+            }
+        }
+        event(transportId, id, stage, error == null ? "succeeded" : "failed " + error.code(), logFields);
         return new ArtifactResult(id, null, action, replacements, unmapped, deployStatus, error);
     }
 
@@ -158,6 +177,10 @@ public class TransportService {
     }
 
     private void event(String transportId, String id, Stage stage, String outcome) {
+        event(transportId, id, stage, outcome, "");
+    }
+
+    private void event(String transportId, String id, Stage stage, String outcome, String fields) {
         // The existing parameter replacer performs GET and PUT in one call.
         if (stage == Stage.CONFIGURATION_READ && outcome.equals("succeeded")
                 || stage == Stage.CONFIGURATION_UPDATE && outcome.equals("started")) return;
@@ -169,8 +192,8 @@ public class TransportService {
         boolean start = outcome.equals("started");
         String result = outcome.equals("succeeded") ? "OK"
                 : outcome.startsWith("failed") ? "FAILED" : outcome;
-        log.info("transportId={} artifactId={} step={} phase={} result={}",
-                transportId, id, step, start ? "START" : "END", start ? "PENDING" : result);
+        log.info("transportId={} artifactId={} step={} phase={} result={}{}",
+                transportId, id, step, start ? "START" : "END", start ? "PENDING" : result, fields);
     }
 
     private void skipped(String transportId, String id, Stage stage, String reason) {
