@@ -1,3 +1,4 @@
+import { TestTenantProvider } from '../../test/tenantProvider';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -21,7 +22,7 @@ const postCount = (fn: ReturnType<typeof mockApi>) => fn.mock.calls.filter((c) =
 function setup(artifactIds: string[] = [], packageId: string | null = 'PkgA', packageName: string | null = 'Package A') {
   const fn = mockApi({ 'POST /transport': () => json(RESULT) });
   const onResult = vi.fn();
-  render(<RunPanel packageId={packageId} packageName={packageName} artifactIds={artifactIds} onResult={onResult} />);
+  render(<RunPanel packageId={packageId} packageName={packageName} artifactIds={artifactIds} onResult={onResult} />, { wrapper: TestTenantProvider });
   return { fn, onResult };
 }
 
@@ -34,7 +35,7 @@ describe('실행 옵션과 요청 본문', () => {
     const { fn, onResult } = setup(['IF_B', 'IF_A']);
     await userEvent.click(dryRunBtn());
     await waitFor(() => expect(onResult).toHaveBeenCalledWith(RESULT));
-    expect(postBody(fn)).toEqual({ packageId: 'PkgA', artifactIds: ['IF_B', 'IF_A'], dryRun: true, deploy: false });
+    expect(postBody(fn)).toEqual({ packageId: 'PkgA', artifactIds: ['IF_B', 'IF_A'], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
   });
 
   it('REQ-005 AC-1: 선택이 0개면 artifactIds 키 없이 보내고 안내 문구를 보인다', async () => {
@@ -43,21 +44,21 @@ describe('실행 옵션과 요청 본문', () => {
     await userEvent.click(dryRunBtn());
     await waitFor(() => expect(onResult).toHaveBeenCalled());
     const body = postBody(fn);
-    expect(Object.keys(body)).toEqual(['packageId', 'dryRun', 'deploy']);
+    expect(Object.keys(body)).toEqual(['packageId', 'dryRun', 'deploy', 'sourceTenantId', 'targetTenantId']);
   });
 
   it('REQ-005 AC-1: 100개는 실행 가능, 101개는 비활성이고 한 번에 100개까지 안내', () => {
-    const { unmount } = render(<RunPanel packageId="P" artifactIds={ids(100)} onResult={() => {}} />);
+    const { unmount } = render(<RunPanel packageId="P" artifactIds={ids(100)} onResult={() => {}} />, { wrapper: TestTenantProvider });
     expect(dryRunBtn()).toBeEnabled();
     expect(screen.queryByText(/한 번에 100개까지/)).toBeNull();
     unmount();
-    render(<RunPanel packageId="P" artifactIds={ids(101)} onResult={() => {}} />);
+    render(<RunPanel packageId="P" artifactIds={ids(101)} onResult={() => {}} />, { wrapper: TestTenantProvider });
     expect(dryRunBtn()).toBeDisabled();
     expect(screen.getByText(/한 번에 100개까지/)).toBeInTheDocument();
   });
 
   it('REQ-005 AC-1: 패키지를 고르지 않으면 실행 버튼이 비활성', () => {
-    render(<RunPanel packageId={null} artifactIds={[]} onResult={() => {}} />);
+    render(<RunPanel packageId={null} artifactIds={[]} onResult={() => {}} />, { wrapper: TestTenantProvider });
     expect(dryRunBtn()).toBeDisabled();
   });
 
@@ -92,10 +93,10 @@ describe('실행 카드 (REQ-104 AC-5)', () => {
   });
 
   it('REQ-104 AC-5: 아티팩트 0개면 "패키지의 모든 아티팩트가 대상", 패키지 미선택이면 "선택 안 됨"과 "—"', () => {
-    const { unmount } = render(<RunPanel packageId="PkgA" packageName="Package A" artifactIds={[]} onResult={() => {}} />);
+    const { unmount } = render(<RunPanel packageId="PkgA" packageName="Package A" artifactIds={[]} onResult={() => {}} />, { wrapper: TestTenantProvider });
     expect(screen.getAllByRole('definition')[1]).toHaveTextContent('패키지의 모든 아티팩트가 대상');
     unmount();
-    render(<RunPanel packageId={null} artifactIds={[]} onResult={() => {}} />);
+    render(<RunPanel packageId={null} artifactIds={[]} onResult={() => {}} />, { wrapper: TestTenantProvider });
     const defs = screen.getAllByRole('definition');
     expect(defs[0]).toHaveTextContent('선택 안 됨');
     expect(defs[1]).toHaveTextContent('—');
@@ -153,7 +154,7 @@ describe('실행 카드 (REQ-104 AC-5)', () => {
   });
 
   it('REQ-104 AC-5: 안내 영역 — 실제 이관이면 warning Callout, 101개 이상이면 danger-fg 글자, 드라이런에는 옛 안내가 없다', async () => {
-    render(<RunPanel packageId="P" artifactIds={ids(101)} onResult={() => {}} />);
+    render(<RunPanel packageId="P" artifactIds={ids(101)} onResult={() => {}} />, { wrapper: TestTenantProvider });
     expect(screen.queryByText('실제 이관입니다. PRD에 업로드합니다.')).toBeNull();
     const over = screen.getByText('한 번에 100개까지 선택할 수 있습니다');
     expect(over.className).toContain('text-danger-fg');
@@ -252,7 +253,7 @@ describe('확인 대화상자', () => {
     await userEvent.click(screen.getByRole('button', { name: '실행' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(postCount(fn)).toBe(1);
-    expect(postBody(fn)).toEqual({ packageId: 'PkgA', artifactIds: ['IF_A', 'IF_B'], dryRun: false, deploy: true });
+    expect(postBody(fn)).toEqual({ packageId: 'PkgA', artifactIds: ['IF_A', 'IF_B'], dryRun: false, deploy: true, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
     expect(onResult).toHaveBeenCalledWith(RESULT);
   });
 
@@ -292,7 +293,7 @@ describe('요청 중 상태', () => {
   it('REQ-005 AC-4: 요청 중에는 실행 버튼이 비활성이고 이관 실행 중 표시가 나온다', async () => {
     let release: (r: Response) => void = () => {};
     mockApi({ 'POST /transport': () => new Promise<Response>((r) => (release = r)) });
-    render(<RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />);
+    render(<RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />, { wrapper: TestTenantProvider });
     await userEvent.click(dryRunBtn());
     expect(dryRunBtn()).toBeDisabled();
     expect(screen.getByRole('status')).toHaveTextContent('이관 실행 중');
@@ -316,7 +317,7 @@ describe('요청 중 상태', () => {
   it('REQ-005 AC-4: 대화상자 실행 버튼 연속 클릭도 1회, 요청 중 실행·취소 비활성과 진행 표시', async () => {
     let release: (r: Response) => void = () => {};
     const fn = mockApi({ 'POST /transport': () => new Promise<Response>((r) => (release = r)) });
-    render(<RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />);
+    render(<RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />, { wrapper: TestTenantProvider });
     await chooseReal();
     await userEvent.click(realBtn());
     const ok = screen.getByRole('button', { name: '실행' });
@@ -335,7 +336,7 @@ describe('요청 중 상태', () => {
   it('REQ-104 AC-6: 드라이런은 실행 버튼을 누르면 바로 요청하고, 요청 중 실행 버튼은 loading(스피너·aria-busy·비활성)이다', async () => {
     let release: (r: Response) => void = () => {};
     const fn = mockApi({ 'POST /transport': () => new Promise<Response>((r) => (release = r)) });
-    render(<RunPanel packageId="P" artifactIds={['IF_A']} onResult={() => {}} />);
+    render(<RunPanel packageId="P" artifactIds={['IF_A']} onResult={() => {}} />, { wrapper: TestTenantProvider });
     await userEvent.click(dryRunBtn());
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(postCount(fn)).toBe(1);
@@ -351,7 +352,7 @@ describe('요청 중 상태', () => {
   it('REQ-104 AC-6: 실제 이관은 대화상자 "실행"을 눌러야만 요청하고 "이관 실행 중" 상태 표시는 한 곳(대화상자 안)에만 나온다', async () => {
     let release: (r: Response) => void = () => {};
     const fn = mockApi({ 'POST /transport': () => new Promise<Response>((r) => (release = r)) });
-    render(<RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />);
+    render(<RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />, { wrapper: TestTenantProvider });
     await chooseReal();
     await userEvent.click(realBtn());
     expect(postCount(fn)).toBe(0);
@@ -368,26 +369,26 @@ describe('요청 중 상태', () => {
 
   it('REQ-104 AC-6: 대화상자가 없을 때(드라이런) 상태 표시는 실행 카드에 한 곳만 나온다', async () => {
     mockApi({ 'POST /transport': () => new Promise<Response>(() => {}) });
-    render(<RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />);
+    render(<RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />, { wrapper: TestTenantProvider });
     await userEvent.click(dryRunBtn());
     expect(screen.getAllByRole('status')).toHaveLength(1);
   });
 
   it('REQ-104 AC-6: 실제 이관 요청 본문은 dryRun false이고 배포 스위치 값을 따른다', async () => {
     const fn = mockApi({ 'POST /transport': () => json(RESULT) });
-    render(<RunPanel packageId="P" artifactIds={['IF_A']} onResult={() => {}} />);
+    render(<RunPanel packageId="P" artifactIds={['IF_A']} onResult={() => {}} />, { wrapper: TestTenantProvider });
     await chooseReal();
     await userEvent.click(realBtn());
     await userEvent.click(screen.getByRole('button', { name: '실행' }));
     await waitFor(() => expect(postCount(fn)).toBe(1));
-    expect(postBody(fn)).toEqual({ packageId: 'P', artifactIds: ['IF_A'], dryRun: false, deploy: false });
+    expect(postBody(fn)).toEqual({ packageId: 'P', artifactIds: ['IF_A'], dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
   });
 
   it('REQ-008 AC-3: 전송 오류는 role=alert로 보이고 다시 실행할 수 있다', async () => {
     mockApi({
       'POST /transport': () => json({ error: 'MAPPING_INVALID', message: 'bad mapping' }, 422),
     });
-    render(<RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />);
+    render(<RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />, { wrapper: TestTenantProvider });
     await userEvent.click(dryRunBtn());
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('매핑 파일이 올바르지 않습니다');

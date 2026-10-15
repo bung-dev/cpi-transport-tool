@@ -8,6 +8,7 @@ import { ListSkeleton } from '../../components/ui/ListSkeleton';
 import { RadioControl } from '../../components/ui/Radio';
 import { TextInput } from '../../components/ui/TextInput';
 import { useRemote } from '../../lib/useRemote';
+import { useTenants } from '../tenants/TenantContext';
 
 interface Props {
   selectedId: string | null;
@@ -22,8 +23,14 @@ const ROW_BASE =
 const ROW_ON = 'bg-primary-soft';
 const ROW_OFF = 'hover:bg-surface-hover';
 
-export function PackagePicker({ selectedId, onSelect }: Props) {
-  const { state, retry } = useRemote(getPackages, 'packages');
+export function PackagePicker(props: Props) {
+  const { sourceTenantId } = useTenants();
+  if (!sourceTenantId) return <EmptyState title="원본 테넌트를 선택하세요" />;
+  return <PackageList key={sourceTenantId} {...props} source={sourceTenantId} />;
+}
+
+function PackageList({ selectedId, onSelect, source }: Props & { source: string }) {
+  const { state, retry } = useRemote(() => getPackages(source), 'packages:' + source);
   const [query, setQuery] = useState('');
 
   if (state.status === 'loading') return <ListSkeleton />;

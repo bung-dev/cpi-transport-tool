@@ -1,3 +1,4 @@
+import { TestTenantProvider } from '../../test/tenantProvider';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -22,11 +23,11 @@ describe('이관 탭 통합', () => {
       results: [],
     };
     const fn = mockApi({
-      'GET /packages': () => json(PACKAGES),
-      'GET /packages/PkgTransportDemo/artifacts': () => json(ARTIFACTS),
+      'GET /packages?tenantId=DEV': () => json(PACKAGES),
+      'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json(ARTIFACTS),
       'POST /transport': () => json(result),
     });
-    render(<TransportTab />);
+    render(<TransportTab />, { wrapper: TestTenantProvider });
     await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
     await userEvent.click(await screen.findByRole('checkbox', { name: /IF_Customer_Push/ }));
     await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
@@ -37,7 +38,7 @@ describe('이관 탭 통합', () => {
       packageId: 'PkgTransportDemo',
       artifactIds: ['IF_Customer_Push'],
       dryRun: true,
-      deploy: false,
+      deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD',
     });
   });
 
@@ -53,11 +54,11 @@ describe('이관 탭 통합', () => {
       results: [],
     };
     mockApi({
-      'GET /packages': () => json(PACKAGES),
-      'GET /packages/PkgTransportDemo/artifacts': () => json(ARTIFACTS),
+      'GET /packages?tenantId=DEV': () => json(PACKAGES),
+      'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json(ARTIFACTS),
       'POST /transport': () => json(result),
     });
-    render(<TransportTab />);
+    render(<TransportTab />, { wrapper: TestTenantProvider });
     await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
     await screen.findByRole('checkbox', { name: /IF_Order_Sync/ });
     await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
@@ -70,8 +71,8 @@ describe('이관 탭 통합', () => {
   });
 
   it('REQ-104 AC-1: 1024px 이상 2단(왼쪽 열에 패키지·아티팩트, 오른쪽 360px 열에 실행·sticky, top 56px 이상), 미만은 1단, 결과는 전체 폭이다', async () => {
-    mockApi({ 'GET /packages': () => json(PACKAGES) });
-    render(<TransportTab />);
+    mockApi({ 'GET /packages?tenantId=DEV': () => json(PACKAGES) });
+    render(<TransportTab />, { wrapper: TestTenantProvider });
     await screen.findByLabelText('패키지 검색');
     const card = (name: string) =>
       screen.getByRole('heading', { name }).closest('div[class*="rounded-lg"]') as HTMLElement;
@@ -109,15 +110,15 @@ const posts = (fn: ReturnType<typeof mockApi>) =>
 
 function setupFlow() {
   const fn = mockApi({
-    'GET /packages': () => json(PACKAGES),
-    'GET /packages/PkgTransportDemo/artifacts': () => json(ARTIFACTS),
-    'GET /packages/PkgFaultDemo/artifacts': () => json(ARTIFACTS),
+    'GET /packages?tenantId=DEV': () => json(PACKAGES),
+    'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json(ARTIFACTS),
+    'GET /packages/PkgFaultDemo/artifacts?tenantId=DEV': () => json(ARTIFACTS),
     'POST /transport': (init) => {
       const body = JSON.parse(init?.body as string);
       return json({ ...RESULT_BASE, transportId: body.dryRun ? 't-dry' : 't-real', dryRun: body.dryRun, deploy: body.deploy });
     },
   });
-  render(<TransportTab />);
+  render(<TransportTab />, { wrapper: TestTenantProvider });
   return fn;
 }
 async function pickDemo(ids: string[] = []) {
@@ -175,8 +176,8 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     await userEvent.click(openRealBtn());
     await userEvent.click(screen.getByRole('button', { name: '실행' }));
     await waitFor(() => expect(posts(fn)).toHaveLength(2));
-    expect(posts(fn)[0]).toEqual({ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'], dryRun: true, deploy: false });
-    expect(posts(fn)[1]).toEqual({ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'], dryRun: false, deploy: false });
+    expect(posts(fn)[0]).toEqual({ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
+    expect(posts(fn)[1]).toEqual({ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'], dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
@@ -191,7 +192,7 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     expect(screen.getByRole('checkbox', { name: /IF_Order_Sync/ })).not.toBeChecked();
     await userEvent.click(screen.getByRole('button', { name: '실행' }));
     await waitFor(() => expect(posts(fn)).toHaveLength(2));
-    expect(posts(fn)[1]).toEqual({ packageId: 'PkgTransportDemo', dryRun: false, deploy: false });
+    expect(posts(fn)[1]).toEqual({ packageId: 'PkgTransportDemo', dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
   });
 
   it('REQ-105 AC-6: "취소"하면 요청을 보내지 않고 실행 모드는 실제 이관으로 남으며, 이후 배포를 켜고 "PRD로 이관"을 누르면 그때의 스위치 값으로 간다', async () => {

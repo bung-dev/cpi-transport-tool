@@ -6,6 +6,7 @@ import { CheckboxControl } from '../../components/ui/Checkbox';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ListSkeleton } from '../../components/ui/ListSkeleton';
 import { useRemote } from '../../lib/useRemote';
+import { useTenants } from '../tenants/TenantContext';
 
 interface Props {
   /** 선택한 패키지. 아직 고르지 않았으면 null(그때도 카드는 보이고 빈 상태를 보인다) */
@@ -22,18 +23,19 @@ const ROW_ON = 'bg-primary-soft';
 const ROW_OFF = 'hover:bg-surface-hover';
 
 export function ArtifactPicker({ packageId, selectedIds, onChange }: Props) {
-  if (packageId === null) {
+  const { sourceTenantId } = useTenants();
+  if (packageId === null || sourceTenantId === null) {
     return (
       <Card title="아티팩트">
         <EmptyState title="패키지를 먼저 선택하세요" />
       </Card>
     );
   }
-  return <ArtifactCard packageId={packageId} selectedIds={selectedIds} onChange={onChange} />;
+  return <ArtifactCard source={sourceTenantId} packageId={packageId} selectedIds={selectedIds} onChange={onChange} />;
 }
 
-function ArtifactCard({ packageId, selectedIds, onChange }: Props & { packageId: string }) {
-  const { state, retry } = useRemote(() => getArtifacts(packageId), `artifacts:${packageId}`);
+function ArtifactCard({ packageId, selectedIds, onChange, source }: Props & { packageId: string; source: string }) {
+  const { state, retry } = useRemote(() => getArtifacts(packageId, source), `artifacts:${source}:${packageId}`);
 
   if (state.status === 'loading') {
     return (

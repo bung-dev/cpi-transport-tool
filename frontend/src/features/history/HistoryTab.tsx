@@ -109,6 +109,8 @@ export function HistoryTab() {
                 <Tr>
                   <Th>시작 시각</Th>
                   <Th>패키지</Th>
+                  <Th>원본</Th>
+                  <Th>대상</Th>
                   <Th>모드</Th>
                   <Th>배포</Th>
                   <Th>결과</Th>
@@ -129,6 +131,8 @@ export function HistoryTab() {
                   >
                     <Td className="whitespace-nowrap">{formatTime(h.startedAt)}</Td>
                     <Td className="whitespace-nowrap font-mono text-[13px]">{h.packageId}</Td>
+                    <Td className="whitespace-nowrap">{h.sourceTenant?.name ?? '-'}</Td>
+                    <Td className="whitespace-nowrap">{h.targetTenant?.name ?? '-'}</Td>
                     <Td className="whitespace-nowrap">{h.dryRun ? <Badge tone="neutral">드라이런</Badge> : <Badge tone="accent">실제 이관</Badge>}</Td>
                     <Td className="whitespace-nowrap">
                       {h.deploy ? <Badge tone="info">배포</Badge> : <span className="text-ink-tertiary">배포 안 함</span>}

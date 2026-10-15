@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Callout';
 import { Switch } from '../../components/ui/Switch';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useTenants } from '../tenants/TenantContext';
 import { RunModeSelect, type RunMode } from './RunModeSelect';
 
 // 백엔드 검증(TransportController.java:31)과 같은 값
@@ -37,6 +38,12 @@ function SummaryRow({ label, children }: { label: string; children: ReactNode })
 }
 
 export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequest, realRequest = 0 }: Props) {
+  const { tenants, sourceTenantId, targetTenantId } = useTenants();
+  const targetName = tenants.state === 'success'
+    ? tenants.data.tenants.find(t => t.id === targetTenantId)?.name ?? 'PRD' : 'PRD';
+  const selectionReason = !sourceTenantId ? '원본 테넌트를 선택하세요'
+    : !targetTenantId ? '대상 테넌트를 선택하세요'
+    : sourceTenantId === targetTenantId ? '원본과 대상이 같습니다' : null;
   const [mode, setMode] = useState<RunMode>('dryRun');
   const [deploy, setDeploy] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -50,7 +57,7 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
   const [handledRequest, setHandledRequest] = useState(realRequest);
   if (realRequest !== handledRequest) {
     setHandledRequest(realRequest);
-    if (!busy && packageId !== null) {
+    if (!busy && packageId !== null && selectionReason === null) {
       setMode('real');
       setDeploy(false);
       setConfirmOpen(true);
@@ -59,7 +66,7 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
 
   const dryRun = mode === 'dryRun';
   const tooMany = artifactIds.length > MAX_ARTIFACTS;
-  const canRun = packageId !== null && !tooMany && !busy;
+  const canRun = packageId !== null && !tooMany && !busy && selectionReason === null;
 
   function changeMode(next: RunMode) {
     setMode(next);
@@ -68,12 +75,12 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
   }
 
   async function submit() {
-    if (inFlight.current || packageId === null || tooMany) return;
+    if (inFlight.current || packageId === null || tooMany || !sourceTenantId || !targetTenantId || selectionReason) return;
     inFlight.current = true;
     setBusy(true);
     setError(null);
     // 선택 0개면 artifactIds 키 자체를 보내지 않는다(패키지 전체 대상). 드라이런 요청은 항상 deploy: false다(REQ-104 AC-5).
-    const body: TransportRequest = { packageId, dryRun, deploy: dryRun ? false : deploy };
+    const body: TransportRequest = { packageId, dryRun, deploy: dryRun ? false : deploy, sourceTenantId, targetTenantId };
     if (artifactIds.length > 0) body.artifactIds = artifactIds;
     onRequest?.(body);
     try {
@@ -89,6 +96,7 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
   }
 
   function onRunClick() {
+    if (!canRun) return;
     if (dryRun) void submit();
     else setConfirmOpen(true);
   }
@@ -116,19 +124,20 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
           )}
         </SummaryRow>
       </dl>
-      <RunModeSelect mode={mode} onChange={changeMode} />
+      <RunModeSelect targetName={targetName} mode={mode} onChange={changeMode} />
       {!dryRun && (
         <Switch
           label="배포"
-          description="이관 후 PRD에 배포합니다"
+          description={`이관 후 ${targetName}에 배포합니다`}
           checked={deploy}
           onChange={(e) => setDeploy(e.target.checked)}
         />
       )}
-      {!dryRun && <Callout tone="warning">실제 이관입니다. PRD에 업로드합니다.</Callout>}
+      {!dryRun && <Callout tone="warning">{`실제 이관입니다. ${targetName}에 업로드합니다.`}</Callout>}
+      {selectionReason && <p className="text-sm text-ink-secondary">{selectionReason}</p>}
       {tooMany && <p className="text-sm text-danger-fg">한 번에 100개까지 선택할 수 있습니다</p>}
       <Button ref={runBtn} variant="primary" fullWidth loading={busy} onClick={onRunClick} disabled={!canRun}>
-        {dryRun ? '드라이런 실행' : 'PRD로 이관'}
+        {dryRun ? '드라이런 실행' : `${targetName}로 이관`}
       </Button>
       {busy && !confirmOpen && (
         <p role="status" className="text-sm text-ink-secondary">
@@ -136,8 +145,9 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
         </p>
       )}
       {error && <ErrorAlert error={error} />}
-      {confirmOpen && packageId !== null && (
+      {confirmOpen && packageId !== null && selectionReason === null && (
         <ConfirmDialog
+          targetName={targetName}
           packageId={packageId}
           artifactCount={artifactIds.length}
           deploy={deploy}

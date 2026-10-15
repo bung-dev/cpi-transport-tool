@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Callout';
 
 interface Props {
+  targetName?: string;
   packageId: string;
   /** 선택한 아티팩트 수. 0이면 패키지 전체 */
   artifactCount: number;
@@ -16,7 +17,7 @@ interface Props {
 }
 
 // REQ-005 AC-3, REQ-009 AC-1: 실제 이관 확인 대화상자(role=dialog, aria-modal).
-export function ConfirmDialog({ packageId, artifactCount, deploy, busy, onConfirm, onCancel, fallbackFocusRef }: Props) {
+export function ConfirmDialog({ packageId, artifactCount, deploy, busy, onConfirm, onCancel, fallbackFocusRef, targetName = 'PRD' }: Props) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -73,7 +74,7 @@ export function ConfirmDialog({ packageId, artifactCount, deploy, busy, onConfir
         <h2 id={titleId} className="mb-3 text-lg font-semibold">
           실제 이관 확인
         </h2>
-        <Callout tone="warning">PRD에 업로드합니다</Callout>
+        <Callout tone="warning">{`${targetName}에 업로드합니다`}</Callout>
         <dl className="mt-3.5 grid gap-2">
           <SummaryRow label="대상 패키지" valueClass="font-mono text-[13px]">
             {packageId}

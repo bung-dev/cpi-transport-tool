@@ -19,7 +19,7 @@ function Probe() {
 }
 it('REQ-302 AC-7: App 두 API는 최초 1회, 탭 전환은 재요청하지 않음', async () => {
   const fn = mockApi({ 'GET /tenants': () => json(TENANTS_OK), 'GET /tenants/status': () => json(TENANT_STATUS_OK),
-    'GET /packages': () => json(PACKAGES), 'GET /transport/history': () => json([]) });
+    'GET /packages?tenantId=DEV': () => json(PACKAGES), 'GET /transport/history': () => json([]) });
   render(<StrictMode><App /></StrictMode>);
   await screen.findByLabelText('패키지 검색');
   await userEvent.click(screen.getByRole('tab', { name: '테넌트' }));
@@ -58,14 +58,14 @@ it('REQ-302 AC-7: 초기 등록 없으면 선택 없음, refresh 중복 요청 �
   await act(async () => release(json(TENANT_STATUS_OK)));
 });
 it('REQ-302 AC-7: 하위 컴포넌트는 테넌트 조회 API를 부르지 않음', async () => {
-  const fn = mockApi({ 'GET /packages': () => json(PACKAGES) });
+  const fn = mockApi({ 'GET /packages?tenantId=DEV': () => json(PACKAGES) });
   render(<TestTenantProvider><TransportTab /></TestTenantProvider>);
   await screen.findByLabelText('패키지 검색');
   expect(fn.mock.calls.every(([url]) => !String(url).startsWith('/tenants'))).toBe(true);
 });
 
 it('REQ-302 AC-7: PackagePicker와 RunPanel 단독 렌더도 테넌트 요청 없음', async () => {
-  const fn = mockApi({ 'GET /packages': () => json(PACKAGES) });
+  const fn = mockApi({ 'GET /packages?tenantId=DEV': () => json(PACKAGES) });
   render(<TestTenantProvider><PackagePicker selectedId={null} onSelect={() => {}} /><RunPanel packageId={null} artifactIds={[]} onResult={() => {}} /></TestTenantProvider>);
   await screen.findByLabelText('패키지 검색');
   expect(fn.mock.calls.every(([url]) => !String(url).startsWith('/tenants'))).toBe(true);

@@ -35,6 +35,8 @@ describe('이력 탭', () => {
     expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
       '시작 시각',
       '패키지',
+      '원본',
+      '대상',
       '모드',
       '배포',
       '결과',
@@ -43,7 +45,7 @@ describe('이력 탭', () => {
     const rows = screen.getAllByRole('row').slice(1);
     expect(rows).toHaveLength(2);
     const cells = within(rows[0]).getAllByRole('cell').map((c) => c.textContent);
-    expect(cells).toEqual([formatTime('2026-09-29T07:05:05.351940500Z'), 'PkgB', '실제 이관', '배포', '성공 1 / 전체 2실패 1', 't-new']);
+    expect(cells).toEqual([formatTime('2026-09-29T07:05:05.351940500Z'), 'PkgB', '-', '-', '실제 이관', '배포', '성공 1 / 전체 2실패 1', 't-new']);
     expect(within(rows[1]).getByRole('button', { name: 't-old' })).toBeInTheDocument();
   });
 
@@ -172,7 +174,7 @@ describe('이력 탭', () => {
     const fn = mockApi({
       'GET /tenants': () => json(TENANTS_OK),
       'GET /tenants/status': () => json(TENANT_STATUS_OK),
-      'GET /packages': () => json(PACKAGES),
+      'GET /packages?tenantId=DEV': () => json(PACKAGES),
       'GET /transport/history': () => json([entry('t-1')]),
     });
     render(<App />);
@@ -221,7 +223,7 @@ describe('이력 탭', () => {
     mockApi({
       'GET /tenants': () => json(TENANTS_OK),
       'GET /tenants/status': () => json(TENANT_STATUS_OK),
-      'GET /packages': () => json(PACKAGES),
+      'GET /packages?tenantId=DEV': () => json(PACKAGES),
       'GET /transport/history': () => json([entry('t-1'), entry('t-2')]),
     });
     render(<App />);
