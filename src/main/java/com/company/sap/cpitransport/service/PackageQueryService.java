@@ -24,8 +24,14 @@ public class PackageQueryService {
 
     public List<ArtifactSummary> packages(String tenantId) {
         requireTenant(tenantId);
-        return client.listPackages(tenantId).stream()
-                .map(p -> new ArtifactSummary(p.id(), p.name(), p.version())).toList();
+        try {
+            return client.listPackages(tenantId).stream()
+                    .map(p -> new ArtifactSummary(p.id(), p.name(), p.version())).toList();
+        } catch (CpiCallException failure) {
+            // AI-NOTE: Spring logs handler arguments/exceptions at TRACE/DEBUG. Upstream summaries
+            // can contain unknown secrets; discard the summary and cause before MVC (REQ-305 AC-3).
+            throw new ApiException(Code.CPI_UNAVAILABLE);
+        }
     }
 
     public List<ArtifactSummary> artifacts(String packageId) {
@@ -46,7 +52,8 @@ public class PackageQueryService {
                     && !failure.isTokenStageFailure()) {
                 throw new ApiException(Code.PACKAGE_NOT_FOUND);
             }
-            throw failure;
+            // AI-NOTE: keep upstream response bodies out of Spring exception logs (REQ-305 AC-3).
+            throw new ApiException(Code.CPI_UNAVAILABLE);
         }
     }
 

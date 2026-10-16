@@ -69,9 +69,88 @@ SAP Cloud Integration(CPI)의 DEV 패키지를 PRD로 이관하는 도구입니�
 - 드라이런(기본값)으로 PRD를 건드리지 않고 결과를 먼저 확인한 뒤, 확인 대화상자를 거쳐 실제 이관을 실행합니다.
 - 이관 결과를 이력으로 남기고 화면에서 다시 볼 수 있습니다.
 
-아래 절차는 실제 테넌트 없이 localhost WireMock 스텁과 더미 자격증명만 사용합니다.
+실행 방법 절과 아래 번호 절의 로컬 데모는 실제 테넌트 없이 localhost WireMock 스텁과 더미 자격증명만 사용합니다.
 
-알려진 한계: 실제 SAP CPI 테넌트 연동은 아직 검증하지 않았고 로컬 스텁으로만 확인했습니다.
+실제 테넌트를 연결하는 절차와 검증 시 주의점은 다음 절을 따릅니다.
+
+## 테넌트 등록과 실제 테넌트로 이관하기
+
+### 서비스 키와 저장소 준비
+
+SAP BTP cockpit의 해당 subaccount/space에서 **Instances and Subscriptions**로 이동해 **Process Integration Runtime**, plan **api** 서비스 인스턴스를 만들고, 그 인스턴스의 **Service Keys**에서 ClientId/Secret 방식의 서비스 키를 만듭니다. 이관·배포에 필요한 역할 이름과 권한은 [SAP Tasks and Permissions](https://help.sap.com/docs/integration-suite/sap-integration-suite/tasks-and-permissions-556d5575d4b0483e85d4f3251f21d0ec)와 [서비스 인스턴스·키 준비 안내](https://developers.sap.com/tutorials/btp-transport-management-cpi-03-set-up-target-account)를 확인하세요. 이 run에서 필요했던 역할 계열의 예시는 `WorkspacePackagesRead`·`WorkspacePackagesEdit`·`WorkspaceArtifactsDeploy`·`MonitoringDataRead`이며, 모든 환경에 대한 완전한 권한 목록은 아닙니다. 역할을 추가한 뒤에는 키를 다시 발급해야 할 수 있습니다.
+
+서비스 키 JSON 파일은 **저장소 밖**에 보관하세요. `.gitignore`는 `*service-key*.json`, `*api-key*.json`, `*.servicekey.json`, `*.enc`, `.env`, `.env.*`를 무시합니다. 파일 이름이 이 패턴에 맞더라도 저장소 안에 키를 복사하지 마세요.
+
+등록 테넌트의 연결 정보는 AES-GCM으로 암호화해 기본 `~/.cpi-transport-tool/tenants.enc`에 보관합니다. 위치는 `cpi.tenants.store-file`로 지정할 수 있습니다. 암호화 키는 **환경 변수 `CPI_TENANT_STORE_KEY`로만** 받으며, 32바이트 임의 값의 base64 문자열이어야 합니다. 최초 한 번 다음 중 하나로 만들고, 이후 재기동 때는 안전하게 보관한 **같은 키**를 사용하세요. 명령은 키를 화면에 출력하지 않습니다.
+
+PowerShell 5.1:
+
+```powershell
+$storeKeyBytes = New-Object byte[] 32
+$storeKeyRng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try { $storeKeyRng.GetBytes($storeKeyBytes) } finally { $storeKeyRng.Dispose() }
+$env:CPI_TENANT_STORE_KEY = [Convert]::ToBase64String($storeKeyBytes)
+```
+
+Git Bash:
+
+```bash
+export CPI_TENANT_STORE_KEY="$(openssl rand -base64 32)"
+```
+
+키를 잃으면 기존 저장 파일을 복호화할 수 없습니다. 새 저장 파일 위치를 지정하고 새 키로 테넌트를 다시 등록해야 합니다. 키가 없거나 저장 파일을 읽지 못하면 등록 테넌트의 쓰기 작업은 막힙니다. 재기동할 때 위 생성 명령을 반복해 기존 키를 바꾸지 마세요.
+
+### 화면 등록과 이관 준비
+
+1. 앱을 실행하고 **테넌트** 탭에서 이름을 입력한 뒤 서비스 키 JSON 파일을 선택하거나 내용을 붙여넣어 등록합니다. 파일을 선택하면 파일 내용을 우선 사용합니다. 등록된 키는 다시 보이지 않습니다.
+2. 목록의 **수정**에서 이름 또는 서비스 키를 바꾸고, **삭제**에서 로컬 등록을 지울 수 있습니다. 수정 폼은 현재 이름과 빈 서비스 키 입력으로 열립니다. 로컬 등록 삭제는 SAP 테넌트의 패키지·아티팩트를 삭제하지 않습니다.
+3. 기존 연결 환경 변수 4개(`CPI_DEV_API_URL`, `CPI_DEV_TOKEN_URL`, `CPI_DEV_CLIENT_ID`, `CPI_DEV_CLIENT_SECRET`; PRD는 `CPI_PRD_*`)를 모두 주면 초기 등록 **DEV·PRD**로 계속 사용할 수 있습니다. 환경 변수로 등록한 항목은 화면에서 수정·삭제할 수 없습니다.
+4. 이관 탭의 **원본 테넌트**·**대상 테넌트** 라디오에서 서로 다른 테넌트를 선택합니다. 상단 연결 상태 칩을 눌러 다시 확인할 수 있습니다. 대상 미선택은 **대상 선택 안 됨**, 상태 요청 자체 실패는 **확인 실패**로 보입니다.
+5. 읽기 전용은 **기본 켜짐**입니다. 드라이런을 확인한 뒤에만 `CPI_TRANSPORT_READ_ONLY=false`를 주고 앱을 재기동하세요. 이 설정을 끄면 실제 대상에 업로드·파라미터 변경·배포를 수행할 수 있으므로 대상 이름과 확인 대화상자를 확인하세요.
+6. **대상 패키지가 미리 있어야 합니다.** 도구는 패키지를 자동 생성하지 않습니다. 매핑의 `devValue`는 원본 테넌트 값, `prdValue`는 대상 테넌트 값입니다. 원본·대상을 바꿀 때 매핑도 확인하세요.
+
+### 실제 검증 절차
+
+실제 검증은 기본 `gradle test`(`./gradlew test`)에 들어 있지 않습니다. 아래 절차는 서비스 키를 직접 등록하고 대상을 선택하는 별도 수동 절차입니다. 실제 서비스 키를 등록하거나 초기 연결 환경 변수로 제공하지 않으면 실제 테넌트에 요청하지 않습니다. 앞 절의 로컬 PRD 더미 환경 변수가 남지 않은 새 터미널에서 시작하세요.
+
+1. 대상에 패키지 `CPITransportRealTest`를 준비합니다. 터미널 1에서 샘플 원본 스텁을 띄웁니다(PowerShell은 `.\gradlew.bat runRealSampleStub`, Git Bash는 `./gradlew runRealSampleStub`). 기본 샘플 아티팩트는 `CPITT_Sample_Push` 하나입니다.
+2. 터미널 2에서 위에서 준비한 저장소 키와 다음 DEV 더미 환경 변수, 매핑을 설정하고 앱을 실행합니다. 저장소 키를 같은 터미널에 먼저 설정하거나 안전한 보관소에서 복원하세요. 처음에는 읽기 전용을 켭니다.
+
+```powershell
+$env:CPI_DEV_API_URL = 'http://localhost:18081'
+$env:CPI_DEV_TOKEN_URL = 'http://localhost:18081/oauth/token'
+$env:CPI_DEV_CLIENT_ID = 'dummy-dev-client'
+$env:CPI_DEV_CLIENT_SECRET = 'dummy-dev-secret'
+$env:CPI_TRANSPORT_MAPPINGFILE = 'examples/real-transport-mapping.yml'
+$env:CPI_TRANSPORT_READ_ONLY = 'true'
+.\gradlew.bat frontendBuild
+.\gradlew.bat bootRun
+```
+
+```bash
+export CPI_DEV_API_URL=http://localhost:18081
+export CPI_DEV_TOKEN_URL=http://localhost:18081/oauth/token
+export CPI_DEV_CLIENT_ID=dummy-dev-client
+export CPI_DEV_CLIENT_SECRET=dummy-dev-secret
+export CPI_TRANSPORT_MAPPINGFILE=examples/real-transport-mapping.yml
+export CPI_TRANSPORT_READ_ONLY=true
+./gradlew frontendBuild
+./gradlew bootRun
+```
+
+3. 브라우저로 http://localhost:8080/ 을 열고 테넌트 탭에서 대상 서비스 키를 등록합니다. 원본 DEV와 등록한 대상을 선택하고 칩으로 연결 상태를 확인합니다. 패키지 `CPITransportRealTest`와 `CPITT_Sample_Push`를 선택해 드라이런을 실행합니다. `examples/real-transport-mapping.yml`의 header·property·외부화 파라미터가 PLANNED인지 확인합니다. 드라이런은 대상에 요청하지 않습니다.
+4. 앱을 Ctrl+C로 정지하고 같은 저장소 키·저장 파일을 유지한 채 PowerShell `$env:CPI_TRANSPORT_READ_ONLY = 'false'` 또는 Git Bash `export CPI_TRANSPORT_READ_ONLY=false`를 설정한 뒤 `bootRun`으로 재기동합니다. 등록 대상이 유지되는지 확인하고 원본·대상을 다시 선택합니다. 먼저 배포를 끈 실제 이관을 실행해 대상 SAP 화면에서 아티팩트와 치환값을 확인합니다.
+5. 이어서 배포 포함 실제 이관을 실행합니다. 대상 SAP 화면에서 배포·기동 상태를 확인하고, 도구의 이관 결과·이력 상세에서 **배포 성공 1개**, 이력 목록의 **배포** 열에서 **성공**을 확인합니다. 검증 후 읽기 전용을 다시 켜고 재기동하면 실제 이관은 막히고 드라이런은 계속 사용할 수 있습니다.
+
+대상 아티팩트가 SAP 화면에서 편집 중(잠금, 버전 상태 Draft)이면 업로드가 HTTP 400(UPLOAD_FAILED)으로 거절된다. 화면에서 편집을 끝낸 뒤(Save as version 또는 Cancel) 다시 이관한다. 이 run의 실제 확인에 따른 안내이며, 도구는 잠금을 자동으로 풀지 않습니다.
+
+### 배포 실패 재현과 상세 확인
+
+기본 샘플 스텁을 Ctrl+C로 정지하고 `./gradlew runRealSampleStub -PsampleVariant=deployFail`(PowerShell: `.\gradlew.bat runRealSampleStub -PsampleVariant=deployFail`)로 변형 스텁을 띄웁니다. 이 변형은 `CPITransportRealTest`에 `CPITT_Sample_DeployFail` 하나만 제공합니다. 이관 탭에서 패키지를 다시 조회하고 이 아티팩트를 선택한 뒤, 읽기 전용을 끈 앱에서 **배포 포함**(`deploy: true`)으로 실제 이관하세요. 이 변형에는 예제 매핑 항목이 없어 치환 결과는 비어 있습니다.
+
+이관 결과와 이력 상세에서 **배포 실패** 요약과 **배포 오류 상세**를 확인합니다. 이력 목록의 **배포** 열에는 배포 결과 **실패 1**이 표시됩니다. 이 아티팩트는 대상에 ERROR 배포 상태로 남으며 도구는 삭제·배포 해제를 하지 않습니다. STARTED·TIMEOUT 또는 통신 실패로 끝나면 의도한 런타임 배포 오류를 재현한 것으로 보지 않습니다. 런타임 ERROR여도 상세 API가 200과 본문을 주지 않으면 상세를 확인하지 못한 것입니다.
+
+일반 이관에서도 배포를 요청하면 이관 결과·이력 상세에 배포 성공·실패·시간 초과 요약이 표시되고, 이력 목록의 배포 열에서 결과를 볼 수 있습니다. 상세를 가져오지 못하면 HTTP 상태 또는 응답 없음 안내가 나옵니다. 상세는 CPI가 알려 준 원문에서 비밀값·인증 헤더·토큰/JWT·대상 호스트의 서브도메인·민감 매핑값 패턴을 가린 뒤 4000자(코드 포인트)까지 표시하며, 넘으면 `…(잘림)`을 붙입니다. 마스킹된 상세는 응답과 이력에 저장되고 앱 로그에는 원문과 마스킹한 상세 모두 남기지 않습니다. **텍스트 패턴 마스킹이므로 알 수 없는 민감값은 가려지지 않을 수 있습니다.** 공유 전에 상세 내용을 직접 확인하세요.
 
 ## 화면
 
