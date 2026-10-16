@@ -137,7 +137,10 @@ class RealSampleEndToEndTests {
             assertThat(result.status()).isEqualTo(ArtifactStatus.SUCCESS);
             assertThat(result.action()).isEqualTo(TransportAction.CREATED);
             assertThat(result.deployStatus()).isEqualTo(DeployStatus.STARTED);
-            assertThat(result.replacements()).hasSize(3).allSatisfy(r -> assertThat(r.status()).isEqualTo(ReplacementStatus.APPLIED));
+            assertThat(result.replacements()).containsExactlyInAnyOrder(
+                    new Replacement(TargetType.HEADER, "SampleHeader", ReplacementStatus.APPLIED, "DEV_HEADER", "TARGET_HEADER", 1),
+                    new Replacement(TargetType.PROPERTY, "SampleProperty", ReplacementStatus.APPLIED, "DEV_PROPERTY", "TARGET_PROPERTY", 1),
+                    new Replacement(TargetType.EXTERNAL_PARAM, "SampleMessage", ReplacementStatus.APPLIED, "DEV_MESSAGE", "TARGET_MESSAGE", 1));
         });
         var uploads = target.findAll(postRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts")));
         assertThat(uploads).hasSize(1);
@@ -147,6 +150,7 @@ class RealSampleEndToEndTests {
         var entries = RealSampleStubTests.entries(Base64.getDecoder().decode(upload.path("ArtifactContent").asString()));
         var document = RealSampleStubTests.parse(entries.get("src/main/resources/scenarioflows/integrationflow/CPITT_Sample_Push.iflw"));
         assertThat(document.getDocumentElement().getTextContent()).contains("TARGET_HEADER", "TARGET_PROPERTY").doesNotContain("DEV_HEADER", "DEV_PROPERTY");
+        assertThat(document.getDocumentElement().getTextContent()).contains("{{SampleMessage}}");
         var original = RealSampleStubTests.entries(source.bundle());
         assertThat(entries.get("META-INF/MANIFEST.MF")).isEqualTo(original.get("META-INF/MANIFEST.MF"));
         var manifest = new Manifest(new ByteArrayInputStream(entries.get("META-INF/MANIFEST.MF")));
