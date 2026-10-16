@@ -109,6 +109,8 @@ class RealSampleStubTests {
             assertThat(attributes.getValue(name)).isEqualTo(RealSampleStub.ID);
         assertThat(attributes.getValue("Bundle-Version")).isEqualTo("1.0.0");
         assertThat(attributes.getValue("SAP-BundleType")).isEqualTo("IntegrationFlow");
+        assertThat(attributes.getValue("SAP-NodeType")).isEqualTo("IFLMAP");
+        assertThat(attributes.getValue("SAP-RuntimeProfile")).isEqualTo("iflmap");
         assertThat(text(entries, ".project")).contains("<name>" + RealSampleStub.ID + "</name>");
     }
 
@@ -149,10 +151,22 @@ class RealSampleStubTests {
     void req306_ac4_timer() throws Exception {
         var document = parse(entries(stub.bundle()).get(IFLW));
         String bpmn = "http://www.omg.org/spec/BPMN/20100524/MODEL";
+        assertThat(document.getElementsByTagNameNS(bpmn, "startEvent").getLength()).isEqualTo(1);
         var start = (org.w3c.dom.Element) document.getElementsByTagNameNS(bpmn, "startEvent").item(0);
         assertThat(start.getElementsByTagNameNS(bpmn, "timerEventDefinition").getLength()).isEqualTo(1);
         assertThat(start.getElementsByTagNameNS(bpmn, "messageEventDefinition").getLength()).isZero();
-        assertThat(start.getTextContent()).contains("simple.repeat=NONE");
+        var timer = (org.w3c.dom.Element) start.getElementsByTagNameNS(bpmn, "timerEventDefinition").item(0);
+        var timerProperties = new HashMap<String, String>();
+        var properties = timer.getElementsByTagNameNS("http:///com.sap.ifl.model/Ifl.xsd", "property");
+        for (int i = 0; i < properties.getLength(); i++) {
+            var property = (org.w3c.dom.Element) properties.item(i);
+            timerProperties.put(property.getElementsByTagName("key").item(0).getTextContent(),
+                    property.getElementsByTagName("value").item(0).getTextContent());
+        }
+        assertThat(timerProperties).containsEntry("activityType", "StartTimerEvent")
+                .containsEntry("componentVersion", "1.4")
+                .containsEntry("cmdVariantUri", "ctype::FlowstepVariant/cname::intermediatetimer/version::1.4.0");
+        assertThat(timerProperties.get("scheduleKey")).contains("simple.repeat=NONE");
         assertThat(document.getElementsByTagNameNS(bpmn, "messageFlow").getLength()).isZero();
         var diagrams = new HashSet<String>();
         for (String tag : List.of("BPMNShape", "BPMNEdge")) {
@@ -175,7 +189,7 @@ class RealSampleStubTests {
         // connection scanner does not mistake this exact identifier allowlist for connection URLs.
         Set<String> identifiers = Set.of("//www.omg.org/spec/BPMN/20100524/MODEL", "//www.omg.org/spec/BPMN/20100524/DI",
                 "//www.omg.org/spec/DD/20100524/DC", "//www.omg.org/spec/DD/20100524/DI",
-                "//www.w3.org/2001/XMLSchema-instance", "//com.sap.it.ifl.tooling/default/flow");
+                "//www.w3.org/2001/XMLSchema-instance");
         var urls = Pattern.compile("https?://(?!/)[^\\s\"'<>\\\\]+", Pattern.CASE_INSENSITIVE);
         var markers = Pattern.compile("ondemand[.]com|trial|sb-", Pattern.CASE_INSENSITIVE);
         for (Path path : files) {

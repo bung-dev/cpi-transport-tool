@@ -1,13 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<parameters>
-    <parameter>
-        <key>SampleMessage</key>
-        <name>SampleMessage</name>
-        <type>xsd:string</type>
-        <isRequired>false</isRequired>
-        <constraint/>
-        <description>Sample message body</description>
-        <additionalMetadata/>
-    </parameter>
-    <param_references/>
-</parameters>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><parameters><parameter>
+    <key>SampleMessage</key>
+    <name>SampleMessage</name>
+    <type>xsd:string</type>
+    <isRequired>false</isRequired>
+    <constraint/>
+    <description>Sample message body</description>
+    <additionalMetadata/>
+  </parameter><param_references/></parameters>
