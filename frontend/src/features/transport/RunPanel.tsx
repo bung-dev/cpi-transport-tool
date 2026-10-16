@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Callout';
 import { Switch } from '../../components/ui/Switch';
 import { ConfirmDialog } from './ConfirmDialog';
-import { useTenants } from '../tenants/TenantContext';
+import { useReadOnlyState, useTenants } from '../tenants/TenantContext';
 import { RunModeSelect, type RunMode } from './RunModeSelect';
 
 // 백엔드 검증(TransportController.java:31)과 같은 값
@@ -39,6 +39,7 @@ function SummaryRow({ label, children }: { label: string; children: ReactNode })
 
 export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequest, realRequest = 0 }: Props) {
   const { tenants, sourceTenantId, targetTenantId } = useTenants();
+  const { realDisabled } = useReadOnlyState();
   const targetName = tenants.state === 'success'
     ? tenants.data.tenants.find(t => t.id === targetTenantId)?.name ?? 'PRD' : 'PRD';
   const selectionReason = !sourceTenantId ? '원본 테넌트를 선택하세요'
@@ -57,25 +58,32 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
   const [handledRequest, setHandledRequest] = useState(realRequest);
   if (realRequest !== handledRequest) {
     setHandledRequest(realRequest);
-    if (!busy && packageId !== null && selectionReason === null) {
+    if (!realDisabled && !busy && packageId !== null && selectionReason === null) {
       setMode('real');
       setDeploy(false);
       setConfirmOpen(true);
     }
   }
 
-  const dryRun = mode === 'dryRun';
+  // AI-NOTE: 상태 재확인으로 readOnly가 모름이 되는 같은 렌더부터 실제 이관을 막고, 이전 선택과 대화상자를 되살리지 않는다(REQ-302 AC-5·AC-7).
+  if (realDisabled && (mode !== 'dryRun' || deploy || confirmOpen)) {
+    setMode('dryRun');
+    setDeploy(false);
+    setConfirmOpen(false);
+  }
+  const dryRun = realDisabled || mode === 'dryRun';
   const tooMany = artifactIds.length > MAX_ARTIFACTS;
   const canRun = packageId !== null && !tooMany && !busy && selectionReason === null;
 
   function changeMode(next: RunMode) {
+    if (next === 'real' && realDisabled) return;
     setMode(next);
     // 드라이런으로 바꾸면 배포 스위치가 사라지고 값은 꺼짐으로 돌아간다.
     if (next === 'dryRun') setDeploy(false);
   }
 
   async function submit() {
-    if (inFlight.current || packageId === null || tooMany || !sourceTenantId || !targetTenantId || selectionReason) return;
+    if (inFlight.current || packageId === null || tooMany || !sourceTenantId || !targetTenantId || selectionReason || (mode === 'real' && realDisabled)) return;
     inFlight.current = true;
     setBusy(true);
     setError(null);
@@ -145,7 +153,7 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
         </p>
       )}
       {error && <ErrorAlert error={error} />}
-      {confirmOpen && packageId !== null && selectionReason === null && (
+      {confirmOpen && !realDisabled && packageId !== null && selectionReason === null && (
         <ConfirmDialog
           targetName={targetName}
           packageId={packageId}

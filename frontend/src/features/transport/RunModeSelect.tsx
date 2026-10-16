@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { RadioControl } from '../../components/ui/Radio';
+import { useReadOnlyState } from '../tenants/TenantContext';
 
 export type RunMode = 'dryRun' | 'real';
 
@@ -28,7 +29,10 @@ interface Props {
 }
 
 export function RunModeSelect({ mode, onChange, targetName = 'PRD' }: Props) {
+  const { realDisabled, notice } = useReadOnlyState();
+  const selectedMode = realDisabled ? 'dryRun' : mode;
   const base = useId();
+  const noticeId = `${base}-read-only`;
   const groupId = `${base}-group`;
   return (
     <div className="min-w-0">
@@ -41,15 +45,16 @@ export function RunModeSelect({ mode, onChange, targetName = 'PRD' }: Props) {
           const titleId = `${base}-${o.mode}-title`;
           const descId = `${base}-${o.mode}-desc`;
           return (
-            <label key={o.mode} className={`${BOX_BASE} ${mode === o.mode ? BOX_ON : BOX_OFF}`}>
+            <label key={o.mode} className={`${BOX_BASE} ${selectedMode === o.mode ? BOX_ON : BOX_OFF}`}>
               <RadioControl
                 name="runMode"
                 value={o.mode}
                 className="mt-0.5"
-                checked={mode === o.mode}
-                onChange={() => onChange(o.mode)}
+                checked={selectedMode === o.mode}
+                disabled={o.mode === 'real' && realDisabled}
+                onChange={() => { if (o.mode === 'dryRun' || !realDisabled) onChange(o.mode); }}
                 aria-labelledby={titleId}
-                aria-describedby={descId}
+                aria-describedby={`${descId}${o.mode === 'real' && notice ? ` ${noticeId}` : ''}`}
               />
               <span className="min-w-0">
                 <span id={titleId} className="block font-medium">
@@ -63,6 +68,7 @@ export function RunModeSelect({ mode, onChange, targetName = 'PRD' }: Props) {
           );
         })}
       </div>
+      {notice && <p id={noticeId} className="mt-1.5 text-sm text-ink-secondary">{notice}</p>}
     </div>
   );
 }

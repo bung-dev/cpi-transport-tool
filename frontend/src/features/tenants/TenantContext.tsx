@@ -23,6 +23,14 @@ export const DEFAULT_TENANT_CONTEXT: TenantContextValue = {
 };
 export const TenantContext = createContext<TenantContextValue>(DEFAULT_TENANT_CONTEXT);
 export function useTenants() { return useContext(TenantContext); }
+export function useReadOnlyState() {
+  const { readOnly, status } = useTenants();
+  return {
+    realDisabled: readOnly !== false,
+    notice: readOnly === true ? '읽기 전용 모드입니다. 실제 이관은 꺼져 있습니다'
+      : status.state === 'error' ? '읽기 전용 여부를 확인하지 못했습니다. 상태 칩을 눌러 다시 확인하세요' : undefined,
+  };
+}
 export function TenantProvider({ children, openTenantsTab }: { children: ReactNode; openTenantsTab: () => void }) {
   const [tenants, setTenants] = useState<LoadState<TenantsResponse>>({ state: 'loading' });
   const [status, setStatus] = useState<LoadState<TenantStatusResponse>>({ state: 'loading' });
@@ -32,15 +40,18 @@ export function TenantProvider({ children, openTenantsTab }: { children: ReactNo
   const started = useRef(false);
   const listVersion = useRef(0);
   const statusVersion = useRef(0);
-  const refreshing = useRef(false);
+  const statusPending = useRef(0);
   const loadStatus = useCallback(async (refresh: boolean) => {
     const version = ++statusVersion.current;
+    statusPending.current += 1;
     setStatus({ state: 'loading' });
     try {
       const data = await getTenantStatus(refresh);
       if (version === statusVersion.current) setStatus({ state: 'success', data });
     } catch (e) {
       if (version === statusVersion.current) setStatus({ state: 'error', error: toApiError(e) });
+    } finally {
+      statusPending.current -= 1;
     }
   }, []);
   const reload = useCallback(async () => {
@@ -66,9 +77,8 @@ export function TenantProvider({ children, openTenantsTab }: { children: ReactNo
     })()]);
   }, [loadStatus]);
   const refreshStatus = useCallback(async () => {
-    if (refreshing.current) return;
-    refreshing.current = true;
-    try { await loadStatus(true); } finally { refreshing.current = false; }
+    if (statusPending.current > 0) return;
+    await loadStatus(true);
   }, [loadStatus]);
   useEffect(() => { if (!started.current) { started.current = true; void reload(); } }, [reload]);
   return <TenantContext.Provider value={{ tenants, status, readOnly: status.state === 'success' ? status.data.readOnly : undefined,

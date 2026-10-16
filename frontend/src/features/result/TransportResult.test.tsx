@@ -1,3 +1,4 @@
+import { TestTenantProvider } from '../../test/tenantProvider';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -488,7 +489,7 @@ describe('이관 결과', () => {
 
   it('REQ-105 AC-6: onOpenReal을 넘기지 않으면 드라이런 결과여도 버튼이 없고, 넘기면 드라이런 결과에만 버튼이 있다', async () => {
     const onOpenReal = vi.fn();
-    const { rerender } = render(<TransportResult result={BASE} />);
+    const { rerender } = render(<TransportResult result={BASE} />, { wrapper: TestTenantProvider });
     expect(screen.queryByRole('button', { name: '이 구성으로 실제 이관' })).toBeNull();
     rerender(<TransportResult result={BASE} onOpenReal={onOpenReal} />);
     await userEvent.click(screen.getByRole('button', { name: '이 구성으로 실제 이관' }));
