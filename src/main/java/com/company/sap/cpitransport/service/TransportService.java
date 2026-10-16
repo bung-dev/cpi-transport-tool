@@ -49,7 +49,8 @@ public class TransportService {
                     && !failure.isTokenStageFailure()) {
                 throw new ErrorResponse.ApiException(ErrorResponse.Code.PACKAGE_NOT_FOUND);
             }
-            throw failure;
+            // AI-NOTE: discard upstream summaries and causes before Spring logs this failure (REQ-305 AC-3).
+            throw new ErrorResponse.ApiException(ErrorResponse.Code.CPI_UNAVAILABLE);
         }
         return execute(request, artifacts, loaded);
     }
