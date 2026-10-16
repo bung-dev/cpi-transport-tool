@@ -11,6 +11,7 @@ import { Table, Td, Th, Tr } from '../../components/ui/Table';
 import { formatTime } from '../../lib/formatTime';
 import { useRemote } from '../../lib/useRemote';
 import { TransportResult } from '../result/TransportResult';
+import { deployOutcome } from '../result/deployOutcome';
 
 // REQ-106 AC-4: 조회 중에는 표 자리에 스켈레톤 행을 보이고 role="status"의 접근 가능한 글자 "불러오는 중"을 둔다(시각적으로는 숨김).
 function TableSkeleton() {
@@ -118,7 +119,9 @@ export function HistoryTab() {
                 </Tr>
               </thead>
               <tbody>
-                {state.data.map((h, i) => (
+                {state.data.map((h, i) => {
+                  const outcome = deployOutcome(h);
+                  return (
                   // 행의 어느 곳을 눌러도 상세가 열린다(마우스 편의). 키보드 경로는 행마다 이관 ID 버튼 하나이고 행에는 tabindex를 주지 않는다(ADR-012).
                   // 이관 ID 버튼의 클릭은 행으로 올라가 같은 핸들러가 처리한다. 셀은 줄바꿈하지 않고, 좁은 폭에서는 표 래퍼 안에서 가로로 스크롤한다(REQ-108 AC-1).
                   <Tr
@@ -135,7 +138,10 @@ export function HistoryTab() {
                     <Td className="whitespace-nowrap">{h.targetTenant?.name ?? '-'}</Td>
                     <Td className="whitespace-nowrap">{h.dryRun ? <Badge tone="neutral">드라이런</Badge> : <Badge tone="accent">실제 이관</Badge>}</Td>
                     <Td className="whitespace-nowrap">
-                      {h.deploy ? <Badge tone="info">배포</Badge> : <span className="text-ink-tertiary">배포 안 함</span>}
+                      <span className="inline-flex items-center gap-2">
+                        {h.deploy ? <Badge tone="info">배포</Badge> : <span className="text-ink-tertiary">배포 안 함</span>}
+                        {outcome && <Badge tone={outcome.tone}>{outcome.label}</Badge>}
+                      </span>
                     </Td>
                     <Td className="whitespace-nowrap">
                       <span className="inline-flex items-center gap-2">
@@ -156,7 +162,8 @@ export function HistoryTab() {
                       </button>
                     </Td>
                   </Tr>
-                ))}
+                  );
+                })}
               </tbody>
             </Table>
           ))}

@@ -69,6 +69,16 @@ export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
                 {r.error.message}
               </Callout>
             )}
+            {r.error && (r.error.detail || r.error.detailHttpStatus != null) && (
+              <div className="min-w-0 max-w-full">
+                <h5 className="mb-1.5 text-xs font-semibold text-ink-secondary">배포 오류 상세</h5>
+                <p className="min-w-0 max-w-full whitespace-pre-wrap break-words text-sm text-ink-secondary">
+                  {r.error.detail || (r.error.detailHttpStatus === 0
+                    ? '오류 상세를 가져오지 못했습니다(응답 없음)'
+                    : `오류 상세를 가져오지 못했습니다(HTTP ${r.error.detailHttpStatus})`)}
+                </p>
+              </div>
+            )}
             <div>
               <h5 className="mb-1.5 text-xs font-semibold text-ink-secondary">치환 항목</h5>
               {r.replacements.length === 0 && !onlyProblems ? (
