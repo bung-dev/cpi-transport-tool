@@ -6,6 +6,7 @@ import { Switch } from '../../components/ui/Switch';
 import { formatTime } from '../../lib/formatTime';
 import { ArtifactCard } from './ArtifactCard';
 import { initialExpanded, isProblemArtifact, totalProblemCount } from './problems';
+import { useReadOnlyState } from '../tenants/TenantContext';
 
 // REQ-105 AC-8, REQ-012 AC-1: 서버 값은 모두 JSX 텍스트 노드로만 렌더링한다.
 interface Props {
@@ -16,6 +17,8 @@ interface Props {
 
 export function TransportResult({ result, onOpenReal }: Props) {
   const titleId = useId();
+  const noticeId = `${titleId}-read-only`;
+  const { realDisabled, notice } = useReadOnlyState();
   const { total, succeeded, failed } = result.summary;
 
   // 접기·펼치기와 "문제 항목만 보기" 상태. 새 결과가 나타나면 그 결과의 처음 상태로 초기화한다(REQ-105 AC-5).
@@ -46,11 +49,12 @@ export function TransportResult({ result, onOpenReal }: Props) {
         {result.dryRun ? <Badge tone="neutral">드라이런</Badge> : <Badge tone="accent">실제 이관</Badge>}
         {result.deploy && <Badge tone="info">배포</Badge>}
         {onOpenReal && result.dryRun && (
-          <Button className="ml-auto" onClick={onOpenReal}>
+          <Button className="ml-auto" disabled={realDisabled} aria-describedby={notice ? noticeId : undefined} onClick={() => { if (!realDisabled) onOpenReal(); }}>
             이 구성으로 실제 이관
           </Button>
         )}
       </div>
+      {onOpenReal && result.dryRun && notice && <p id={noticeId} className="text-sm text-ink-secondary">{notice}</p>}
       <div className="grid grid-cols-3 gap-3">
         <Stat label="전체" value={total} />
         <Stat label="성공" value={succeeded} valueClass={succeeded >= 1 ? 'text-success-fg' : 'text-ink'} />

@@ -35,13 +35,32 @@ it('REQ-308 AC-5·AC-7: 대상 이름이 여섯 문구에 반영되고 확인창
   expect(document.body.textContent).not.toContain('PRD');
 });
 
-it.each(['미선택', '목록에 없는 id', 'provider 없음'])('REQ-308 AC-5·AC-7: %s일 때 여섯 문구의 기본 이름은 PRD다', async variant => {
+it.each(['미선택', '목록에 없는 id'])('REQ-308 AC-5·AC-7: %s일 때 여섯 문구의 기본 이름은 PRD다', async variant => {
   const provider = variant !== 'provider 없음';
   const value = { ...named, targetTenantId: variant === '미선택' ? null : 'missing' };
   await checkPanel('PRD', value, provider);
   if (variant !== '목록에 없는 id') expect(screen.getByRole('button', { name: 'PRD로 이관' })).toBeDisabled();
   // 미선택은 실행할 수 없으므로 확인창의 독립 기본값 계약을 확인한다.
   render(<ConfirmDialog packageId="P" artifactCount={0} deploy={false} busy={false} onConfirm={() => {}} onCancel={() => {}} />);
+  checkDialog('PRD');
+});
+
+it('REQ-308 AC-5·AC-7: provider 없음이면 PRD 기본 설명과 드라이런을 유지하고 실제 이관은 비활성이다', async () => {
+  render(<RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />);
+  expect(screen.getByText('PRD에 요청을 보내지 않고 변경 내용만 확인합니다')).toBeInTheDocument();
+  const real = screen.getByRole('radio', { name: '실제 이관' });
+  expect(real).toBeDisabled();
+  expect(screen.getByRole('radio', { name: '드라이런' })).toBeEnabled();
+  expect(screen.getByRole('radio', { name: '드라이런' })).toBeChecked();
+  await userEvent.click(real);
+  expect(real).not.toBeChecked();
+  expect(screen.getByRole('radio', { name: '드라이런' })).toBeChecked();
+  expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+it('REQ-308 AC-5·AC-7: readOnly false provider에서 여섯 문구의 기본 이름은 PRD다', async () => {
+  await checkPanel('PRD', { readOnly: false });
+  await userEvent.click(screen.getByRole('button', { name: 'PRD로 이관' }));
   checkDialog('PRD');
 });
 
