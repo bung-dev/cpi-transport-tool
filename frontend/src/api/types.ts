@@ -34,6 +34,8 @@ export interface UnmappedKey {
 export interface ArtifactError {
   code: string;
   message: string;
+  detail?: string | null;
+  detailHttpStatus?: number | null;
 }
 
 export interface ArtifactResult {

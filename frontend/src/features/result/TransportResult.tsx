@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Switch } from '../../components/ui/Switch';
 import { formatTime } from '../../lib/formatTime';
 import { ArtifactCard } from './ArtifactCard';
+import { deployOutcome } from './deployOutcome';
 import { initialExpanded, isProblemArtifact, totalProblemCount } from './problems';
 import { useReadOnlyState } from '../tenants/TenantContext';
 
@@ -20,6 +21,7 @@ export function TransportResult({ result, onOpenReal }: Props) {
   const noticeId = `${titleId}-read-only`;
   const { realDisabled, notice } = useReadOnlyState();
   const { total, succeeded, failed } = result.summary;
+  const outcome = deployOutcome(result);
 
   // 접기·펼치기와 "문제 항목만 보기" 상태. 새 결과가 나타나면 그 결과의 처음 상태로 초기화한다(REQ-105 AC-5).
   // 렌더 중 이전 결과와 비교해 상태를 맞추는 방식이라 결과가 바뀐 같은 렌더에서 옛 상태가 한 번도 보이지 않는다.
@@ -54,6 +56,7 @@ export function TransportResult({ result, onOpenReal }: Props) {
           </Button>
         )}
       </div>
+      {outcome && <p className={outcome.tone === 'success' ? 'text-success-fg' : 'text-danger-fg'}>{outcome.summary}</p>}
       {onOpenReal && result.dryRun && notice && <p id={noticeId} className="text-sm text-ink-secondary">{notice}</p>}
       <div className="grid grid-cols-3 gap-3">
         <Stat label="전체" value={total} />
