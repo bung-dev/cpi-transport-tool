@@ -1,6 +1,8 @@
 package com.company.sap.cpitransport.client;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -141,6 +143,10 @@ public class CpiApiClient {
 
     private JsonNode read(String environment, String path) {
         byte[] body = http.execute(environment, HttpMethod.GET, ROOT + path, null, true).getBody();
+        return data(body);
+    }
+
+    private JsonNode data(byte[] body) {
         try {
             JsonNode data = mapper.readTree(body).path("d");
             if (!data.isObject()) throw invalidResponse();
@@ -152,9 +158,83 @@ public class CpiApiClient {
     }
 
     private <T> List<T> list(String environment, String path, Function<JsonNode, T> convert) {
-        JsonNode results = read(environment, path).path("results");
-        if (!results.isArray()) throw invalidResponse();
-        return results.valueStream().map(convert).toList();
+        URI base = http.apiUrl(environment);
+        URI current = URI.create(base.toString() + ROOT + path);
+        List<T> values = new ArrayList<>();
+        for (int page = 1; page <= 50; page++) {
+            String requestPath = (current.getRawPath().isEmpty() ? "/" : current.getRawPath())
+                    + (current.getRawQuery() == null ? "" : "?" + current.getRawQuery());
+            JsonNode response = data(http.executePage(environment, requestPath).getBody());
+            JsonNode results = response.path("results");
+            if (!results.isArray()) throw invalidResponse();
+            results.valueStream().map(convert).forEach(values::add);
+            JsonNode next = response.path("__next");
+            if (next.isMissingNode() || next.isNull()) return List.copyOf(values);
+            if (!next.isString() || page == 50) throw invalidResponse();
+            current = nextPage(base, current, next.asString());
+        }
+        throw invalidResponse();
+    }
+
+    // AI-NOTE: Resolve against the current request, but validate against the selected tenant
+    // before sending any bearer token. Keep raw query bytes intact (REQ-304 AC-1 / REQ-305 AC-3).
+    static URI nextPage(URI base, URI current, String link) {
+        try {
+            URI reference = URI.create(link);
+            if (link.startsWith("//") || reference.getRawUserInfo() != null
+                    || reference.getRawFragment() != null || reference.isOpaque()) throw invalidResponse();
+            URI next = reference;
+            if (!reference.isAbsolute()) {
+                String path = reference.getRawPath();
+                String query = reference.getRawQuery();
+                if (path.isEmpty()) {
+                    path = current.getRawPath();
+                    if (query == null) query = current.getRawQuery();
+                } else if (!path.startsWith("/")) {
+                    String currentPath = current.getRawPath();
+                    path = currentPath.substring(0, currentPath.lastIndexOf('/') + 1) + path;
+                    if (!path.startsWith("/")) path = "/" + path;
+                }
+                next = URI.create(current.getScheme() + "://" + current.getRawAuthority()
+                        + path + (query == null ? "" : "?" + query));
+            }
+            if (base.getHost() == null || next.getHost() == null
+                    || !base.getScheme().equalsIgnoreCase(next.getScheme())
+                    || !base.getHost().equalsIgnoreCase(next.getHost())
+                    || port(base) != port(next) || next.getRawPath().startsWith("//")) throw invalidResponse();
+            String normalizedPath = removeDotSegments(next.getRawPath());
+            if (normalizedPath.startsWith("//")) throw invalidResponse();
+            return URI.create(next.getScheme() + "://" + next.getRawAuthority()
+                    + normalizedPath
+                    + (next.getRawQuery() == null ? "" : "?" + next.getRawQuery()));
+        } catch (RuntimeException failure) {
+            throw invalidResponse();
+        }
+    }
+
+    // RFC 3986 section 5.2.4 preserves empty path segments and clamps parent traversal at the root.
+    private static String removeDotSegments(String path) {
+        var output = new StringBuilder();
+        while (!path.isEmpty()) {
+            if (path.startsWith("../")) path = path.substring(3);
+            else if (path.startsWith("./")) path = path.substring(2);
+            else if (path.startsWith("/./") || path.equals("/.")) path = "/" + path.substring(Math.min(3, path.length()));
+            else if (path.startsWith("/../") || path.equals("/..")) {
+                path = "/" + path.substring(Math.min(4, path.length()));
+                output.setLength(Math.max(0, output.lastIndexOf("/")));
+            } else if (path.equals(".") || path.equals("..")) path = "";
+            else {
+                int end = path.indexOf('/', path.startsWith("/") ? 1 : 0);
+                if (end < 0) end = path.length();
+                output.append(path, 0, end);
+                path = path.substring(end);
+            }
+        }
+        return output.toString();
+    }
+
+    private static int port(URI uri) {
+        return uri.getPort() >= 0 ? uri.getPort() : ("https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80);
     }
 
     private CpiPackage packageValue(JsonNode node) {
@@ -166,7 +246,7 @@ public class CpiApiClient {
         return node.path(key).asString();
     }
 
-    private CpiCallException invalidResponse() {
+    private static CpiCallException invalidResponse() {
         return new CpiCallException(null, "Invalid CPI OData response");
     }
 

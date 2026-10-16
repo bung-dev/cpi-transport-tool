@@ -21,9 +21,13 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 @Component
 public class CpiHttpExecutor {
+    private static final JsonMapper ERROR_JSON = JsonMapper.builder()
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
     private final TenantRegistry tenants;
     private final OAuthTokenProvider tokens;
     private final CsrfTokenStore csrf;
@@ -71,8 +75,25 @@ public class CpiHttpExecutor {
         return send(environment, method, path, body, acceptJson, false);
     }
 
+    URI apiUrl(String environment) {
+        return URI.create(tenants.find(environment).orElseThrow(() -> new ApiException(Code.TENANT_NOT_FOUND))
+                .connection().apiUrl().replaceAll("/+$", ""));
+    }
+
+    ResponseEntity<byte[]> executePage(String environment, String path) {
+        if (!path.startsWith("/") || path.startsWith("//")) {
+            throw new IllegalArgumentException("CPI path must be relative to the configured API");
+        }
+        return send(environment, HttpMethod.GET, path, null, true, false, true);
+    }
+
     private ResponseEntity<byte[]> send(String environment, HttpMethod method, String path,
                                          byte[] body, boolean acceptJson, boolean fetch) {
+        return send(environment, method, path, body, acceptJson, fetch, false);
+    }
+
+    private ResponseEntity<byte[]> send(String environment, HttpMethod method, String path,
+                                         byte[] body, boolean acceptJson, boolean fetch, boolean originRelative) {
         boolean write = HttpMethod.POST.equals(method) || HttpMethod.PUT.equals(method);
         boolean refreshedAuth = false;
         boolean refreshedCsrf = false;
@@ -92,10 +113,15 @@ public class CpiHttpExecutor {
             ResponseEntity<byte[]> response;
             try {
                 String base = connection.apiUrl().replaceAll("/+$", "");
+                // AI-NOTE: A next-page root path may be outside apiUrl's path prefix (REQ-304 AC-1).
+                if (originRelative) {
+                    URI api = URI.create(base);
+                    base = api.getScheme() + "://" + api.getRawAuthority();
+                }
                 var request = client.method(method).uri(URI.create(base + path))
                         .headers(headers -> {
                             headers.setBearerAuth(bearer);
-                            if (acceptJson && !path.split("\\?", 2)[0].endsWith("/$value")) {
+                            if (acceptJson && (originRelative || !path.split("\\?", 2)[0].endsWith("/$value"))) {
                                 headers.setAccept(List.of(MediaType.APPLICATION_JSON));
                             }
                             if (fetch) headers.set("X-CSRF-Token", "Fetch");
@@ -136,7 +162,7 @@ public class CpiHttpExecutor {
                 delay = nextDelay(delay, transientFailures);
                 continue;
             }
-            throw new CpiCallException(status, summarize(response.getBody(), secrets));
+            throw new CpiCallException(status, summarize(response.getBody(), secrets, response.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE)));
         }
     }
 
@@ -218,8 +244,19 @@ public class CpiHttpExecutor {
         }
     }
 
-    private String summarize(byte[] body, List<String> secrets) {
+    private String summarize(byte[] body, List<String> secrets, String contentType) {
         String summary = body == null ? "" : new String(body, StandardCharsets.UTF_8);
+        if (!summary.isBlank()) {
+            try {
+                ERROR_JSON.readTree(summary);
+            } catch (RuntimeException failure) {
+                // AI-NOTE: Retain legacy untyped plain-text summaries, but never echo markup or
+                // a declared non-JSON response/parser diagnostic (REQ-304 AC-4; legacy REQ-002 AC-6).
+                if (contentType != null || summary.replace("\uFEFF", "").stripLeading().startsWith("<")) {
+                    return "Invalid CPI OData response";
+                }
+            }
+        }
         // AI-NOTE: Sanitize before truncation so a secret crossing character 200 cannot leak a prefix. (근거: REQ-002 AC-6, run 20260928-cpi-transport)
         summary = maskAuthentication(maskSecrets(summary, secrets)).replaceAll("[\\r\\n\\t]", " ");
         return summary.isBlank() ? "CPI request failed" : summary.substring(0, Math.min(200, summary.length()));
