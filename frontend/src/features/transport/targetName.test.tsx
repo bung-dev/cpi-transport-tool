@@ -45,16 +45,16 @@ it.each(['미선택', '목록에 없는 id'])('REQ-308 AC-5·AC-7: %s일 때 여
   checkDialog('PRD');
 });
 
-it('REQ-308 AC-5·AC-7: provider 없음이면 PRD 기본 설명과 드라이런을 유지하고 실제 이관은 비활성이다', async () => {
+it('REQ-308 AC-5·AC-7: provider 없음이면 PRD 기본 설명과 미리보기를 유지하고 실제 이관은 비활성이다', async () => {
   render(<RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />);
   expect(screen.getByText('PRD에 요청을 보내지 않고 변경 내용만 확인합니다')).toBeInTheDocument();
   const real = screen.getByRole('radio', { name: '실제 이관' });
   expect(real).toBeDisabled();
-  expect(screen.getByRole('radio', { name: '드라이런' })).toBeEnabled();
-  expect(screen.getByRole('radio', { name: '드라이런' })).toBeChecked();
+  expect(screen.getByRole('radio', { name: '미리보기' })).toBeEnabled();
+  expect(screen.getByRole('radio', { name: '미리보기' })).toBeChecked();
   await userEvent.click(real);
   expect(real).not.toBeChecked();
-  expect(screen.getByRole('radio', { name: '드라이런' })).toBeChecked();
+  expect(screen.getByRole('radio', { name: '미리보기' })).toBeChecked();
   expect(screen.queryByRole('dialog')).toBeNull();
 });
 
@@ -78,6 +78,6 @@ it('REQ-308 AC-5·AC-7: 대상 선택이 바뀌면 이미 열린 확인창도 �
 it('REQ-308 AC-5·AC-7: 선택한 대상 이름과 관계없이 이관 탭 머리 설명은 그대로다', async () => {
   mockApi({ 'GET /packages?tenantId=DEV': () => json(PACKAGES) });
   render(<TestTenantProvider value={named}><TransportTab /></TestTenantProvider>);
-  expect(screen.getByText('DEV 테넌트의 패키지를 PRD 테넌트로 이관합니다. 드라이런으로 변경 내용을 먼저 확인할 수 있습니다.')).toBeInTheDocument();
+  expect(screen.getByText('DEV 테넌트의 패키지를 PRD 테넌트로 이관합니다. 미리보기로 변경 내용을 먼저 확인할 수 있습니다.')).toBeInTheDocument();
   await screen.findByLabelText('패키지 검색');
 });

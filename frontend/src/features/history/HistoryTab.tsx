@@ -136,7 +136,7 @@ export function HistoryTab() {
                     <Td className="whitespace-nowrap font-mono text-[13px]">{h.packageId}</Td>
                     <Td className="whitespace-nowrap">{h.sourceTenant?.name ?? '-'}</Td>
                     <Td className="whitespace-nowrap">{h.targetTenant?.name ?? '-'}</Td>
-                    <Td className="whitespace-nowrap">{h.dryRun ? <Badge tone="neutral">드라이런</Badge> : <Badge tone="accent">실제 이관</Badge>}</Td>
+                    <Td className="whitespace-nowrap">{h.dryRun ? <Badge tone="neutral">미리보기</Badge> : <Badge tone="accent">실제 이관</Badge>}</Td>
                     <Td className="whitespace-nowrap">
                       <span className="inline-flex items-center gap-2">
                         {h.deploy ? <Badge tone="info">배포</Badge> : <span className="text-ink-tertiary">배포 안 함</span>}

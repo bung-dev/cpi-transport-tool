@@ -12,7 +12,7 @@ import { useReadOnlyState } from '../tenants/TenantContext';
 // REQ-105 AC-8, REQ-012 AC-1: 서버 값은 모두 JSX 텍스트 노드로만 렌더링한다.
 interface Props {
   result: TransportResponse;
-  /** 이관 탭이 넘긴다. 드라이런 결과의 머리에 "이 구성으로 실제 이관" 버튼을 보인다. 이력 상세는 넘기지 않는다(REQ-105 AC-6). */
+  /** 이관 탭이 넘긴다. 미리보기 결과의 머리에 "이 구성으로 실제 이관" 버튼을 보인다. 이력 상세는 넘기지 않는다(REQ-105 AC-6). */
   onOpenReal?: () => void;
 }
 
@@ -48,7 +48,7 @@ export function TransportResult({ result, onOpenReal }: Props) {
         <h3 id={titleId} className="mr-1 text-lg font-semibold">
           이관 결과
         </h3>
-        {result.dryRun ? <Badge tone="neutral">드라이런</Badge> : <Badge tone="accent">실제 이관</Badge>}
+        {result.dryRun ? <Badge tone="neutral">미리보기</Badge> : <Badge tone="accent">실제 이관</Badge>}
         {result.deploy && <Badge tone="info">배포</Badge>}
         {onOpenReal && result.dryRun && (
           <Button className="ml-auto" disabled={realDisabled} aria-describedby={notice ? noticeId : undefined} onClick={() => { if (!realDisabled) onOpenReal(); }}>

@@ -19,7 +19,7 @@ interface Props {
   packageName?: string | null;
   artifactIds: string[];
   onResult: (r: TransportResponse | null) => void;
-  /** 전송 직전에 요청 본문을 알린다("이 구성으로 실제 이관"이 드라이런 요청의 선택을 되살리는 데 쓴다). */
+  /** 전송 직전에 요청 본문을 알린다("이 구성으로 실제 이관"이 미리보기 요청의 선택을 되살리는 데 쓴다). */
   onRequest?: (body: TransportRequest) => void;
   /**
    * "이 구성으로 실제 이관"의 요청 번호. 값이 바뀌면 실행 모드를 실제 이관으로, 배포를 꺼짐으로 맞추고 확인 대화상자를 연다(REQ-105 AC-6, D-018 ①).
@@ -78,7 +78,7 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
   function changeMode(next: RunMode) {
     if (next === 'real' && realDisabled) return;
     setMode(next);
-    // 드라이런으로 바꾸면 배포 스위치가 사라지고 값은 꺼짐으로 돌아간다.
+    // 미리보기로 바꾸면 배포 스위치가 사라지고 값은 꺼짐으로 돌아간다.
     if (next === 'dryRun') setDeploy(false);
   }
 
@@ -87,7 +87,7 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
     inFlight.current = true;
     setBusy(true);
     setError(null);
-    // 선택 0개면 artifactIds 키 자체를 보내지 않는다(패키지 전체 대상). 드라이런 요청은 항상 deploy: false다(REQ-104 AC-5).
+    // 선택 0개면 artifactIds 키 자체를 보내지 않는다(패키지 전체 대상). 미리보기 요청은 항상 deploy: false다(REQ-104 AC-5).
     const body: TransportRequest = { packageId, dryRun, deploy: dryRun ? false : deploy, sourceTenantId, targetTenantId };
     if (artifactIds.length > 0) body.artifactIds = artifactIds;
     onRequest?.(body);
@@ -145,7 +145,7 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
       {selectionReason && <p className="text-sm text-ink-secondary">{selectionReason}</p>}
       {tooMany && <p className="text-sm text-danger-fg">한 번에 100개까지 선택할 수 있습니다</p>}
       <Button ref={runBtn} variant="primary" fullWidth loading={busy} onClick={onRunClick} disabled={!canRun}>
-        {dryRun ? '드라이런 실행' : `${targetName}로 이관`}
+        {dryRun ? '미리보기 실행' : `${targetName}로 이관`}
       </Button>
       {busy && !confirmOpen && (
         <p role="status" className="text-sm text-ink-secondary">

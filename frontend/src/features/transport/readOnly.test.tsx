@@ -22,7 +22,7 @@ const states: [string, Partial<TenantContextValue>, string | undefined][] = [
   ['모름', { readOnly: undefined }, undefined],
 ];
 
-it.each(states)('REQ-302 AC-5·AC-7: %s에서 두 실제 이관 컨트롤만 비활성, 설명 연결, 드라이런 실행 유지', async (_label, value, notice) => {
+it.each(states)('REQ-302 AC-5·AC-7: %s에서 두 실제 이관 컨트롤만 비활성, 설명 연결, 미리보기 실행 유지', async (_label, value, notice) => {
   const fn = mockApi({ 'POST /transport': () => json(RESULT) });
   const onResult = vi.fn(), onOpenReal = vi.fn();
   render(<TestTenantProvider value={value}><RunPanel packageId="P" artifactIds={[]} onResult={onResult} />
@@ -38,19 +38,19 @@ it.each(states)('REQ-302 AC-5·AC-7: %s에서 두 실제 이관 컨트롤만 비
   }
   await userEvent.click(real); await userEvent.click(fromResult);
   expect(onOpenReal).not.toHaveBeenCalled(); expect(screen.queryByRole('dialog')).toBeNull();
-  expect(screen.getByRole('radio', { name: '드라이런' })).toBeEnabled();
-  expect(screen.getByRole('radio', { name: '드라이런' })).toBeChecked();
-  await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+  expect(screen.getByRole('radio', { name: '미리보기' })).toBeEnabled();
+  expect(screen.getByRole('radio', { name: '미리보기' })).toBeChecked();
+  await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
   await waitFor(() => expect(onResult).toHaveBeenCalledWith(RESULT));
   expect(JSON.parse(fn.mock.calls[0][1]?.body as string)).toMatchObject({ dryRun: true, deploy: false });
   expect(fn.mock.calls.every(([url]) => url === '/transport')).toBe(true);
 });
-it('REQ-302 AC-5·AC-7: provider 없음의 단독 화면은 실제 이관 비활성이고 드라이런 모드를 쓸 수 있으며 테넌트 조회를 하지 않는다', async () => {
+it('REQ-302 AC-5·AC-7: provider 없음의 단독 화면은 실제 이관 비활성이고 미리보기 모드를 쓸 수 있으며 테넌트 조회를 하지 않는다', async () => {
   const fn = mockApi({}); const onChange = vi.fn(), onOpenReal = vi.fn();
   render(<><RunModeSelect mode="real" onChange={onChange} /><TransportResult result={RESULT} onOpenReal={onOpenReal} /></>);
   expect(screen.getByRole('radio', { name: '실제 이관' })).toBeDisabled();
   expect(screen.getByRole('button', { name: '이 구성으로 실제 이관' })).toBeDisabled();
-  const dryRun = screen.getByRole('radio', { name: '드라이런' });
+  const dryRun = screen.getByRole('radio', { name: '미리보기' });
   expect(dryRun).toBeEnabled(); expect(dryRun).toBeChecked();
   await userEvent.click(screen.getByRole('button', { name: '이 구성으로 실제 이관' }));
   expect(onOpenReal).not.toHaveBeenCalled(); expect(fn).not.toHaveBeenCalled();
@@ -60,7 +60,7 @@ it('REQ-302 AC-5·AC-7: provider 없는 RunPanel은 요청 번호로도 실제 �
   const { rerender } = render(<RunPanel packageId="P" artifactIds={[]} realRequest={0} onResult={() => {}} />);
   rerender(<RunPanel packageId="P" artifactIds={[]} realRequest={1} onResult={() => {}} />);
   expect(screen.getByRole('radio', { name: '실제 이관' })).toBeDisabled();
-  expect(screen.getByRole('radio', { name: '드라이런' })).toBeChecked();
+  expect(screen.getByRole('radio', { name: '미리보기' })).toBeChecked();
   expect(screen.queryByRole('dialog')).toBeNull(); expect(fn).not.toHaveBeenCalled();
 });
 it.each(states)('REQ-302 AC-5·AC-7: %s에서 실제 이관 요청 번호를 무시하며 나중에 허용돼도 되살리지 않는다', (_label, value) => {
@@ -68,10 +68,10 @@ it.each(states)('REQ-302 AC-5·AC-7: %s에서 실제 이관 요청 번호를 무
   const view = (n: number, current: Partial<TenantContextValue>) => <TestTenantProvider value={current}>
     <RunPanel packageId="P" artifactIds={[]} realRequest={n} onResult={() => {}} /></TestTenantProvider>;
   const { rerender } = render(view(0, value)); rerender(view(1, value));
-  expect(screen.getByRole('radio', { name: '드라이런' })).toBeChecked(); expect(screen.queryByRole('dialog')).toBeNull();
+  expect(screen.getByRole('radio', { name: '미리보기' })).toBeChecked(); expect(screen.queryByRole('dialog')).toBeNull();
   rerender(view(1, { readOnly: false }));
   expect(screen.getByRole('radio', { name: '실제 이관' })).toBeEnabled();
-  expect(screen.getByRole('radio', { name: '드라이런' })).toBeChecked(); expect(screen.queryByRole('dialog')).toBeNull();
+  expect(screen.getByRole('radio', { name: '미리보기' })).toBeChecked(); expect(screen.queryByRole('dialog')).toBeNull();
   expect(fn).not.toHaveBeenCalled();
 });
 it('REQ-302 AC-5·AC-7: false면 두 컨트롤 활성, 결과 버튼 클릭 가능, 실제 이관 대화상자 경로 유지', async () => {
@@ -85,7 +85,7 @@ it('REQ-302 AC-5·AC-7: false면 두 컨트롤 활성, 결과 버튼 클릭 가�
   await userEvent.click(screen.getByRole('button', { name: 'PRD로 이관' }));
   expect(screen.getByRole('dialog', { name: '실제 이관 확인' })).toBeInTheDocument(); expect(fn).not.toHaveBeenCalled();
 });
-it('REQ-302 AC-5·AC-7: 재확인 대기부터 열린 확인창과 배포 선택을 닫고 드라이런으로 유지한다', async () => {
+it('REQ-302 AC-5·AC-7: 재확인 대기부터 열린 확인창과 배포 선택을 닫고 미리보기로 유지한다', async () => {
   const fn = mockApi({ 'POST /transport': () => json(RESULT) }); const onResult = vi.fn();
   const view = (value: Partial<TenantContextValue>) => <TestTenantProvider value={value}>
     <RunPanel packageId="P" artifactIds={[]} onResult={onResult} /></TestTenantProvider>;
@@ -96,9 +96,9 @@ it('REQ-302 AC-5·AC-7: 재확인 대기부터 열린 확인창과 배포 선택
   expect(screen.getByRole('dialog')).toBeInTheDocument();
   rerender(view({ readOnly: undefined, status: { state: 'loading' } }));
   expect(screen.queryByRole('dialog')).toBeNull(); expect(screen.queryByRole('switch', { name: '배포' })).toBeNull();
-  expect(screen.getByRole('radio', { name: '드라이런' })).toBeChecked();
-  rerender(view({ readOnly: false })); expect(screen.getByRole('radio', { name: '드라이런' })).toBeChecked();
-  await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+  expect(screen.getByRole('radio', { name: '미리보기' })).toBeChecked();
+  rerender(view({ readOnly: false })); expect(screen.getByRole('radio', { name: '미리보기' })).toBeChecked();
+  await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
   await waitFor(() => expect(onResult).toHaveBeenCalledWith(RESULT));
   expect(JSON.parse(fn.mock.calls[0][1]?.body as string)).toMatchObject({ dryRun: true, deploy: false });
 });

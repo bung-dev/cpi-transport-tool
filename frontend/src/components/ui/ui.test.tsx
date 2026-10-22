@@ -109,9 +109,9 @@ describe('Button', () => {
 
 describe('Checkbox, Radio, Switch', () => {
   it('REQ-009 AC-1: 체크박스는 label과 연결된다', async () => {
-    render(<Checkbox label="드라이런" />);
-    await userEvent.click(screen.getByLabelText('드라이런'));
-    expect(screen.getByLabelText('드라이런')).toBeChecked();
+    render(<Checkbox label="미리보기" />);
+    await userEvent.click(screen.getByLabelText('미리보기'));
+    expect(screen.getByLabelText('미리보기')).toBeChecked();
   });
 
   it('REQ-103 AC-2: Checkbox는 네이티브 checkbox, 16px·control-border 테두리·선택 시 primary 채움, Space로 조작된다', async () => {
@@ -132,11 +132,11 @@ describe('Checkbox, Radio, Switch', () => {
   it('REQ-103 AC-2: Radio는 네이티브 radio, 16px·control-border 테두리·선택 시 primary 채움과 on-primary 점, 같은 name은 한 그룹', async () => {
     render(
       <>
-        <Radio name="mode" label="드라이런" defaultChecked />
+        <Radio name="mode" label="미리보기" defaultChecked />
         <Radio name="mode" label="실제 이관" />
       </>,
     );
-    const a = screen.getByRole('radio', { name: '드라이런' });
+    const a = screen.getByRole('radio', { name: '미리보기' });
     const b = screen.getByRole('radio', { name: '실제 이관' });
     expect(a).toHaveAttribute('type', 'radio');
     expect(a.className).toContain('rounded-full');

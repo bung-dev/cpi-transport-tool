@@ -26,7 +26,7 @@ function setup(artifactIds: string[] = [], packageId: string | null = 'PkgA', pa
   return { fn, onResult };
 }
 
-const dryRunBtn = () => screen.getByRole('button', { name: '드라이런 실행' });
+const dryRunBtn = () => screen.getByRole('button', { name: '미리보기 실행' });
 const realBtn = () => screen.getByRole('button', { name: 'PRD로 이관' });
 const chooseReal = () => userEvent.click(screen.getByRole('radio', { name: '실제 이관' }));
 
@@ -62,17 +62,17 @@ describe('실행 옵션과 요청 본문', () => {
     expect(dryRunBtn()).toBeDisabled();
   });
 
-  it('REQ-005 AC-2: 기본은 드라이런(배포 스위치 없음)이고 실제 이관을 고르면 배포 스위치(기본 꺼짐)가 나온다. 드라이런 요청은 deploy: false다', async () => {
+  it('REQ-005 AC-2: 기본은 미리보기(배포 스위치 없음)이고 실제 이관을 고르면 배포 스위치(기본 꺼짐)가 나온다. 미리보기 요청은 deploy: false다', async () => {
     const { fn, onResult } = setup();
-    expect(screen.getByRole('radio', { name: '드라이런' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: '미리보기' })).toBeChecked();
     expect(screen.queryByRole('switch', { name: '배포' })).toBeNull();
     expect(screen.queryByText(/SKIPPED_DRY_RUN/)).toBeNull();
     await chooseReal();
     expect(screen.getByRole('switch', { name: '배포' })).not.toBeChecked();
     await userEvent.click(screen.getByRole('switch', { name: '배포' }));
     expect(screen.getByRole('switch', { name: '배포' })).toBeChecked();
-    // 배포를 켠 채 드라이런으로 돌아가도 요청은 deploy: false이고 옛 SKIPPED_DRY_RUN 안내는 없다
-    await userEvent.click(screen.getByRole('radio', { name: '드라이런' }));
+    // 배포를 켠 채 미리보기로 돌아가도 요청은 deploy: false이고 옛 SKIPPED_DRY_RUN 안내는 없다
+    await userEvent.click(screen.getByRole('radio', { name: '미리보기' }));
     expect(screen.queryByRole('switch', { name: '배포' })).toBeNull();
     expect(screen.queryByText(/SKIPPED_DRY_RUN/)).toBeNull();
     await userEvent.click(dryRunBtn());
@@ -102,14 +102,14 @@ describe('실행 카드 (REQ-104 AC-5)', () => {
     expect(defs[1]).toHaveTextContent('—');
   });
 
-  it('REQ-104 AC-5: 실행 모드는 이름이 "실행 모드"인 라디오 그룹이고 드라이런이 기본이며 설명이 붙는다', () => {
+  it('REQ-104 AC-5: 실행 모드는 이름이 "실행 모드"인 라디오 그룹이고 미리보기가 기본이며 설명이 붙는다', () => {
     setup();
     const group = screen.getByRole('radiogroup', { name: '실행 모드' });
     const radios = within(group).getAllByRole('radio');
     expect(radios.map((r) => r.getAttribute('value'))).toEqual(['dryRun', 'real']);
     expect(radios.every((r) => r.getAttribute('name') === 'runMode')).toBe(true);
-    expect(screen.getByRole('radio', { name: '드라이런' })).toBeChecked();
-    expect(screen.getByRole('radio', { name: '드라이런' })).toHaveAccessibleDescription(
+    expect(screen.getByRole('radio', { name: '미리보기' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: '미리보기' })).toHaveAccessibleDescription(
       'PRD에 요청을 보내지 않고 변경 내용만 확인합니다',
     );
     expect(screen.getByRole('radio', { name: '실제 이관' })).toHaveAccessibleDescription('PRD에 업로드합니다');
@@ -118,17 +118,17 @@ describe('실행 카드 (REQ-104 AC-5)', () => {
   it('REQ-104 AC-5: 선택지는 상자 전체가 클릭 영역이고 선택된 쪽은 primary 테두리·primary-soft 배경이다', async () => {
     setup();
     const boxOf = (name: string) => screen.getByRole('radio', { name }).closest('label') as HTMLElement;
-    expect(boxOf('드라이런').className).toContain('border-primary');
-    expect(boxOf('드라이런').className).toContain('bg-primary-soft');
+    expect(boxOf('미리보기').className).toContain('border-primary');
+    expect(boxOf('미리보기').className).toContain('bg-primary-soft');
     expect(boxOf('실제 이관').className).toContain('border-hairline-strong');
     expect(boxOf('실제 이관').className).not.toContain('bg-primary-soft');
     await userEvent.click(screen.getByText('PRD에 업로드합니다'));
     expect(screen.getByRole('radio', { name: '실제 이관' })).toBeChecked();
     expect(boxOf('실제 이관').className).toContain('border-primary');
-    expect(boxOf('드라이런').className).toContain('border-hairline-strong');
+    expect(boxOf('미리보기').className).toContain('border-hairline-strong');
   });
 
-  it('REQ-104 AC-5: 배포 스위치는 실제 이관일 때만 보이고(설명 포함) 드라이런으로 바꾸면 사라지며 값은 꺼짐으로 돌아간다', async () => {
+  it('REQ-104 AC-5: 배포 스위치는 실제 이관일 때만 보이고(설명 포함) 미리보기로 바꾸면 사라지며 값은 꺼짐으로 돌아간다', async () => {
     setup();
     expect(screen.queryByRole('switch')).toBeNull();
     await chooseReal();
@@ -137,23 +137,23 @@ describe('실행 카드 (REQ-104 AC-5)', () => {
     expect(sw).not.toBeChecked();
     await userEvent.click(sw);
     expect(sw).toBeChecked();
-    await userEvent.click(screen.getByRole('radio', { name: '드라이런' }));
+    await userEvent.click(screen.getByRole('radio', { name: '미리보기' }));
     expect(screen.queryByRole('switch')).toBeNull();
     await chooseReal();
     expect(screen.getByRole('switch', { name: '배포' })).not.toBeChecked();
   });
 
-  it('REQ-104 AC-5: 실행 버튼 글자는 드라이런 "드라이런 실행", 실제 이관 "PRD로 이관"이고 전체 폭 primary다', async () => {
+  it('REQ-104 AC-5: 실행 버튼 글자는 미리보기 "미리보기 실행", 실제 이관 "PRD로 이관"이고 전체 폭 primary다', async () => {
     setup();
     expect(dryRunBtn().className).toContain('w-full');
     expect(dryRunBtn().className).toContain('bg-primary');
     expect(screen.queryByRole('button', { name: 'PRD로 이관' })).toBeNull();
     await chooseReal();
     expect(realBtn()).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '드라이런 실행' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '미리보기 실행' })).toBeNull();
   });
 
-  it('REQ-104 AC-5: 안내 영역 — 실제 이관이면 warning Callout, 101개 이상이면 danger-fg 글자, 드라이런에는 옛 안내가 없다', async () => {
+  it('REQ-104 AC-5: 안내 영역 — 실제 이관이면 warning Callout, 101개 이상이면 danger-fg 글자, 미리보기에는 옛 안내가 없다', async () => {
     render(<RunPanel packageId="P" artifactIds={ids(101)} onResult={() => {}} />, { wrapper: TestTenantProvider });
     expect(screen.queryByText('실제 이관입니다. PRD에 업로드합니다.')).toBeNull();
     const over = screen.getByText('한 번에 100개까지 선택할 수 있습니다');
@@ -161,7 +161,7 @@ describe('실행 카드 (REQ-104 AC-5)', () => {
     await userEvent.click(screen.getByRole('radio', { name: '실제 이관' }));
     const callout = screen.getByText('실제 이관입니다. PRD에 업로드합니다.').closest('div[class*="bg-warning-bg"]');
     expect(callout).not.toBeNull();
-    expect(screen.queryByText(/SKIPPED_DRY_RUN|드라이런에서는 배포하지 않습니다/)).toBeNull();
+    expect(screen.queryByText(/SKIPPED_DRY_RUN|미리보기에서는 배포하지 않습니다/)).toBeNull();
   });
 
   it('REQ-104 AC-5: 카드 구성 순서는 요약 → 실행 모드 → 배포 → 안내 → 실행 버튼이다', async () => {
@@ -186,7 +186,7 @@ describe('실행 카드 (REQ-104 AC-5)', () => {
 
   it('REQ-101 AC-6: 실행 모드 선택지 상자의 테두리·배경 변화에 150ms 전환이 있다', () => {
     setup();
-    for (const name of ['드라이런', '실제 이관']) {
+    for (const name of ['미리보기', '실제 이관']) {
       const box = screen.getByRole('radio', { name }).closest('label') as HTMLElement;
       expect(box.className).toContain('transition-colors');
       expect(box.className).toContain('duration-150');
@@ -197,7 +197,7 @@ describe('실행 카드 (REQ-104 AC-5)', () => {
     setup();
     await chooseReal();
     for (const el of [
-      screen.getByRole('radio', { name: '드라이런' }),
+      screen.getByRole('radio', { name: '미리보기' }),
       screen.getByRole('radio', { name: '실제 이관' }),
       screen.getByRole('switch', { name: '배포' }),
       realBtn(),
@@ -257,7 +257,7 @@ describe('확인 대화상자', () => {
     expect(onResult).toHaveBeenCalledWith(RESULT);
   });
 
-  it('REQ-005 AC-3: 드라이런이면 대화상자 없이 바로 전송한다', async () => {
+  it('REQ-005 AC-3: 미리보기면 대화상자 없이 바로 전송한다', async () => {
     const { fn, onResult } = setup(['IF_A']);
     await userEvent.click(dryRunBtn());
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -333,7 +333,7 @@ describe('요청 중 상태', () => {
     expect(postCount(fn)).toBe(1);
   });
 
-  it('REQ-104 AC-6: 드라이런은 실행 버튼을 누르면 바로 요청하고, 요청 중 실행 버튼은 loading(스피너·aria-busy·비활성)이다', async () => {
+  it('REQ-104 AC-6: 미리보기는 실행 버튼을 누르면 바로 요청하고, 요청 중 실행 버튼은 loading(스피너·aria-busy·비활성)이다', async () => {
     let release: (r: Response) => void = () => {};
     const fn = mockApi({ 'POST /transport': () => new Promise<Response>((r) => (release = r)) });
     render(<RunPanel packageId="P" artifactIds={['IF_A']} onResult={() => {}} />, { wrapper: TestTenantProvider });
@@ -367,7 +367,7 @@ describe('요청 중 상태', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('REQ-104 AC-6: 대화상자가 없을 때(드라이런) 상태 표시는 실행 카드에 한 곳만 나온다', async () => {
+  it('REQ-104 AC-6: 대화상자가 없을 때(미리보기) 상태 표시는 실행 카드에 한 곳만 나온다', async () => {
     mockApi({ 'POST /transport': () => new Promise<Response>(() => {}) });
     render(<RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />, { wrapper: TestTenantProvider });
     await userEvent.click(dryRunBtn());

@@ -49,7 +49,7 @@ describe('이력 탭', () => {
     expect(within(rows[1]).getByRole('button', { name: 't-old' })).toBeInTheDocument();
   });
 
-  it('REQ-106 AC-1: 모드는 neutral "드라이런"/accent "실제 이관" 배지, 배포는 info "배포" 배지 또는 ink-tertiary "배포 안 함"', async () => {
+  it('REQ-106 AC-1: 모드는 neutral "미리보기"/accent "실제 이관" 배지, 배포는 info "배포" 배지 또는 ink-tertiary "배포 안 함"', async () => {
     mockApi({
       'GET /transport/history': () => json([entry('t-real', { dryRun: false, deploy: true }), entry('t-dry', { dryRun: true, deploy: false })]),
     });
@@ -59,7 +59,7 @@ describe('이력 탭', () => {
     expect(real.getByText('실제 이관').className).toContain('bg-accent-bg');
     expect(real.getByText('배포').className).toContain('bg-info-bg');
     expect(real.queryByText('배포 안 함')).toBeNull();
-    expect(dry.getByText('드라이런').className).toContain('bg-neutral-bg');
+    expect(dry.getByText('미리보기').className).toContain('bg-neutral-bg');
     expect(dry.getByText('배포 안 함').className).toContain('text-ink-tertiary');
     expect(dry.queryByText('배포', { selector: 'span.rounded-full' })).toBeNull();
   });

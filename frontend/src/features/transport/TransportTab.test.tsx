@@ -30,7 +30,7 @@ describe('이관 탭 통합', () => {
     render(<TransportTab />, { wrapper: TestTenantProvider });
     await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
     await userEvent.click(await screen.findByRole('checkbox', { name: /IF_Customer_Push/ }));
-    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     expect(await screen.findByRole('heading', { name: '이관 결과' })).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: '이관 결과' })).getByText('이관 ID').nextElementSibling).toHaveTextContent('t-9');
     const post = fn.mock.calls.find((c) => c[1]?.method === 'POST');
@@ -61,7 +61,7 @@ describe('이관 탭 통합', () => {
     render(<TransportTab />, { wrapper: TestTenantProvider });
     await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
     await screen.findByRole('checkbox', { name: /IF_Order_Sync/ });
-    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     const resultHeading = await screen.findByRole('heading', { name: '이관 결과' });
     const order = ['패키지', '아티팩트', '실행'].map((name) => screen.getByRole('heading', { name }));
     order.push(resultHeading);
@@ -96,7 +96,7 @@ describe('이관 탭 통합', () => {
 
 });
 
-// REQ-105 AC-6·AC-7: 드라이런 결과 → "이 구성으로 실제 이관", 결과 스크롤
+// REQ-105 AC-6·AC-7: 미리보기 결과 → "이 구성으로 실제 이관", 결과 스크롤
 const RESULT_BASE = {
   packageId: 'PkgTransportDemo',
   deploy: false,
@@ -128,14 +128,14 @@ async function pickDemo(ids: string[] = []) {
 }
 const openRealBtn = () => screen.getByRole('button', { name: '이 구성으로 실제 이관' });
 
-describe('드라이런 결과에서 실제 이관 열기', () => {
+describe('미리보기 결과에서 실제 이관 열기', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('REQ-105 AC-6: "이 구성으로 실제 이관" 버튼은 드라이런 결과에만 있고 실제 이관 결과에는 없다', async () => {
+  it('REQ-105 AC-6: "이 구성으로 실제 이관" 버튼은 미리보기 결과에만 있고 실제 이관 결과에는 없다', async () => {
     setupFlow();
     await pickDemo();
     expect(screen.queryByRole('button', { name: '이 구성으로 실제 이관' })).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('heading', { name: '이관 결과' });
     expect(openRealBtn()).toBeInTheDocument();
     expect(openRealBtn().className).toContain('bg-canvas');
@@ -146,12 +146,12 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     expect(screen.queryByRole('button', { name: '이 구성으로 실제 이관' })).toBeNull();
   });
 
-  it('REQ-105 AC-6: 누르면 실행 모드가 실제 이관, 배포 스위치가 꺼짐이 되고 아티팩트 선택이 드라이런 요청의 선택으로 맞춰지며 대화상자가 그 내용으로 열린다', async () => {
+  it('REQ-105 AC-6: 누르면 실행 모드가 실제 이관, 배포 스위치가 꺼짐이 되고 아티팩트 선택이 미리보기 요청의 선택으로 맞춰지며 대화상자가 그 내용으로 열린다', async () => {
     const fn = setupFlow();
     await pickDemo(['IF_Customer_Push']);
-    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('heading', { name: '이관 결과' });
-    // 결과를 본 뒤 선택을 바꾸고 배포를 켜 둔 상태에서 눌러도 드라이런 요청의 선택·배포 꺼짐으로 맞춰진다
+    // 결과를 본 뒤 선택을 바꾸고 배포를 켜 둔 상태에서 눌러도 미리보기 요청의 선택·배포 꺼짐으로 맞춰진다
     await userEvent.click(screen.getByRole('checkbox', { name: /IF_Order_Sync/ }));
     await userEvent.click(screen.getByRole('radio', { name: '실제 이관' }));
     await userEvent.click(screen.getByRole('switch', { name: '배포' }));
@@ -171,7 +171,7 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
   it('REQ-105 AC-6 / REQ-109 AC-2: "실행"을 누르면 같은 packageId와 artifactIds, dryRun: false, deploy: false로 요청한다', async () => {
     const fn = setupFlow();
     await pickDemo(['IF_Customer_Push']);
-    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('heading', { name: '이관 결과' });
     await userEvent.click(openRealBtn());
     await userEvent.click(screen.getByRole('button', { name: '실행' }));
@@ -181,10 +181,10 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('REQ-105 AC-6: 드라이런 요청에 선택을 보내지 않았으면 0개 선택으로 맞춰지고 요청에도 artifactIds가 없다', async () => {
+  it('REQ-105 AC-6: 미리보기 요청에 선택을 보내지 않았으면 0개 선택으로 맞춰지고 요청에도 artifactIds가 없다', async () => {
     const fn = setupFlow();
     await pickDemo();
-    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('heading', { name: '이관 결과' });
     await userEvent.click(screen.getByRole('checkbox', { name: /IF_Order_Sync/ }));
     await userEvent.click(openRealBtn());
@@ -198,7 +198,7 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
   it('REQ-105 AC-6: "취소"하면 요청을 보내지 않고 실행 모드는 실제 이관으로 남으며, 이후 배포를 켜고 "PRD로 이관"을 누르면 그때의 스위치 값으로 간다', async () => {
     const fn = setupFlow();
     await pickDemo(['IF_Order_Sync']);
-    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('heading', { name: '이관 결과' });
     await userEvent.click(openRealBtn());
     await userEvent.click(screen.getByRole('button', { name: '취소' }));
@@ -213,10 +213,10 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     expect(posts(fn)[1]).toMatchObject({ dryRun: false, deploy: true });
   });
 
-  it('REQ-105 AC-6: 드라이런 결과 뒤에 패키지를 바꾸면 결과와 함께 버튼도 사라진다', async () => {
+  it('REQ-105 AC-6: 미리보기 결과 뒤에 패키지를 바꾸면 결과와 함께 버튼도 사라진다', async () => {
     setupFlow();
     await pickDemo();
-    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('heading', { name: '이관 결과' });
     await userEvent.click(screen.getByRole('radio', { name: /Fault Demo/ }));
     expect(screen.queryByRole('heading', { name: '이관 결과' })).toBeNull();
@@ -228,7 +228,7 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     setupFlow();
     await pickDemo();
     // 클릭은 포커스를 대상으로 옮기므로, 키보드(Enter)로 실행해 "코드가 포커스를 옮기지 않음"만 따로 확인한다.
-    const run = screen.getByRole('button', { name: '드라이런 실행' });
+    const run = screen.getByRole('button', { name: '미리보기 실행' });
     run.focus();
     const focusedBefore = document.activeElement;
     expect(focusedBefore).toBe(run);
@@ -252,7 +252,7 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     const spy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
     setupFlow();
     await pickDemo();
-    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('heading', { name: '이관 결과' });
     expect(spy).toHaveBeenCalledWith({ behavior: 'auto', block: 'start' });
   });
@@ -261,7 +261,7 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     const spy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
     setupFlow();
     await pickDemo();
-    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('heading', { name: '이관 결과' });
     spy.mockClear();
     await userEvent.click(screen.getByRole('radio', { name: /Fault Demo/ }));
@@ -297,7 +297,7 @@ describe('드라이런 결과에서 실제 이관 열기', () => {
     });
     setupFlow();
     await pickDemo(['IF_Customer_Push']);
-    await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('heading', { name: '이관 결과' });
     await userEvent.click(openRealBtn());
     focusCalls.length = 0;
