@@ -11,6 +11,9 @@ export interface TenantContextValue {
   targetTenantId: string | null;
   setSourceTenantId: (id: string | null) => void;
   setTargetTenantId: (id: string | null) => void;
+  /** 원본 라디오를 사용자가 바꿨을 때만 부른다. 재마운트된 TenantSelect가 take로 한 번 받아 그 라디오로 포커스를 돌린다(REQ-310). */
+  requestSourceFocus: (id: string) => void;
+  takeSourceFocusRequest: () => string | null;
   reload: () => Promise<void>;
   refreshStatus: () => Promise<void>;
   openTenantsTab: () => void;
@@ -19,6 +22,7 @@ const noop = () => {};
 export const DEFAULT_TENANT_CONTEXT: TenantContextValue = {
   tenants: { state: 'loading' }, status: { state: 'loading' }, readOnly: undefined,
   sourceTenantId: null, targetTenantId: null, setSourceTenantId: noop, setTargetTenantId: noop,
+  requestSourceFocus: noop, takeSourceFocusRequest: () => null,
   reload: async () => {}, refreshStatus: async () => {}, openTenantsTab: noop,
 };
 export const TenantContext = createContext<TenantContextValue>(DEFAULT_TENANT_CONTEXT);
@@ -36,6 +40,10 @@ export function TenantProvider({ children, openTenantsTab }: { children: ReactNo
   const [status, setStatus] = useState<LoadState<TenantStatusResponse>>({ state: 'loading' });
   const [sourceTenantId, setSourceTenantId] = useState<string | null>(null);
   const [targetTenantId, setTargetTenantId] = useState<string | null>(null);
+  // AI-NOTE: 원본이 바뀌면 TransportTab이 폼 전체를 다시 마운트(key)해 포커스가 있던 라디오가 사라진다. 포커스 요청은 재마운트에서 살아남는 Provider의 ref에 두고 새 TenantSelect가 한 번만 소비한다. 초기 로드·reload로 원본이 정해질 때는 요청하지 않아 포커스를 훔치지 않는다 (근거: REQ-310, REQ-308 AC-5)
+  const sourceFocus = useRef<string | null>(null);
+  const requestSourceFocus = useCallback((id: string) => { sourceFocus.current = id; }, []);
+  const takeSourceFocusRequest = useCallback(() => { const id = sourceFocus.current; sourceFocus.current = null; return id; }, []);
   const initialized = useRef(false);
   const started = useRef(false);
   const listVersion = useRef(0);
@@ -82,5 +90,5 @@ export function TenantProvider({ children, openTenantsTab }: { children: ReactNo
   }, [loadStatus]);
   useEffect(() => { if (!started.current) { started.current = true; void reload(); } }, [reload]);
   return <TenantContext.Provider value={{ tenants, status, readOnly: status.state === 'success' ? status.data.readOnly : undefined,
-    sourceTenantId, targetTenantId, setSourceTenantId, setTargetTenantId, reload, refreshStatus, openTenantsTab }}>{children}</TenantContext.Provider>;
+    sourceTenantId, targetTenantId, setSourceTenantId, setTargetTenantId, requestSourceFocus, takeSourceFocusRequest, reload, refreshStatus, openTenantsTab }}>{children}</TenantContext.Provider>;
 }

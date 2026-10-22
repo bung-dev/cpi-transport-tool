@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -9,7 +9,17 @@ import { useTenants } from '../tenants/TenantContext';
 
 export function TenantSelect() {
   const base = useId();
-  const { tenants, sourceTenantId, targetTenantId, setSourceTenantId, setTargetTenantId, reload, openTenantsTab } = useTenants();
+  const { tenants, sourceTenantId, targetTenantId, setSourceTenantId, setTargetTenantId, requestSourceFocus, takeSourceFocusRequest, reload, openTenantsTab } = useTenants();
+  const sourceRef = useRef<HTMLFieldSetElement>(null);
+  // 방향키로 원본을 바꾸면 폼이 다시 마운트되므로(TransportTab key) 마운트 직후 새로 선택된 원본 라디오로 포커스를 돌려준다(REQ-310 AC-1).
+  useEffect(() => {
+    if (tenants.state !== 'success') return;
+    const id = takeSourceFocusRequest();
+    if (id === null) return;
+    const radios = Array.from(sourceRef.current?.querySelectorAll<HTMLInputElement>('input[type="radio"]') ?? []);
+    radios.find(r => r.value === id)?.focus();
+  }, [tenants.state, takeSourceFocusRequest]);
+  const selectSource = (id: string) => { requestSourceFocus(id); setSourceTenantId(id); };
   return (
     <Card title="테넌트">
       {tenants.state === 'loading' && <ListSkeleton />}
@@ -22,10 +32,10 @@ export function TenantSelect() {
       ) : (
         <div className="flex min-w-0 flex-col gap-4">
           {[
-            { key: 'source', title: '원본 테넌트', value: sourceTenantId, select: setSourceTenantId },
+            { key: 'source', title: '원본 테넌트', value: sourceTenantId, select: selectSource },
             { key: 'target', title: '대상 테넌트', value: targetTenantId, select: setTargetTenantId },
           ].map(group => (
-            <fieldset key={group.key} role="radiogroup" className="min-w-0">
+            <fieldset key={group.key} role="radiogroup" className="min-w-0" ref={group.key === 'source' ? sourceRef : undefined}>
               <legend className="mb-1.5 text-xs font-medium text-ink-tertiary">{group.title}</legend>
               <div className="flex min-w-0 flex-col gap-1">
                 {tenants.data.tenants.map((tenant, i) => {
