@@ -67,7 +67,7 @@ async function openResultState() {
   setupApp();
   await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
   await userEvent.click(await screen.findByRole('checkbox', { name: /IF_Order_Sync/ }));
-  await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+  await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
   await screen.findByRole('heading', { name: '이관 결과' });
 }
 
@@ -107,7 +107,7 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
   it('REQ-108 AC-2: Enter/Space(라디오 그룹은 화살표 키)로 조작된다', async () => {
     await openResultState();
     // 라디오 그룹: 화살표 키
-    screen.getByRole('radio', { name: '드라이런' }).focus();
+    screen.getByRole('radio', { name: '미리보기' }).focus();
     await userEvent.keyboard('{ArrowDown}');
     expect(screen.getByRole('radio', { name: '실제 이관' })).toBeChecked();
     // 스위치와 체크박스: Space

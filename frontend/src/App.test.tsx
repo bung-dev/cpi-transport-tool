@@ -117,7 +117,7 @@ describe('App', () => {
     expect(within(panel).getAllByRole('heading')[0]).toHaveTextContent('패키지 이관');
     expect(within(panel).getByRole('heading', { level: 2, name: '패키지 이관' })).toBeInTheDocument();
     expect(
-      within(panel).getByText('DEV 테넌트의 패키지를 PRD 테넌트로 이관합니다. 드라이런으로 변경 내용을 먼저 확인할 수 있습니다.'),
+      within(panel).getByText('DEV 테넌트의 패키지를 PRD 테넌트로 이관합니다. 미리보기로 변경 내용을 먼저 확인할 수 있습니다.'),
     ).toBeInTheDocument();
     expect(within(panel).getByRole('heading', { level: 3, name: '패키지' })).toBeInTheDocument();
     expect(within(panel).getByRole('heading', { level: 3, name: '실행' })).toBeInTheDocument();

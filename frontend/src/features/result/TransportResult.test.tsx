@@ -59,7 +59,7 @@ function expectOnlyComponentIcons(container: HTMLElement, expectedIcons: number)
 afterEach(() => vi.unstubAllGlobals());
 
 describe('이관 결과', () => {
-  it('REQ-006 AC-1: 머리 정보(transportId, packageId, 드라이런/배포 예·아니오, 시각, 요약)', () => {
+  it('REQ-006 AC-1: 머리 정보(transportId, packageId, 미리보기/배포 예·아니오, 시각, 요약)', () => {
     render(<TransportResult result={BASE} />);
     expect(screen.getByRole('heading', { name: '이관 결과' })).toBeInTheDocument();
     const region = screen.getByRole('region');
@@ -67,7 +67,7 @@ describe('이관 결과', () => {
     const valueOf = (label: string) => within(region).getByText(label).nextElementSibling;
     expect(valueOf('이관 ID')).toHaveTextContent('t-1');
     expect(valueOf('패키지 ID')).toHaveTextContent('PkgTransportDemo');
-    expect(within(region).getByText('드라이런')).toBeInTheDocument();
+    expect(within(region).getByText('미리보기')).toBeInTheDocument();
     expect(within(region).queryByText('실제 이관')).toBeNull();
     expect(within(region).queryByText('배포', { selector: 'span.rounded-full' })).toBeNull();
     expect(valueOf('시작')).toHaveTextContent(formatTime(BASE.startedAt));
@@ -132,12 +132,12 @@ describe('이관 결과', () => {
     expectOnlyComponentIcons(container, 2);
   });
 
-  it('REQ-105 AC-1: 모드 배지 — dryRun이면 neutral "드라이런", 실제 이관이면 accent "실제 이관", deploy가 true일 때만 info "배포" 배지를 더 보인다', () => {
+  it('REQ-105 AC-1: 모드 배지 — dryRun이면 neutral "미리보기", 실제 이관이면 accent "실제 이관", deploy가 true일 때만 info "배포" 배지를 더 보인다', () => {
     const badges = (c: HTMLElement) => Array.from(c.querySelectorAll('section > div:first-child > span')).map((e) => [e.textContent, e.className]);
     const { container, rerender } = render(<TransportResult result={BASE} />);
     let b = badges(container);
     expect(b).toHaveLength(1);
-    expect(b[0][0]).toBe('드라이런');
+    expect(b[0][0]).toBe('미리보기');
     expect(b[0][1]).toContain('bg-neutral-bg');
     rerender(<TransportResult result={{ ...BASE, dryRun: false, deploy: false }} />);
     b = badges(container);
@@ -466,7 +466,7 @@ describe('이관 결과', () => {
     expect(screen.getByRole('button', { name: 'D_Planned' })).toBeInTheDocument();
   });
 
-  it('REQ-105 AC-6: 이력 상세의 결과에는 드라이런 결과여도 "이 구성으로 실제 이관" 버튼이 없다', async () => {
+  it('REQ-105 AC-6: 이력 상세의 결과에는 미리보기 결과여도 "이 구성으로 실제 이관" 버튼이 없다', async () => {
     mockApi({ 'GET /transport/history': () => json([{ ...BASE, transportId: 't-1', dryRun: true }, { ...BASE, transportId: 't-2', dryRun: false }]) });
     render(<HistoryTab />);
     await userEvent.click(await screen.findByRole('button', { name: 't-1' }));
@@ -487,7 +487,7 @@ describe('이관 결과', () => {
     spy.mockRestore();
   });
 
-  it('REQ-105 AC-6: onOpenReal을 넘기지 않으면 드라이런 결과여도 버튼이 없고, 넘기면 드라이런 결과에만 버튼이 있다', async () => {
+  it('REQ-105 AC-6: onOpenReal을 넘기지 않으면 미리보기 결과여도 버튼이 없고, 넘기면 미리보기 결과에만 버튼이 있다', async () => {
     const onOpenReal = vi.fn();
     const { rerender } = render(<TransportResult result={BASE} />, { wrapper: TestTenantProvider });
     expect(screen.queryByRole('button', { name: '이 구성으로 실제 이관' })).toBeNull();

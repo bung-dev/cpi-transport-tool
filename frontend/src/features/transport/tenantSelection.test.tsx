@@ -72,19 +72,19 @@ it('REQ-308 AC-5·AC-7: 원본 변경은 패키지 아티팩트 결과 마지막
   const fn = setup();
   await pickPackage();
   await userEvent.click(screen.getByRole('checkbox', { name: /IF_Order_Sync/ }));
-  await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+  await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
   await screen.findByRole('region', { name: '이관 결과' });
   await userEvent.click(group('원본 테넌트').getByRole('radio', { name: 'EXTRA' }));
   await screen.findByLabelText('패키지 검색');
   expect(screen.queryByRole('region', { name: '이관 결과' })).toBeNull();
   expect(screen.queryByRole('button', { name: '이 구성으로 실제 이관' })).toBeNull();
   expect(screen.queryByRole('checkbox')).toBeNull();
-  expect(screen.getByRole('button', { name: '드라이런 실행' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '미리보기 실행' })).toBeDisabled();
   expect(within(screen.getByRole('list', { name: '패키지 목록' })).getAllByRole('radio').every(r => !(r as HTMLInputElement).checked)).toBe(true);
   expect(fn.mock.calls.map(([url]) => url)).toContain('/packages?tenantId=source%20%2F2');
   await pickPackage();
   expect(screen.getByText('0개 선택 / 전체 2개')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+  await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
   await screen.findByRole('region', { name: '이관 결과' });
   await userEvent.click(screen.getByRole('button', { name: '이 구성으로 실제 이관' }));
   expect(within(screen.getByRole('dialog')).getByText('아티팩트 수').nextElementSibling).toHaveTextContent('전체');
@@ -101,7 +101,7 @@ it.each([null, 'DEV'])('REQ-308 AC-5·AC-7: 대상 %s는 두 실행을 막고 �
   const view = render(<TestTenantProvider value={value}><RunPanel packageId="P" artifactIds={[]} onResult={() => {}} /></TestTenantProvider>);
   const reason = targetTenantId ? '원본과 대상이 같습니다' : '대상 테넌트를 선택하세요';
   expect(screen.getByText(reason)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '드라이런 실행' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '미리보기 실행' })).toBeDisabled();
   await userEvent.click(screen.getByRole('radio', { name: '실제 이관' }));
   expect(screen.getByRole('button', { name: (targetTenantId ?? 'PRD') + '로 이관' })).toBeDisabled();
   view.rerender(<TestTenantProvider value={value}><RunPanel packageId="P" artifactIds={[]} onResult={() => {}} realRequest={1} /></TestTenantProvider>);
@@ -111,7 +111,7 @@ it.each([null, 'DEV'])('REQ-308 AC-5·AC-7: 대상 %s는 두 실행을 막고 �
 it('REQ-308 AC-5·AC-7: 대상이 원본과 같아지면 기존 결과의 실제 이관 열기도 막는다', async () => {
   setup();
   await pickPackage();
-  await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+  await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
   await screen.findByRole('region', { name: '이관 결과' });
   await userEvent.click(group('대상 테넌트').getByRole('radio', { name: 'DEV' }));
   await userEvent.click(screen.getByRole('button', { name: '이 구성으로 실제 이관' }));
@@ -158,7 +158,7 @@ it('REQ-308 AC-5·AC-7: 원본 변경 후 이전 원본의 늦은 실행 결과�
     'POST /transport': () => new Promise<Response>(resolve => { release = resolve; }) });
   render(<App />);
   await pickPackage();
-  await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+  await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
   await userEvent.click(group('원본 테넌트').getByRole('radio', { name: 'EXTRA' }));
   await act(async () => release(json(result)));
   expect(screen.queryByRole('region', { name: '이관 결과' })).toBeNull();

@@ -11,7 +11,7 @@ interface Option {
 }
 
 const options = (targetName: string): Option[] => [
-  { mode: 'dryRun', title: '드라이런', description: `${targetName}에 요청을 보내지 않고 변경 내용만 확인합니다` },
+  { mode: 'dryRun', title: '미리보기', description: `${targetName}에 요청을 보내지 않고 변경 내용만 확인합니다` },
   { mode: 'real', title: '실제 이관', description: `${targetName}에 업로드합니다` },
 ];
 

@@ -47,11 +47,11 @@ describe('배포 결과 요약', () => {
   );
 
   it.each([
-    { label: '드라이런 안의 ERROR', statuses: ['ERROR'], overrides: { dryRun: true } },
+    { label: '미리보기 안의 ERROR', statuses: ['ERROR'], overrides: { dryRun: true } },
     { label: '배포 요청 없음', statuses: ['ERROR'], overrides: { deploy: false } },
     { label: '빈 결과', statuses: [], overrides: {} },
     { label: '배포 전 실패', statuses: ['NOT_REQUESTED'], overrides: {} },
-    { label: '드라이런 생략 결과', statuses: ['SKIPPED_DRY_RUN'], overrides: {} },
+    { label: '미리보기 생략 결과', statuses: ['SKIPPED_DRY_RUN'], overrides: {} },
   ] as { label: string; statuses: DeployStatus[]; overrides: Partial<TransportResponse> }[])(
     'REQ-309 AC-8·AC-10: $label 에는 요약 없음',
     ({ statuses, overrides }) => {

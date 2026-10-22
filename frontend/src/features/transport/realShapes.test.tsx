@@ -25,7 +25,7 @@ it('REQ-304 AC-3: 규칙 밖 ID도 목록에 보이고 선택 후 400 오류 제
   expect(fn.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
 });
 
-it('REQ-304 AC-3: 한글 공백 따옴표 & 이름을 그대로 표시하고 선택한 ID로 드라이런한다', async () => {
+it('REQ-304 AC-3: 한글 공백 따옴표 & 이름을 그대로 표시하고 선택한 ID로 미리보기를 실행한다', async () => {
   const artifactName = '아티팩트 "한글 이름" & 설명';
   const fn = mockApi({
     'GET /packages?tenantId=DEV': () => json([{ id: 'Pkg', name, version: '1' }]),
@@ -43,7 +43,7 @@ it('REQ-304 AC-3: 한글 공백 따옴표 & 이름을 그대로 표시하고 선
   const artifacts = await screen.findByRole('list', { name: '아티팩트 목록' });
   expect(within(artifacts).getByText(artifactName)).toHaveTextContent(artifactName);
   await userEvent.click(within(artifacts).getByRole('checkbox'));
-  await userEvent.click(screen.getByRole('button', { name: '드라이런 실행' }));
+  await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
   await waitFor(() => expect(screen.getByRole('region', { name: '이관 결과' })).toBeInTheDocument());
   const posts = fn.mock.calls.filter(([, init]) => init?.method === 'POST');
   expect(posts).toHaveLength(1);
