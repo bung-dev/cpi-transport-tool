@@ -28,6 +28,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class CpiHttpExecutor {
     private static final JsonMapper ERROR_JSON = JsonMapper.builder()
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
+    private static final String DOWNLOAD_ACCEPT = "application/zip, application/octet-stream, */*";
     private final TenantRegistry tenants;
     private final OAuthTokenProvider tokens;
     private final CsrfTokenStore csrf;
@@ -121,7 +122,13 @@ public class CpiHttpExecutor {
                 var request = client.method(method).uri(URI.create(base + path))
                         .headers(headers -> {
                             headers.setBearerAuth(bearer);
-                            if (acceptJson && (originRelative || !path.split("\\?", 2)[0].endsWith("/$value"))) {
+                            // AI-NOTE: 번들 다운로드(GET .../$value)는 acceptJson 값과 상관없이 아래 문자열을 그대로 보낸다.
+                            // MediaType 목록 렌더링에 맡기면 값이 달라질 수 있다. 오류 상세(executeOnce)는 이 경로가 아니다.
+                            // (근거: REQ-311 AC-1, run 20261020-defect-fix)
+                            if (!originRelative && HttpMethod.GET.equals(method)
+                                    && path.split("\\?", 2)[0].endsWith("/$value")) {
+                                headers.set(HttpHeaders.ACCEPT, DOWNLOAD_ACCEPT);
+                            } else if (acceptJson) {
                                 headers.setAccept(List.of(MediaType.APPLICATION_JSON));
                             }
                             if (fetch) headers.set("X-CSRF-Token", "Fetch");

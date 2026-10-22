@@ -95,7 +95,7 @@ class CpiApiClientWireMockTests {
         verifyGet(ART, "prd");
         server.verify(getRequestedFor(urlEqualTo(ART + "/$value"))
                 .withHeader("Authorization", equalTo("Bearer dummy-dev-token-0001"))
-                .withHeader("Accept", absent()));
+                .withHeader("Accept", equalTo("application/zip, application/octet-stream, */*")));
     }
 
     @Test
