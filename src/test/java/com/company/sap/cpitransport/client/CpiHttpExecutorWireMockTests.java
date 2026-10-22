@@ -76,7 +76,7 @@ class CpiHttpExecutorWireMockTests {
     }
 
     @Test
-    @DisplayName("REQ-003 AC-4: Bearer and JSON Accept, binary download excludes Accept")
+    @DisplayName("REQ-003 AC-4: Bearer and JSON Accept, binary download sends explicit zip Accept")
     void req003_ac4_headersAndDownload() {
         server.stubFor(get(urlEqualTo("/dev/api/v1/items")).willReturn(okJson("{}")));
         server.stubFor(get(urlEqualTo("/dev/api/v1/items/$value")).willReturn(ok().withBody(new byte[]{0, 1, 2})));
@@ -88,7 +88,7 @@ class CpiHttpExecutorWireMockTests {
                 .withHeader("Accept", equalTo("application/json")));
         server.verify(1, getRequestedFor(urlEqualTo("/dev/api/v1/items/$value"))
                 .withHeader("Authorization", equalTo("Bearer dummy-dev-token-0001"))
-                .withHeader("Accept", absent()));
+                .withHeader("Accept", equalTo("application/zip, application/octet-stream, */*")));
         server.verify(0, getRequestedFor(urlEqualTo("/dev/api/v1/")));
         server.verify(1, postRequestedFor(urlEqualTo("/dev/oauth/token")));
     }
