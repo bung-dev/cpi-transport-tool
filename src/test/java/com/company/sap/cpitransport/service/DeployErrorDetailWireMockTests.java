@@ -285,7 +285,7 @@ class DeployErrorDetailWireMockTests {
         once();
     }
 
-    @Test @DisplayName("REQ-309 AC-4 / REQ-309 AC-5 / REQ-309 AC-6 / REQ-309 AC-10: masked detail stays out of logs and persists through history API alongside legacy rows")
+    @Test @DisplayName("REQ-309 AC-4 / REQ-309 AC-5 / REQ-309 AC-6 / REQ-309 AC-10: deployFailure=RUNTIME_ERROR log includes detailHttpStatus and detailLength; masked detail stays out of logs and persists through history API alongside legacy rows")
     void req309_ac5_logsAndHistory(CapturedOutput output) throws Exception {
         String raw = "test-dummy-detail-line " + TOKEN + " dummy-prd-client dummy-prd-secret dummy-dev-client dummy-dev-secret "
                 + base64("dummy-prd-client:dummy-prd-secret") + "\n\tkept";
@@ -360,4 +360,26 @@ class DeployErrorDetailWireMockTests {
         return DeployErrorDetail.mask(body.getBytes(StandardCharsets.UTF_8), secrets, "http://localhost", "http://127.0.0.1", values);
     }
     private String base64(String value) { return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8)); }
+
+    @Test @DisplayName("REQ-309 AC-1: runtime STARTED makes zero deployment error detail requests")
+    void req314_startedNoDetail() {
+        var result = run("IF_Fault_A", false, true).results().getFirst();
+        assertThat(result.deployStatus()).isEqualTo(DeployStatus.STARTED);
+        assertThat(result.error()).isNull();
+        noDetail();
+        stubs.dev().verify(0, getRequestedFor(urlPathMatching(".*ErrorInformation.*")));
+    }
+
+    @ParameterizedTest(name = "REQ-309 AC-5: {0} deployFailure=CALL_FAILED log omits detailHttpStatus and detailLength")
+    @ValueSource(strings = {"IF_Fault_DeployPost500", "IF_Fault_RuntimeGet500"})
+    @DisplayName("REQ-309 AC-5: deployFailure=CALL_FAILED log omits detailHttpStatus and detailLength")
+    void req314_callFailedLog(String id, CapturedOutput output) {
+        var result = run(id, false, true).results().getFirst();
+        failed(result);
+        assertThat(result.error().detail()).isNull();
+        assertThat(result.error().detailHttpStatus()).isNull();
+        assertThat(deployLine(output, id)).endsWith("phase=END result=FAILED deployFailure=CALL_FAILED")
+                .doesNotContain("detailHttpStatus", "detailLength");
+        noDetail();
+    }
 }
