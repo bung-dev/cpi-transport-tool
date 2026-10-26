@@ -45,7 +45,7 @@ class TenantApiSecretTests {
     }
 
     @Test
-    @DisplayName("REQ-305 AC-3 / REQ-301 AC-3·AC-9: TRACE success and invalid registration update never disclose body credentials")
+    @DisplayName("REQ-305 AC-3 / REQ-301 AC-3·AC-9: tenant registry path TRACE logs and responses never disclose service key clientid clientsecret on success and invalid registration update")
     void req305_ac3_trace(CapturedOutput output) throws Exception {
         var json = TenantControllerTests.JSON;
         String body = json.writeValueAsString(TenantControllerTests.body("Secret test", "http://localhost:1"));
