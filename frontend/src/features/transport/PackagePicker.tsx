@@ -9,6 +9,7 @@ import { RadioControl } from '../../components/ui/Radio';
 import { TextInput } from '../../components/ui/TextInput';
 import { useRemote } from '../../lib/useRemote';
 import { useTenants } from '../tenants/TenantContext';
+import { hasNoTenants, REGISTER_TENANT_FIRST } from './noTenants';
 
 interface Props {
   selectedId: string | null;
@@ -24,8 +25,8 @@ const ROW_ON = 'bg-primary-soft';
 const ROW_OFF = 'hover:bg-surface-hover';
 
 export function PackagePicker(props: Props) {
-  const { sourceTenantId } = useTenants();
-  if (!sourceTenantId) return <EmptyState title="원본 테넌트를 선택하세요" />;
+  const { tenants, sourceTenantId } = useTenants();
+  if (!sourceTenantId) return <EmptyState title={hasNoTenants(tenants) ? REGISTER_TENANT_FIRST : '원본 테넌트를 선택하세요'} />;
   return <PackageList key={sourceTenantId} {...props} source={sourceTenantId} />;
 }
 
