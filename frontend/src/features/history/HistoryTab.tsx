@@ -123,7 +123,8 @@ export function HistoryTab() {
                   const outcome = deployOutcome(h);
                   return (
                   // 행의 어느 곳을 눌러도 상세가 열린다(마우스 편의). 키보드 경로는 행마다 이관 ID 버튼 하나이고 행에는 tabindex를 주지 않는다(ADR-012).
-                  // 이관 ID 버튼의 클릭은 행으로 올라가 같은 핸들러가 처리한다. 셀은 줄바꿈하지 않고, 좁은 폭에서는 표 래퍼 안에서 가로로 스크롤한다(REQ-108 AC-1).
+                  // 이관 ID 버튼의 클릭은 행으로 올라가 같은 핸들러가 처리한다. 짧은 셀(시작 시각·모드·배포·결과)은 줄바꿈하지 않고, 좁은 폭에서는 표 래퍼 안에서 가로로 스크롤한다(REQ-108 AC-1).
+                  // AI-NOTE: 긴 텍스트 셀(패키지·원본·대상·이관 ID)에 whitespace-nowrap을 주지 않는다. Td 기본 break-all로 줄바꿈해야 1280px(본문 최대 1200px)에서 40자 값 세 개와 UUID가 있어도 모든 열이 래퍼 안에 든다. 말줄임은 쓰지 않아 전체 값이 항상 보인다. min-w-28은 390px 가로 스크롤 때 긴 셀이 몇 글자 폭으로 눌려 행이 매우 높아지는 것을 막는 하한이며, 네 셀 하한 합과 짧은 셀 폭을 더해도 1280px 본문 폭 안에 든다 (근거: REQ-317 AC-1·AC-2, 판정 데이터 측정 변경 전 1280px 넘침 707px·변경 뒤 0px, 하한 없을 때 390px 행 높이 421px·하한 112px일 때 121px, run 20261020-defect-fix)
                   <Tr
                     key={`${h.transportId}-${i}`}
                     className="cursor-pointer"
@@ -133,9 +134,9 @@ export function HistoryTab() {
                     }}
                   >
                     <Td className="whitespace-nowrap">{formatTime(h.startedAt)}</Td>
-                    <Td className="whitespace-nowrap font-mono text-[13px]">{h.packageId}</Td>
-                    <Td className="whitespace-nowrap">{h.sourceTenant?.name ?? '-'}</Td>
-                    <Td className="whitespace-nowrap">{h.targetTenant?.name ?? '-'}</Td>
+                    <Td className="min-w-28 font-mono text-[13px]">{h.packageId}</Td>
+                    <Td className="min-w-28">{h.sourceTenant?.name ?? '-'}</Td>
+                    <Td className="min-w-28">{h.targetTenant?.name ?? '-'}</Td>
                     <Td className="whitespace-nowrap">{h.dryRun ? <Badge tone="neutral">미리보기</Badge> : <Badge tone="accent">실제 이관</Badge>}</Td>
                     <Td className="whitespace-nowrap">
                       <span className="inline-flex items-center gap-2">
@@ -149,7 +150,7 @@ export function HistoryTab() {
                         {h.summary.failed >= 1 && <Badge tone="danger">{`실패 ${h.summary.failed}`}</Badge>}
                       </span>
                     </Td>
-                    <Td className="whitespace-nowrap">
+                    <Td className="min-w-28">
                       <button
                         type="button"
                         ref={(el) => {
