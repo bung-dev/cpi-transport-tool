@@ -194,3 +194,5 @@ frontend/coverage/
 ### docker local ###
 # 실제 테넌트 매핑 파일 폴더(compose의 ./local → /config)
 local/
+# 참고 화면 캡처(실제 테넌트 호스트가 보인다)
+REF/

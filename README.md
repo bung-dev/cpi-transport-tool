@@ -86,7 +86,7 @@ SAP Cloud Integration(CPI)의 DEV 패키지를 PRD로 이관하는 도구입니�
    (Get-Content .env) -replace '^CPI_TENANT_STORE_KEY=.*', "CPI_TENANT_STORE_KEY=$([Convert]::ToBase64String($b))" | Set-Content -Encoding ascii .env
    ```
 
-2. 매핑 파일을 `local/mapping.yml`에 둡니다(`local/`은 git이 무시). 형식은 `examples/real-transport-mapping.yml`을 참고합니다. `devValue`는 원본 테넌트 값, `prdValue`는 대상 테넌트 값입니다. 이관할 때마다 파일을 다시 읽으므로 고친 뒤 재기동하지 않아도 됩니다. 매핑 없이 쓰려면 `.env`의 `CPI_TRANSPORT_MAPPINGFILE`을 비웁니다.
+2. 기본은 매핑 없음입니다(`CPI_TRANSPORT_MAPPINGFILE` 빈 값). 이때 iFlow 값은 원본 그대로 대상에 갑니다. 매핑을 쓰려면 `local/mapping.yml`을 만들고(`local/`은 git이 무시) `.env`에 `CPI_TRANSPORT_MAPPINGFILE=/config/mapping.yml`을 지정한 뒤 `docker compose up -d`로 다시 만듭니다. 형식은 `examples/real-transport-mapping.yml`을 참고합니다. `devValue`는 원본 테넌트 값, `prdValue`는 대상 테넌트 값입니다. 경로를 지정했는데 파일이 없으면 미리보기·이관이 "Mapping file cannot be read"로 실패합니다. 파일 내용은 이관할 때마다 다시 읽으므로 고친 뒤 재기동하지 않아도 됩니다.
 3. 기동하고 http://localhost:8080/ 을 엽니다. 포트는 이 PC(127.0.0.1)에만 열립니다.
 
    ```powershell
