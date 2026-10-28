@@ -190,3 +190,7 @@ frontend/coverage/
 *.enc
 .env
 .env.*
+
+### docker local ###
+# 실제 테넌트 매핑 파일 폴더(compose의 ./local → /config)
+local/
