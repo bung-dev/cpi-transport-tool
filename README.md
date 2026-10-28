@@ -73,6 +73,32 @@ SAP Cloud Integration(CPI)의 DEV 패키지를 PRD로 이관하는 도구입니�
 
 실제 테넌트를 연결하는 절차와 검증 시 주의점은 다음 절을 따릅니다.
 
+## Docker로 실행 (실제 테넌트)
+
+스텁 없이 앱만 컨테이너로 띄웁니다. 필요한 것은 Docker(Compose 포함)뿐이고 JDK·Node.js는 이미지 안에서 씁니다. 원본·대상 테넌트는 화면의 테넌트 탭에서 서비스 키로 등록합니다(다음 절).
+
+1. `docker.env.example`을 `.env`로 복사하고 `CPI_TENANT_STORE_KEY`를 채웁니다. 키는 다음 절 "서비스 키와 저장소 준비"의 명령으로 한 번 만들고, 이후 계속 같은 값을 씁니다. `.env`는 git이 무시합니다.
+
+   ```powershell
+   Copy-Item docker.env.example .env
+   $b = New-Object byte[] 32; $r = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+   try { $r.GetBytes($b) } finally { $r.Dispose() }
+   (Get-Content .env) -replace '^CPI_TENANT_STORE_KEY=.*', "CPI_TENANT_STORE_KEY=$([Convert]::ToBase64String($b))" | Set-Content -Encoding ascii .env
+   ```
+
+2. 매핑 파일을 `local/mapping.yml`에 둡니다(`local/`은 git이 무시). 형식은 `examples/real-transport-mapping.yml`을 참고합니다. `devValue`는 원본 테넌트 값, `prdValue`는 대상 테넌트 값입니다. 이관할 때마다 파일을 다시 읽으므로 고친 뒤 재기동하지 않아도 됩니다. 매핑 없이 쓰려면 `.env`의 `CPI_TRANSPORT_MAPPINGFILE`을 비웁니다.
+3. 기동하고 http://localhost:8080/ 을 엽니다. 포트는 이 PC(127.0.0.1)에만 열립니다.
+
+   ```powershell
+   docker compose up -d --build
+   docker compose logs -f app   # 로그 보기(Ctrl+C로 빠져나옴)
+   ```
+
+4. 읽기 전용(`CPI_TRANSPORT_READ_ONLY=true`)으로 미리보기를 먼저 확인합니다. 실제 이관은 `.env`에서 `false`로 바꾸고 `docker compose up -d`로 다시 만듭니다.
+5. 정지는 `docker compose down`입니다. 등록 테넌트와 이력은 볼륨 `cpitt-data`에 남습니다. `docker compose down -v`는 이 볼륨까지 지우므로 테넌트를 다시 등록해야 합니다.
+
+코드를 바꾼 뒤에는 `docker compose up -d --build`로 이미지를 다시 만듭니다.
+
 ## 테넌트 등록과 실제 테넌트로 이관하기
 
 ### 서비스 키와 저장소 준비
