@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class TransportService {
     private static final Logger log = LoggerFactory.getLogger(TransportService.class);
+    static final String LOCK_HINT = "대상 테넌트에서 이 아티팩트가 편집 중(잠김)일 수 있습니다. CPI 화면에서 편집을 저장하거나 취소한 뒤 다시 시도하세요.";
     private final CpiApiClient api;
     private final IflwReplacer iflw;
     private final ExternalParameterReplacer parameters;
@@ -88,6 +89,7 @@ public class TransportService {
         var unmapped = new ArrayList<UnmappedKey>();
         ArtifactError error = null;
         var deployFailure = DeployOutcome.DeployFailure.NONE;
+        boolean exists = false;
         event(transportId, id, stage, "started");
         try {
             var artifact = artifacts.stream().filter(a -> id.equals(a.id())).findFirst();
@@ -107,7 +109,7 @@ public class TransportService {
                     if (api.getPackage(request.target().id(), request.packageId()).isEmpty()) {
                         error = new ArtifactError("PACKAGE_NOT_FOUND_IN_TARGET", "TARGET: HTTP 404; CPI package not found");
                     } else {
-                        boolean exists = api.artifactExists(request.target().id(), id);
+                        exists = api.artifactExists(request.target().id(), id);
                         stage = next(transportId, id, stage, Stage.UPLOAD);
                         String content = Base64.getEncoder().encodeToString(replaced.zipBytes());
                         if (exists) api.updateArtifact(request.target().id(), id, artifact.get().name(), content);
@@ -151,6 +153,13 @@ public class TransportService {
             // REQ-309 permits only masked ErrorInformation in ArtifactError.detail; other failures remain categorical.
             String detail = failure instanceof CpiCallException call
                     ? "HTTP " + call.httpStatus() + "; CPI call failed" : "CPI processing failed";
+            // AI-NOTE: 갱신 PUT의 "400, 본문 없음"은 직전 run에서 편집 락 때 한 번 관찰한 형태일 뿐 락만의 신호가 아니다.
+            // 그래서 락을 감지·해제하지 않고 안내만 붙인다. 생성 POST·Configurations·DEPLOY·본문 있는 400에는 붙이지 않는다.
+            // (근거: REQ-315 AC-1·AC-2, 01_spec.md B2, run 20261020-defect-fix)
+            if (stage == Stage.UPLOAD && exists && failure instanceof CpiCallException call
+                    && Integer.valueOf(400).equals(call.httpStatus()) && call.hasEmptyBody()) {
+                detail += ". " + LOCK_HINT;
+            }
             error = stage == Stage.DEPLOY
                     ? new ArtifactError(stage.code, "DEPLOY: CPI deployment ERROR")
                     : new ArtifactError(stage.code, stage + ": " + detail);

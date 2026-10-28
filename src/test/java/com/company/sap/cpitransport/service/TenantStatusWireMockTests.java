@@ -110,14 +110,16 @@ class TenantStatusWireMockTests {
     }
     @Test @DisplayName("REQ-303 AC-3·AC-5: parallel checks and total two-request deadline")
     void req303_ac3_deadline() {
-        service.close(); service = service(Duration.ofMillis(900));
-        token(200, "{\"access_token\":\"test-dummy-token\",\"expires_in\":3600}", 300);
-        read(200, "{\"d\":{\"results\":[]}}", 300);
+        // AI-NOTE: 지연·한도·상한은 부하에서도 성질이 유지되도록 큰 간격을 둔다. 테넌트당 지연 합 1000ms < 병렬 상한 1500ms < 직렬 합 2000ms,
+        // 한도 2000ms > 지연 합이라 병렬이면 OK, 직렬로 밀리면 두 번째 테넌트가 한도에 걸려 UNREACHABLE이 된다. 초과 경우는 지연 합 3000ms로 한도를 1000ms 넘긴다 (근거: REQ-313 AC-3, run 20261020-defect-fix)
+        service.close(); service = service(Duration.ofMillis(2000));
+        token(200, "{\"access_token\":\"test-dummy-token\",\"expires_in\":3600}", 500);
+        read(200, "{\"d\":{\"results\":[]}}", 500);
         long start = System.nanoTime();
         assertThat(service.status(null, true).tenants()).allMatch(t -> t.check() == Check.OK);
-        assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(1100));
-        token(200, "{\"access_token\":\"test-dummy-token\",\"expires_in\":3600}", 600);
-        read(200, "{\"d\":{\"results\":[]}}", 600);
+        assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(1500));
+        token(200, "{\"access_token\":\"test-dummy-token\",\"expires_in\":3600}", 1500);
+        read(200, "{\"d\":{\"results\":[]}}", 1500);
         assertThat(check()).isEqualTo(Check.UNREACHABLE);
     }
     @Test @DisplayName("REQ-303 AC-1·AC-5: connection refused and empty registry")

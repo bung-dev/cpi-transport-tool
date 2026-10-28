@@ -66,7 +66,7 @@ SAP Cloud Integration(CPI)의 DEV 패키지를 PRD로 이관하는 도구입니�
 
 - 패키지와 아티팩트(iFlow)를 골라 DEV에서 PRD로 이관합니다.
 - 매핑 파일(YAML 또는 JSON)로 Content Modifier와 Externalized Parameter 값을 PRD 값으로 치환합니다.
-- 드라이런(기본값)으로 PRD를 건드리지 않고 결과를 먼저 확인한 뒤, 확인 대화상자를 거쳐 실제 이관을 실행합니다.
+- 미리보기(dry run, 기본값)로 PRD를 건드리지 않고 결과를 먼저 확인한 뒤, 확인 대화상자를 거쳐 실제 이관을 실행합니다.
 - 이관 결과를 이력으로 남기고 화면에서 다시 볼 수 있습니다.
 
 실행 방법 절과 아래 번호 절의 로컬 데모는 실제 테넌트 없이 localhost WireMock 스텁과 더미 자격증명만 사용합니다.
@@ -106,7 +106,7 @@ export CPI_TENANT_STORE_KEY="$(openssl rand -base64 32)"
 2. 목록의 **수정**에서 이름 또는 서비스 키를 바꾸고, **삭제**에서 로컬 등록을 지울 수 있습니다. 수정 폼은 현재 이름과 빈 서비스 키 입력으로 열립니다. 로컬 등록 삭제는 SAP 테넌트의 패키지·아티팩트를 삭제하지 않습니다.
 3. 기존 연결 환경 변수 4개(`CPI_DEV_API_URL`, `CPI_DEV_TOKEN_URL`, `CPI_DEV_CLIENT_ID`, `CPI_DEV_CLIENT_SECRET`; PRD는 `CPI_PRD_*`)를 모두 주면 초기 등록 **DEV·PRD**로 계속 사용할 수 있습니다. 환경 변수로 등록한 항목은 화면에서 수정·삭제할 수 없습니다.
 4. 이관 탭의 **원본 테넌트**·**대상 테넌트** 라디오에서 서로 다른 테넌트를 선택합니다. 상단 연결 상태 칩을 눌러 다시 확인할 수 있습니다. 대상 미선택은 **대상 선택 안 됨**, 상태 요청 자체 실패는 **확인 실패**로 보입니다.
-5. 읽기 전용은 **기본 켜짐**입니다. 드라이런을 확인한 뒤에만 `CPI_TRANSPORT_READ_ONLY=false`를 주고 앱을 재기동하세요. 이 설정을 끄면 실제 대상에 업로드·파라미터 변경·배포를 수행할 수 있으므로 대상 이름과 확인 대화상자를 확인하세요.
+5. 읽기 전용은 **기본 켜짐**입니다. 미리보기를 확인한 뒤에만 `CPI_TRANSPORT_READ_ONLY=false`를 주고 앱을 재기동하세요. 이 설정을 끄면 실제 대상에 업로드·파라미터 변경·배포를 수행할 수 있으므로 대상 이름과 확인 대화상자를 확인하세요.
 6. **대상 패키지가 미리 있어야 합니다.** 도구는 패키지를 자동 생성하지 않습니다. 매핑의 `devValue`는 원본 테넌트 값, `prdValue`는 대상 테넌트 값입니다. 원본·대상을 바꿀 때 매핑도 확인하세요.
 
 ### 실제 검증 절차
@@ -138,9 +138,9 @@ export CPI_TRANSPORT_READ_ONLY=true
 ./gradlew bootRun
 ```
 
-3. 브라우저로 http://localhost:8080/ 을 열고 테넌트 탭에서 대상 서비스 키를 등록합니다. 원본 DEV와 등록한 대상을 선택하고 칩으로 연결 상태를 확인합니다. 패키지 `CPITransportRealTest`와 `CPITT_Sample_Push`를 선택해 드라이런을 실행합니다. `examples/real-transport-mapping.yml`의 header·property·외부화 파라미터가 PLANNED인지 확인합니다. 드라이런은 대상에 요청하지 않습니다.
+3. 브라우저로 http://localhost:8080/ 을 열고 테넌트 탭에서 대상 서비스 키를 등록합니다. 원본 DEV와 등록한 대상을 선택하고 칩으로 연결 상태를 확인합니다. 패키지 `CPITransportRealTest`와 `CPITT_Sample_Push`를 선택해 미리보기를 실행합니다. `examples/real-transport-mapping.yml`의 header·property·외부화 파라미터가 PLANNED인지 확인합니다. 미리보기는 대상에 요청하지 않습니다.
 4. 앱을 Ctrl+C로 정지하고 같은 저장소 키·저장 파일을 유지한 채 PowerShell `$env:CPI_TRANSPORT_READ_ONLY = 'false'` 또는 Git Bash `export CPI_TRANSPORT_READ_ONLY=false`를 설정한 뒤 `bootRun`으로 재기동합니다. 등록 대상이 유지되는지 확인하고 원본·대상을 다시 선택합니다. 먼저 배포를 끈 실제 이관을 실행해 대상 SAP 화면에서 아티팩트와 치환값을 확인합니다.
-5. 이어서 배포 포함 실제 이관을 실행합니다. 대상 SAP 화면에서 배포·기동 상태를 확인하고, 도구의 이관 결과·이력 상세에서 **배포 성공 1개**, 이력 목록의 **배포** 열에서 **성공**을 확인합니다. 검증 후 읽기 전용을 다시 켜고 재기동하면 실제 이관은 막히고 드라이런은 계속 사용할 수 있습니다.
+5. 이어서 배포 포함 실제 이관을 실행합니다. 대상 SAP 화면에서 배포·기동 상태를 확인하고, 도구의 이관 결과·이력 상세에서 **배포 성공 1개**, 이력 목록의 **배포** 열에서 **성공**을 확인합니다. 검증 후 읽기 전용을 다시 켜고 재기동하면 실제 이관은 막히고 미리보기는 계속 사용할 수 있습니다.
 
 대상 아티팩트가 SAP 화면에서 편집 중(잠금, 버전 상태 Draft)이면 업로드가 HTTP 400(UPLOAD_FAILED)으로 거절된다. 화면에서 편집을 끝낸 뒤(Save as version 또는 Cancel) 다시 이관한다. 이 run의 실제 확인에 따른 안내이며, 도구는 잠금을 자동으로 풀지 않습니다.
 
@@ -154,9 +154,9 @@ export CPI_TRANSPORT_READ_ONLY=true
 
 ## 화면
 
-![이관 탭: 패키지·아티팩트를 고르고 드라이런을 실행한 결과](docs/images/transport-result.png)
+![이관 탭: 패키지·아티팩트를 고르고 미리보기를 실행한 결과](docs/images/transport-result.png)
 
-이관 탭: 패키지·아티팩트를 선택하고 실행 모드를 "드라이런"으로 실행한 결과입니다. 결과에서는 아티팩트 카드를 접고 펼 수 있고 "문제 항목만 보기"로 확인이 필요한 항목만 모아 볼 수 있으며, 드라이런 결과에서 "이 구성으로 실제 이관"으로 이어 갈 수 있습니다.
+이관 탭: 패키지·아티팩트를 선택하고 실행 모드를 "미리보기"로 실행한 결과입니다. 결과에서는 아티팩트 카드를 접고 펼 수 있고 "문제 항목만 보기"로 확인이 필요한 항목만 모아 볼 수 있으며, 미리보기 결과에서 "이 구성으로 실제 이관"으로 이어 갈 수 있습니다.
 
 ![실제 이관 확인 대화상자](docs/images/confirm-dialog.png)
 
@@ -272,7 +272,7 @@ curl -s -o build/local-stubs/transport-response.json -w '%{http_code}\n' -X POST
 cat build/local-stubs/transport-response.json
 ```
 
-초기 상태에서 예제 이관은 HTTP 200, 응답의 `APPLIED` 1건 이상, 업로드 요청 2건을 기대합니다. 드라이런은 본문에 `"dryRun":true`를 추가합니다(업로드 없음).
+초기 상태에서 예제 이관은 HTTP 200, 응답의 `APPLIED` 1건 이상, 업로드 요청 2건을 기대합니다. 미리보기(`"dryRun":true`)는 본문에 이 필드를 추가해 요청합니다(업로드 없음).
 
 ## 4. 업로드 ZIP 확인
 

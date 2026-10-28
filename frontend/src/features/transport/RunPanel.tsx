@@ -8,6 +8,7 @@ import { Callout } from '../../components/ui/Callout';
 import { Switch } from '../../components/ui/Switch';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useReadOnlyState, useTenants } from '../tenants/TenantContext';
+import { hasNoTenants, REGISTER_TENANT_FIRST } from './noTenants';
 import { RunModeSelect, type RunMode } from './RunModeSelect';
 
 // 백엔드 검증(TransportController.java:31)과 같은 값
@@ -42,7 +43,7 @@ export function RunPanel({ packageId, packageName, artifactIds, onResult, onRequ
   const { realDisabled } = useReadOnlyState();
   const targetName = tenants.state === 'success'
     ? tenants.data.tenants.find(t => t.id === targetTenantId)?.name ?? 'PRD' : 'PRD';
-  const selectionReason = !sourceTenantId ? '원본 테넌트를 선택하세요'
+  const selectionReason = !sourceTenantId ? (hasNoTenants(tenants) ? REGISTER_TENANT_FIRST : '원본 테넌트를 선택하세요')
     : !targetTenantId ? '대상 테넌트를 선택하세요'
     : sourceTenantId === targetTenantId ? '원본과 대상이 같습니다' : null;
   const [mode, setMode] = useState<RunMode>('dryRun');
