@@ -148,4 +148,45 @@ class TransportTenantSelectionTests {
             assertThat(r.sourceTenant()).isNull(); assertThat(r.targetTenant()).isNull();
         });
     }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "REQ-308 AC-1: source equals target returns 400 for {0}, preview={1}")
+    @org.junit.jupiter.params.provider.CsvSource({"DEV,true", "DEV,false", "PRD,true", "PRD,false", "registered,true", "registered,false"})
+    @DisplayName("REQ-308 AC-1: source equals target returns 400")
+    void req314_sameTenant(String choice, boolean preview) throws Exception {
+        String id = choice.equals("registered") ? targetId : choice;
+        error(Map.of("sourceTenantId", id, "targetTenantId", id, "dryRun", preview), 400, "INVALID_REQUEST");
+        assertThat(history.findAll()).isEmpty();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "REQ-308 AC-1: unregistered reserved {0} source always returns 503, preview={1}")
+    @org.junit.jupiter.params.provider.CsvSource({"DEV,true", "DEV,false", "PRD,true", "PRD,false"})
+    @DisplayName("REQ-308 AC-1: unregistered reserved source always returns 503")
+    void req314_missingSource(String reserved, boolean preview) throws Exception {
+        configure(false, false, false);
+        transport(Map.of("sourceTenantId", reserved, "targetTenantId", targetId, "dryRun", preview))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.message").value(String.join(", ", new EnvironmentGuard(properties, tenants).missingKeys(reserved))));
+        assertThat(source.getAllServeEvents()).isEmpty();
+        assertThat(target.getAllServeEvents()).isEmpty();
+        assertThat(history.findAll()).isEmpty();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "REQ-308 AC-1: unregistered reserved {0} target returns 503 only for actual transport; preview succeeds")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"DEV", "PRD"})
+    @DisplayName("REQ-308 AC-1: unregistered reserved target returns 503 only for actual transport")
+    void req314_missingTarget(String reserved) throws Exception {
+        configure(false, false, false);
+        String registeredSource = tenants.register(registration("Registered source", source)).id();
+        transport(Map.of("sourceTenantId", registeredSource, "targetTenantId", reserved, "dryRun", false))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.message").value(String.join(", ", new EnvironmentGuard(properties, tenants).missingKeys(reserved))));
+        assertThat(source.getAllServeEvents()).isEmpty();
+        assertThat(target.getAllServeEvents()).isEmpty();
+        assertThat(history.findAll()).isEmpty();
+        transport(Map.of("sourceTenantId", registeredSource, "targetTenantId", reserved, "dryRun", true))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.targetTenant.id").value(reserved));
+        source.verify(1, getRequestedFor(urlEqualTo("/api/v1/IntegrationPackages('Pkg')")));
+        assertThat(target.getAllServeEvents()).isEmpty();
+        assertThat(history.findAll()).hasSize(1);
+    }
 }

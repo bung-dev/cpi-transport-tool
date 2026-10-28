@@ -6,7 +6,7 @@ import { Switch } from '../../components/ui/Switch';
 import { formatTime } from '../../lib/formatTime';
 import { ArtifactCard } from './ArtifactCard';
 import { deployOutcome } from './deployOutcome';
-import { initialExpanded, isProblemArtifact, totalProblemCount } from './problems';
+import { failedArtifactCount, initialExpanded, isProblemArtifact, totalProblemCount } from './problems';
 import { useReadOnlyState } from '../tenants/TenantContext';
 
 // REQ-105 AC-8, REQ-012 AC-1: 서버 값은 모두 JSX 텍스트 노드로만 렌더링한다.
@@ -39,6 +39,7 @@ export function TransportResult({ result, onOpenReal }: Props) {
   }
 
   const problemTotal = totalProblemCount(result.results);
+  const failedArtifacts = failedArtifactCount(result.results);
   const hasProblemArtifact = result.results.some(isProblemArtifact);
   const setAll = (value: boolean) => setExpanded(result.results.map(() => value));
 
@@ -84,6 +85,8 @@ export function TransportResult({ result, onOpenReal }: Props) {
             onChange={(e) => setOnlyProblems(e.target.checked)}
           />
           <span className="text-xs text-ink-tertiary">문제 항목 {problemTotal}건</span>
+          {/* AI-NOTE: "문제 항목 N건"은 치환 항목만 센다(ADR-014). 스위치를 켜면 FAILED 카드도 남으므로 그 수를 별도 요소로 옆에 보인다. N에 더하거나 같은 요소에 합치지 않는다(근거: REQ-316 AC-1·AC-2, 직전 qa_result 8절) */}
+          {failedArtifacts >= 1 && <span className="text-xs font-medium text-danger-fg">실패 아티팩트 {failedArtifacts}개</span>}
         </div>
         <div className="ml-auto flex items-center gap-1.5">
           <Button variant="ghost" size="sm" disabled={onlyNow} onClick={() => setAll(true)}>

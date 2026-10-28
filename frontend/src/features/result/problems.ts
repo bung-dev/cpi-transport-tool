@@ -23,6 +23,14 @@ export function totalProblemCount(results: ArtifactResult[]): number {
   return results.reduce((sum, a) => sum + problemCount(a), 0);
 }
 
+/**
+ * 결과 전체의 실패 아티팩트 수: status가 FAILED인 아티팩트 수. "실패" 통계 타일(summary.failed)과 같은 값이다(REQ-316 AC-1).
+ * 치환 항목만 세는 totalProblemCount와 합치지 않는다(REQ-316 AC-2, ADR-014).
+ */
+export function failedArtifactCount(results: ArtifactResult[]): number {
+  return results.filter((a) => a.status === 'FAILED').length;
+}
+
 /** 카드의 처음 펼침 상태: 문제 아티팩트는 펼침, 그 밖은 접힘. 아티팩트가 1개뿐이면 펼침. */
 export function initialExpanded(results: ArtifactResult[]): boolean[] {
   return results.length === 1 ? [true] : results.map(isProblemArtifact);

@@ -169,7 +169,12 @@ public class CpiHttpExecutor {
                 delay = nextDelay(delay, transientFailures);
                 continue;
             }
-            throw new CpiCallException(status, summarize(response.getBody(), secrets, response.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE)));
+            // AI-NOTE: 빈 본문 여부는 boolean으로만 넘기고 본문은 남기지 않는다(REQ-305 AC-3). CSRF 토큰 조회(fetch)는
+            // 자원 요청의 응답이 아니므로 false다(REQ-315 AC-2: 갱신 PUT 응답일 때만 락 안내, run 20261020-defect-fix).
+            boolean emptyBody = !fetch && (response.getBody() == null
+                    || new String(response.getBody(), StandardCharsets.UTF_8).isBlank());
+            throw new CpiCallException(status, summarize(response.getBody(), secrets, response.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE)),
+                    false, emptyBody);
         }
     }
 
