@@ -1,6 +1,6 @@
 import { TENANTS_OK, TENANT_STATUS_OK } from '../../test/tenantFixtures';
 import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TransportResponse } from '../../api/types';
 import App from '../../App';
@@ -261,7 +261,8 @@ describe('이력 탭', () => {
     release(json([entry('t-3')]));
     await screen.findByRole('button', { name: 't-3' });
     await waitFor(() => expect(refresh).toBeEnabled());
-    expect(document.activeElement).toBe(refresh);
+    // 포커스는 응답 반영 커밋 뒤의 effect가 옮긴다. 행이 보이는 시점과 effect 실행 사이가 부하에서 벌어지므로 포커스 자체를 기다린다.
+    await waitFor(() => expect(document.activeElement).toBe(refresh));
   });
 
   it('REQ-008 AC-3: 조회 오류는 role=alert와 다시 시도로 보인다', async () => {

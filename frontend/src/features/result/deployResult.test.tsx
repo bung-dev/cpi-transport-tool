@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from '../../test/userEvent';
 import { describe, expect, it } from 'vitest';
 import type { ArtifactError, ArtifactResult, DeployStatus, TransportResponse } from '../../api/types';
 import { TransportResult } from './TransportResult';

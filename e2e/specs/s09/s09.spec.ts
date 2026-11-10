@@ -797,6 +797,9 @@ test('QA-223: 사용자가 입력한 데이터는 치환되지 않는다', async
   const stored = await findTenant(request, NAME);
   rec.storedName = stored?.name;
   expect(stored?.name, '저장된 이름이 입력 그대로').toBe(NAME);
+  // 등록 응답(201) 뒤에 앱이 GET /tenants로 목록을 다시 읽어 그린다. 응답 직후 바로 읽으면 이전 목록을 읽으므로 새 항목이 보일 때까지 기다린다.
+  const mine = page.getByRole('listitem').filter({ hasText: NAME });
+  await expect.soft(mine.first(), '테넌트 탭 목록에 입력한 이름 그대로').toBeVisible();
   const listText = await page.getByRole('listitem').filter({ hasText: 'QA319-' }).allInnerTexts();
   rec.tenantTabItems = listText.map((s) => s.replace(/\s+/g, ' '));
   expect.soft(rec.tenantTabItems.some((s: string) => s.includes(NAME)), '테넌트 탭 목록에 입력한 이름 그대로').toBe(true);
