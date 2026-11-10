@@ -2,7 +2,7 @@ import { TENANTS_OK, TENANT_STATUS_OK } from './test/tenantFixtures';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from './test/userEvent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TransportResponse } from './api/types';
 import { PACKAGES, json, mockApi } from './test/mockFetch';

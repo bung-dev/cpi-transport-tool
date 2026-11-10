@@ -1,0 +1,11 @@
+{
+  "name": "cpi-transport-tool-e2e",
+  "private": true,
+  "description": "브라우저 E2E 회귀 테스트. 실행 방법은 README.md",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
