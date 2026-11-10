@@ -1,6 +1,6 @@
 import { TENANTS_OK, TENANT_STATUS_OK } from './tenantFixtures';
 import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from './userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ArtifactResult, TransportResponse } from '../api/types';
 import App from '../App';

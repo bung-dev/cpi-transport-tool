@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from '../../test/userEvent';
 import { useRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ConfirmDialog } from './ConfirmDialog';
