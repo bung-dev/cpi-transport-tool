@@ -54,10 +54,6 @@ function setupApp(historyError = false) {
 // AI-NOTE: 키보드 접근 테스트는 병렬 전체 실행에서 호출마다 setTimeout 양보(delay 기본 0)가 쌓여 느려진다. 동작은 같고 양보만 없애려고 delay: null 인스턴스를 쓴다 (근거: REQ-313 AC-1, run 20261020-defect-fix)
 const keyboardUser = () => userEvent.setup({ delay: null });
 type User = ReturnType<typeof keyboardUser>;
-// AI-NOTE: 병렬 전체 실행에서 첫 렌더 뒤 데이터 대기가 findBy 기본 제한(1초)을 넘어 실패한 적이 있어, '키보드 접근 (REQ-108 AC-2)' 테스트 4개의 findBy에만 넉넉한 제한을 준다(다른 테스트는 기본 대기). 전역 asyncUtilTimeout은 바꾸지 않는다 (근거: REQ-313 AC-1, run 20261020-defect-fix)
-const LOAD_WAIT = { timeout: 10_000 };
-// AI-NOTE: 같은 이유로 키보드 접근 테스트 4개에만 테스트별 제한 시간(vitest 기본 5초)을 늘린다. 전역 testTimeout·maxWorkers는 바꾸지 않는다 (근거: REQ-313 AC-1, 부하 재현에서 5초 초과 확인)
-const KEYBOARD_TEST_TIMEOUT = 30_000;
 
 /** Tab 키만으로 도달하는 요소를 처음부터 끝까지 모은다(포커스가 이미 본 요소로 돌아오거나 문서 밖으로 나가면 멈춘다). */
 async function tabOrder(user: User): Promise<HTMLElement[]> {
@@ -71,19 +67,18 @@ async function tabOrder(user: User): Promise<HTMLElement[]> {
   return seen;
 }
 
-/** wait는 키보드 접근 테스트만 넘긴다. 생략하면 findBy 기본 대기(setup.ts의 asyncUtilTimeout)를 그대로 쓴다. */
-async function openResultState(user: User = userEvent.setup(), wait?: { timeout: number }) {
+async function openResultState(user: User = userEvent.setup()) {
   setupApp();
-  await user.click(await screen.findByRole('radio', { name: /Transport Demo/ }, wait));
-  await user.click(await screen.findByRole('checkbox', { name: /IF_Order_Sync/ }, wait));
+  await user.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
+  await user.click(await screen.findByRole('checkbox', { name: /IF_Order_Sync/ }));
   await user.click(screen.getByRole('button', { name: '미리보기 실행' }));
-  await screen.findByRole('heading', { name: '이관 결과' }, wait);
+  await screen.findByRole('heading', { name: '이관 결과' });
 }
 
 describe('키보드 접근 (REQ-108 AC-2)', () => {
   it('REQ-108 AC-2: 이관 탭(결과 표시 상태)의 모든 컨트롤이 Tab 순서에 있고 네이티브 활성 컨트롤이다', async () => {
     const user = keyboardUser();
-    await openResultState(user, LOAD_WAIT);
+    await openResultState(user);
     await user.click(screen.getByRole('radio', { name: '실제 이관' })); // 배포 스위치를 보이게 한다
     document.body.focus();
     (document.activeElement as HTMLElement | null)?.blur();
@@ -112,11 +107,11 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
       expect(el).toBeEnabled();
       expect(el.tabIndex).toBeGreaterThanOrEqual(0);
     }
-  }, KEYBOARD_TEST_TIMEOUT);
+  });
 
   it('REQ-108 AC-2: Enter/Space(라디오 그룹은 화살표 키)로 조작된다', async () => {
     const user = keyboardUser();
-    await openResultState(user, LOAD_WAIT);
+    await openResultState(user);
     // 라디오 그룹: 화살표 키
     screen.getByRole('radio', { name: '미리보기' }).focus();
     await user.keyboard('{ArrowDown}');
@@ -148,18 +143,18 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
     screen.getByRole('tab', { name: '이관' }).focus();
     await user.keyboard('{ArrowRight}');
     expect(screen.getByRole('tab', { name: '이력' })).toHaveAttribute('aria-selected', 'true');
-  }, KEYBOARD_TEST_TIMEOUT);
+  });
 
   it('REQ-108 AC-2: 이력 탭(목록·상세·오류)의 컨트롤이 Tab 순서에 있고 Enter/Space로 조작된다', async () => {
     const user = keyboardUser();
     setupApp(true);
     await user.click(screen.getByRole('tab', { name: '이력' }));
     // 오류 상태: 다시 시도
-    const retry = await screen.findByRole('button', { name: '다시 시도' }, LOAD_WAIT);
+    const retry = await screen.findByRole('button', { name: '다시 시도' });
     expect((await tabOrder(user)).includes(retry)).toBe(true);
     retry.focus();
     await user.keyboard('{Enter}');
-    const idBtn = await screen.findByRole('button', { name: 't-a11y' }, LOAD_WAIT);
+    const idBtn = await screen.findByRole('button', { name: 't-a11y' });
     // 목록: 새로고침, 행마다 이관 ID 버튼 하나(행에는 tabindex 없음)
     (document.activeElement as HTMLElement | null)?.blur();
     const order = await tabOrder(user);
@@ -175,11 +170,11 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
     expect(screen.getByRole('table')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '새로고침' }));
     await waitFor(() => expect(screen.getByRole('button', { name: '새로고침' })).toBeEnabled());
-  }, KEYBOARD_TEST_TIMEOUT);
+  });
 
   it('REQ-108 AC-2: 확인 대화상자의 버튼이 Tab 순서에 있고 Enter/Space로 조작된다', async () => {
     const user = keyboardUser();
-    await openResultState(user, LOAD_WAIT);
+    await openResultState(user);
     await user.click(screen.getByRole('radio', { name: '실제 이관' }));
     screen.getByRole('button', { name: 'PRD로 이관' }).focus();
     await user.keyboard('{Enter}');
@@ -190,7 +185,7 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
     within(dialog).getByRole('button', { name: '취소' }).focus();
     await user.keyboard(' ');
     expect(screen.queryByRole('dialog')).toBeNull();
-  }, KEYBOARD_TEST_TIMEOUT);
+  });
 });
 
 describe('접근 가능한 이름과 색 외 구분 (REQ-108 AC-3)', () => {
