@@ -1,6 +1,6 @@
 import { TestTenantProvider } from '../../test/tenantProvider';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { json, mockApi } from '../../test/mockFetch';
 import { RunPanel } from './RunPanel';

@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from '../../test/userEvent';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { TransportResponse } from '../../api/types';
 import { json, mockApi } from '../../test/mockFetch';

@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from '../../test/userEvent';
 import { afterEach, expect, it, vi } from 'vitest';
 import { PACKAGES, json, mockApi } from '../../test/mockFetch';
 import { TENANTS_OK } from '../../test/tenantFixtures';

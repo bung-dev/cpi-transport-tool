@@ -196,3 +196,12 @@ frontend/coverage/
 local/
 # 참고 화면 캡처(실제 테넌트 호스트가 보인다)
 REF/
+
+### workflow v3 ###
+# 작업 폴더와 검사 출력(로컬 전용)
+changes/
+.check/
+# E2E 의존성·결과
+e2e/node_modules/
+e2e/.artifacts/
+e2e/test-results/

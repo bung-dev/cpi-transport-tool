@@ -1,5 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent from '../../test/userEvent';
 import { afterEach, expect, it, vi } from 'vitest';
 import App from '../../App';
 import type { Tenant } from '../../api/types';
