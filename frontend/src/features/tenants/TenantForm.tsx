@@ -8,6 +8,7 @@ interface Props { tenantId?: string; initialName?: string; disabled?: boolean; o
 export function TenantForm({ tenantId, initialName = '', disabled = false, onSuccess, onCancel }: Props) {
   const [name, setName] = useState(initialName);
   const [text, setText] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError>();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -18,7 +19,7 @@ export function TenantForm({ tenantId, initialName = '', disabled = false, onSuc
     setError(undefined);
     setBusy(true);
     try {
-      const file = fileRef.current?.files?.[0];
+      const file = selectedFile ?? fileRef.current?.files?.[0];
       let serviceKey: Record<string, unknown> | undefined;
       if (file || text || !tenantId) {
         try {
@@ -43,6 +44,7 @@ export function TenantForm({ tenantId, initialName = '', disabled = false, onSuc
     finally {
       // AI-NOTE: 성공·실패(요청 전 JSON 검사, 서버 오류, 네트워크 오류, onSuccess 실패) 모두 서비스 키 입력과 파일 선택을 비운다. 이름은 실패 때 유지한다. 키를 고쳐 다시 붙여넣어야 하는 불편은 명세가 받아들인 대가다 (근거: REQ-318 AC-1·AC-2, 직전 REQ-305 AC-3·QA-102)
       setText('');
+      setSelectedFile(null);
       if (fileRef.current) fileRef.current.value = '';
       setBusy(false);
     }
@@ -52,7 +54,14 @@ export function TenantForm({ tenantId, initialName = '', disabled = false, onSuc
       <legend className="sr-only">{tenantId ? '테넌트 수정' : '테넌트 등록'}</legend>
       <TextInput label="이름" value={name} onChange={e => setName(e.target.value)} maxLength={40} required={!tenantId} />
       <label htmlFor={`${inputId}-file`} className="text-sm">서비스 키 파일</label>
-      <input ref={fileRef} id={`${inputId}-file`} type="file" accept=".json,application/json" className="w-full min-w-0 text-sm" />
+      <input ref={fileRef} id={`${inputId}-file`} type="file" accept=".json,application/json" className="sr-only" tabIndex={-1} onChange={e => setSelectedFile(e.target.files?.[0] ?? null)} />
+      <div className="grid gap-3 rounded-lg border border-dashed border-control-border bg-surface p-5" onDragOver={e => e.preventDefault()} onDrop={e => {
+        e.preventDefault(); if (!disabled && !busy) setSelectedFile(e.dataTransfer.files[0] ?? null);
+      }}>
+        <p>JSON 파일을 선택하거나 끌어놓으세요</p>
+        <Button className="justify-self-start" onClick={() => fileRef.current?.click()}>파일 선택</Button>
+        {selectedFile && <p className="break-all">{selectedFile.name}</p>}
+      </div>
       <label htmlFor={`${inputId}-text`} className="text-sm">서비스 키 붙여넣기</label>
       <textarea id={`${inputId}-text`} value={text} onChange={e => setText(e.target.value)} rows={5} className="w-full min-w-0 rounded-md border border-control-border bg-canvas p-3 text-sm" />
       <div className="flex flex-wrap gap-2"><Button type="submit" variant="primary" loading={busy}>{tenantId ? '저장' : '등록'}</Button>

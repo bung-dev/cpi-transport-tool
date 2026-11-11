@@ -1,5 +1,6 @@
 import { ApiRequestError, networkError, parseErrorBody, unknownError } from './errors';
 import type { ArtifactSummary, TransportRequest, TransportResponse, Tenant, TenantsResponse, TenantStatusResponse } from './types';
+import type { TransportTemplate, TemplateInput, AuditCategory, AuditEntry } from './types';
 
 // REQ-002 AC-4, REQ-012 AC-2: 같은 출처의 상대 경로만 쓴다. 기준 URL이나 환경 변수 값은 없다.
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -56,6 +57,15 @@ export function registerTenant(name: string, serviceKey: Record<string, unknown>
 export function updateTenant(id: string, fields: { name?: string; serviceKey?: Record<string, unknown> }): Promise<Tenant> {
   return request(`/tenants/${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fields) });
 }
-export function deleteTenant(id: string): Promise<void> {
-  return request(`/tenants/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export function deleteTenant(id: string, deleteTemplates = false): Promise<void> {
+  return request(`/tenants/${encodeURIComponent(id)}${deleteTemplates ? '?deleteTemplates=true' : ''}`, { method: 'DELETE' });
 }
+
+export function getTemplates(): Promise<TransportTemplate[]> { return request('/templates'); }
+export function saveTemplate(body: TemplateInput, id?: string): Promise<TransportTemplate> {
+  return request(id ? `/templates/${encodeURIComponent(id)}` : '/templates', {
+    method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+}
+export function deleteTemplate(id: string): Promise<void> { return request(`/templates/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+export function getAudit(category: AuditCategory | 'all'): Promise<AuditEntry[]> { return request(`/audit?category=${category}`); }

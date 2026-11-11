@@ -5,48 +5,50 @@
 @theme static {
   /* 표면 */
   --color-canvas: #ffffff;
-  --color-surface: #f7f7f5;
-  --color-surface-hover: #f1f1ef;
+  --color-surface: #f4f6f2;
+  --color-surface-hover: #edf2ec;
   --color-scrim: #0f0f0f66;
 
   /* 테두리. control-border는 글자 라벨이 없는 컨트롤(체크박스, 라디오, 스위치, 입력)의 경계용이다 */
-  --color-hairline: #e9e9e7;
-  --color-hairline-strong: #d3d1cb;
-  --color-control-border: #8f8e8a;
+  --color-hairline: #dce4dd;
+  --color-hairline-strong: #c7d4ca;
+  --color-control-border: #7b8d80;
 
   /* 글자 */
-  --color-ink: #1a1a1a;
-  --color-ink-secondary: #5f5e5b;
-  --color-ink-tertiary: #6b6a65;
-  --color-ink-disabled: #a3a29e;
+  --color-ink: #182e29;
+  --color-ink-secondary: #5b6b65;
+  --color-ink-tertiary: #5b6b65;
+  --color-ink-disabled: #8a958e;
 
   /* 강조 */
-  --color-primary: #5645d4;
-  --color-primary-hover: #4c3bc4;
-  --color-primary-pressed: #4130a8;
-  --color-primary-soft: #f0eefc;
+  --color-primary: #185c48;
+  --color-primary-hover: #104633;
+  --color-primary-pressed: #0b3929;
+  --color-primary-soft: #e7f1e9;
   --color-on-primary: #ffffff;
 
   /* 상태 */
-  --color-success-bg: #e3f4e8;
-  --color-success-fg: #1b6e3c;
-  --color-warning-bg: #fdecd8;
-  --color-warning-fg: #8a4500;
-  --color-danger-bg: #fde4e4;
-  --color-danger-fg: #b42318;
-  --color-info-bg: #e1effb;
-  --color-info-fg: #1d5fa8;
-  --color-accent-bg: #ebe7fa;
-  --color-accent-fg: #4534b3;
+  --color-success-bg: #e7f1e9;
+  --color-success-fg: #185c48;
+  --color-warning-bg: #fff4df;
+  --color-warning-fg: #865414;
+  --color-danger-bg: #fceeee;
+  --color-danger-fg: #ac3636;
+  --color-info-bg: #edf3fc;
+  --color-info-fg: #315b88;
+  --color-accent-bg: #e7f1e9;
+  --color-accent-fg: #185c48;
   --color-caution-bg: #fbf3d0;
   --color-caution-fg: #7a5b00;
-  --color-neutral-bg: #efefed;
-  --color-neutral-fg: #4d4c48;
+  --color-neutral-bg: #edf0ec;
+  --color-neutral-fg: #4e6057;
 
   --radius-sm: 6px;
-  --radius-md: 8px;
+  --radius-md: 9px;
   --radius-lg: 12px;
   --radius-xl: 16px;
+  --radius-2xl: 18px;
+  --color-focus: #3972ab;
   --radius-full: 9999px;
 
   --shadow-xs: 0 1px 2px 0 rgba(15, 15, 15, 0.04);
@@ -83,15 +85,44 @@ body {
   background-color: var(--color-surface);
 }
 
+.app-modal {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(440px, calc(100% - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-2xl);
+  padding: 24px;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-overlay);
+}
+.app-modal::backdrop { background: var(--color-scrim); }
+.app-drawer {
+  inset: 0 0 0 auto;
+  margin: 0;
+  width: min(480px, 100%);
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: var(--radius-xl) 0 0 var(--radius-xl);
+}
+.app-palette { width: min(650px, calc(100% - 32px)); }
+@media (max-width: 700px) {
+  .app-drawer { width: 100%; border-radius: 0; }
+}
+
 /* AI-NOTE: 평상시에도 외곽선 색을 primary로 둔다. 외곽선 색을 기본값(currentcolor)으로 두면 Tailwind의 transition 유틸리티(outline-color 포함)가 포커스를 받는 순간 ink에서 primary로 150ms 동안 서서히 바꿔, 그 사이에 읽은 포커스 색이 primary가 아니다 (근거: REQ-101 AC-7, 개발 중 브라우저 확인) */
 :where(button, a, input, select, textarea, [tabindex]) {
-  outline-color: var(--color-primary);
+  outline-color: var(--color-focus);
 }
 
 /* REQ-101 AC-7: 모든 인터랙티브 요소의 키보드 포커스 표시 */
 :where(button, a, input, select, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
+  outline: 3px solid var(--color-focus);
+  outline-offset: 4px;
 }
 
 /* REQ-101 AC-6: 움직임 줄이기 설정에서는 전환과 애니메이션(스켈레톤, 스피너, 대화상자 등장)을 멈춘다 */
