@@ -1,9 +1,9 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, expect, it, vi } from 'vitest';
-import App from '../../App';
 import type { Tenant } from '../../api/types';
 import { PACKAGES, json, mockApi } from '../../test/mockFetch';
+import { navLink, renderAt } from '../../test/appRoutes';
 import { TENANT_STATUS_OK } from '../../test/tenantFixtures';
 import { TestTenantProvider } from '../../test/tenantProvider';
 import { PackagePicker } from './PackagePicker';
@@ -23,7 +23,7 @@ function setup(tenants: () => Response | Promise<Response>) {
     'GET /tenants/status': () => json(TENANT_STATUS_OK),
     'GET /packages?tenantId=ONE': () => json(PACKAGES),
   });
-  render(<App />);
+  renderAt('#/transport');
   return fn;
 }
 const empty = () => json({ store: 'OK', tenants: [] });
@@ -53,7 +53,7 @@ it('REQ-312 AC-2: 0개일 때 미리보기·실제 이관은 비활성이고 안
   const go = screen.getByRole('button', { name: '테넌트 탭으로 이동' });
   expect(go).toBeEnabled();
   await userEvent.click(go);
-  expect(screen.getByRole('tab', { name: '테넌트' })).toHaveAttribute('aria-selected', 'true');
+  expect(navLink('테넌트')).toHaveAttribute('aria-current', 'page');
   expect(screen.getByRole('heading', { level: 2, name: '테넌트' })).toBeInTheDocument();
 });
 

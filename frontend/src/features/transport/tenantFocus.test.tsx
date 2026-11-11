@@ -1,9 +1,9 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
-import App from '../../App';
 import type { Tenant, TransportResponse } from '../../api/types';
 import { ARTIFACTS, PACKAGES, json, mockApi } from '../../test/mockFetch';
+import { renderAt } from '../../test/appRoutes';
 import { TENANTS_OK, TENANT_STATUS_OK } from '../../test/tenantFixtures';
 
 // REQ-310: 원본·대상 라디오를 방향키로 옮겨도 포커스가 새로 선택된 라디오에 남는다(직전 QA-083).
@@ -24,7 +24,7 @@ function setup() {
     for (const pkg of PACKAGES) routes[`GET /packages/${pkg.id}/artifacts?tenantId=${id}`] = () => json(ARTIFACTS);
   }
   const fn = mockApi(routes);
-  render(<App />);
+  renderAt('#/transport');
   return fn;
 }
 const group = (name: string) => within(screen.getByRole('radiogroup', { name }));

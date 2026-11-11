@@ -1,10 +1,10 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, expect, it, vi } from 'vitest';
-import App from '../../App';
 import { getArtifacts, getPackages } from '../../api/client';
 import type { Tenant, TransportResponse } from '../../api/types';
 import { ARTIFACTS, PACKAGES, json, mockApi } from '../../test/mockFetch';
+import { navLink, renderAt } from '../../test/appRoutes';
 import { TENANTS_OK, TENANT_STATUS_OK } from '../../test/tenantFixtures';
 import { TestTenantProvider } from '../../test/tenantProvider';
 import { RunPanel } from './RunPanel';
@@ -23,7 +23,7 @@ function setup(tenants = [...TENANTS_OK.tenants, extra]) {
     'GET /packages/PkgTransportDemo/artifacts?tenantId=source%20%2F2': () => json(ARTIFACTS),
     'POST /transport': init => json({ ...result, dryRun: JSON.parse(init?.body as string).dryRun }),
   });
-  render(<App />);
+  renderAt('#/transport');
   return fn;
 }
 const group = (name: string) => within(screen.getByRole('radiogroup', { name }));
@@ -123,7 +123,7 @@ it('REQ-308 AC-5·AC-7: 테넌트 0개는 안내 버튼으로 테넌트 탭을 �
   setup([]);
   expect(await screen.findByText('등록된 테넌트가 없습니다')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: '테넌트 탭으로 이동' }));
-  expect(screen.getByRole('tab', { name: '테넌트' })).toHaveAttribute('aria-selected', 'true');
+  expect(navLink('테넌트')).toHaveAttribute('aria-current', 'page');
   expect(screen.getByRole('heading', { level: 2, name: '테넌트' })).toBeInTheDocument();
 });
 
@@ -156,7 +156,7 @@ it('REQ-308 AC-5·AC-7: 원본 변경 후 이전 원본의 늦은 실행 결과�
     'GET /packages?tenantId=source%20%2F2': () => json(PACKAGES),
     'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json(ARTIFACTS),
     'POST /transport': () => new Promise<Response>(resolve => { release = resolve; }) });
-  render(<App />);
+  renderAt('#/transport');
   await pickPackage();
   await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
   await userEvent.click(group('원본 테넌트').getByRole('radio', { name: 'EXTRA' }));

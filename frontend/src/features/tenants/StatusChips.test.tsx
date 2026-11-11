@@ -1,9 +1,9 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, expect, it, vi } from 'vitest';
-import App from '../../App';
 import type { TenantCheck, TransportResponse } from '../../api/types';
 import { json, mockApi } from '../../test/mockFetch';
+import { renderAt } from '../../test/appRoutes';
 import { TENANTS_OK, TENANT_STATUS_OK } from '../../test/tenantFixtures';
 import { TestTenantProvider } from '../../test/tenantProvider';
 import { RunPanel } from '../transport/RunPanel';
@@ -96,7 +96,7 @@ it('REQ-303 AC-4·AC-5: 최초 상태 요청 중 칩 클릭과 Enter는 새 요�
 it('REQ-303 AC-4·AC-5 / REQ-307 AC-6: App 상단 banner 안에 연결됨 칩 둘과 접근 가능한 제품명이 있다', async () => {
   mockApi({ 'GET /tenants': () => json(TENANTS_OK), 'GET /tenants/status': () => json(TENANT_STATUS_OK),
     'GET /packages?tenantId=DEV': () => json([]) });
-  render(<App />);
+  renderAt('#/transport');
   const banner = screen.getByRole('banner');
   await within(banner).findByRole('button', { name: '대상 PRD 연결됨' });
   expect(within(banner).getAllByText('연결됨')).toHaveLength(2);

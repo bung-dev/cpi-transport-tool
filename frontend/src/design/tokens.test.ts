@@ -27,47 +27,39 @@ function themeVars(): Record<string, string> {
 const vars = themeVars();
 const color = (name: string) => vars[`--color-${name}`];
 
-const COLOR_TOKENS: Record<string, string> = {
+// REQ-410: merged 시안(ADR-021)의 토큰 값. 이름은 이전 30개를 유지하고 값만 바꾼다. 시안에 값이 없는 이름은 아래 대비 조건만 지킨다.
+const COLOR_NAMES = [
+  'canvas', 'surface', 'surface-hover', 'scrim', 'hairline', 'hairline-strong', 'control-border',
+  'ink', 'ink-secondary', 'ink-tertiary', 'ink-disabled',
+  'primary', 'primary-hover', 'primary-pressed', 'primary-soft', 'on-primary',
+  'success-bg', 'success-fg', 'warning-bg', 'warning-fg', 'danger-bg', 'danger-fg', 'info-bg', 'info-fg',
+  'accent-bg', 'accent-fg', 'caution-bg', 'caution-fg', 'neutral-bg', 'neutral-fg',
+];
+const MERGED_COLORS: Record<string, string> = {
   canvas: '#ffffff',
-  surface: '#f7f7f5',
-  'surface-hover': '#f1f1ef',
-  scrim: '#0f0f0f66',
-  hairline: '#e9e9e7',
-  'hairline-strong': '#d3d1cb',
-  'control-border': '#8f8e8a',
-  ink: '#1a1a1a',
-  'ink-secondary': '#5f5e5b',
-  'ink-tertiary': '#6b6a65',
-  'ink-disabled': '#a3a29e',
-  primary: '#5645d4',
-  'primary-hover': '#4c3bc4',
-  'primary-pressed': '#4130a8',
-  'primary-soft': '#f0eefc',
+  surface: '#f4f6f2',
+  hairline: '#dce4dd',
+  ink: '#182e29',
+  'ink-secondary': '#5b6b65',
+  primary: '#185c48',
+  'primary-hover': '#104633',
+  'primary-soft': '#e7f1e9',
   'on-primary': '#ffffff',
-  'success-bg': '#e3f4e8',
-  'success-fg': '#1b6e3c',
-  'warning-bg': '#fdecd8',
-  'warning-fg': '#8a4500',
-  'danger-bg': '#fde4e4',
-  'danger-fg': '#b42318',
-  'info-bg': '#e1effb',
-  'info-fg': '#1d5fa8',
-  'accent-bg': '#ebe7fa',
-  'accent-fg': '#4534b3',
-  'caution-bg': '#fbf3d0',
-  'caution-fg': '#7a5b00',
-  'neutral-bg': '#efefed',
-  'neutral-fg': '#4d4c48',
+  'warning-fg': '#865414',
+  'warning-bg': '#fff4df',
+  'danger-fg': '#ac3636',
+  'danger-bg': '#fceeee',
+  'info-fg': '#315b88',
+  'info-bg': '#edf3fc',
+  focus: '#3972ab',
 };
 const OTHER_TOKENS: Record<string, string> = {
   '--radius-sm': '6px',
-  '--radius-md': '8px',
+  '--radius-md': '9px',
   '--radius-lg': '12px',
   '--radius-xl': '16px',
+  '--radius-2xl': '18px',
   '--radius-full': '9999px',
-  '--shadow-xs': '0 1px 2px 0 rgba(15, 15, 15, 0.04)',
-  '--shadow-md': '0 4px 12px 0 rgba(15, 15, 15, 0.08)',
-  '--shadow-overlay': '0 16px 48px -8px rgba(15, 15, 15, 0.16)',
 };
 
 // 이전 토큰 이름: card-tint-*, charcoal, slate, steel, stone, muted, ink-deep, link-blue, semantic-*
@@ -81,13 +73,18 @@ const paletteRe = (palette: string) =>
   new RegExp(`(?<![\\w-])(?:[a-z-]+:)*${UTILITY}-(?:(?:${palette})-\\d+|black|white)(?![a-z0-9-])`);
 
 describe('디자인 토큰', () => {
-  it('REQ-101 AC-1: @theme에 색 토큰 30개가 표의 값으로 정의된다', () => {
-    expect(Object.keys(COLOR_TOKENS)).toHaveLength(30);
-    for (const [name, value] of Object.entries(COLOR_TOKENS)) expect(color(name), `--color-${name}`).toBe(value);
+  it('REQ-101 AC-1: @theme에 색 토큰 30개 이름이 모두 정의된다', () => {
+    expect(COLOR_NAMES).toHaveLength(30);
+    for (const name of COLOR_NAMES) expect(color(name), `--color-${name}`).toMatch(/^#[0-9a-f]{6}([0-9a-f]{2})?$/);
   });
 
-  it('REQ-101 AC-1: 반경 5개와 그림자 3개가 표의 값으로 정의된다', () => {
+  it('REQ-410: 세이지 배경·녹색 주 행동·상태색·포커스색이 merged 시안 값이다', () => {
+    for (const [name, value] of Object.entries(MERGED_COLORS)) expect(color(name), `--color-${name}`).toBe(value);
+  });
+
+  it('REQ-410: 반경은 배지 6 / 버튼·입력 9 / 구역 12 / 카드 16 / 대화상자 18px이고 그림자 3개가 정의된다', () => {
     for (const [name, value] of Object.entries(OTHER_TOKENS)) expect(vars[name], name).toBe(value);
+    for (const name of ['--shadow-xs', '--shadow-md', '--shadow-overlay']) expect(vars[name], name).toBeDefined();
   });
 
   it('REQ-101 AC-1: 상태 7종은 <상태>-bg/<상태>-fg 쌍이다', () => {
@@ -208,13 +205,17 @@ describe('기반 규칙', () => {
     expect(block).toContain('scroll-behavior: auto');
   });
 
-  it('REQ-101 AC-7: :focus-visible에 primary 2px 외곽선과 offset 2px 규칙이 있다', () => {
+  it('REQ-101 AC-7 / REQ-410: :focus-visible에 focus 색 3px 외곽선과 offset 4px 규칙이 있다', () => {
     const rule = css.match(/:focus-visible\s*\{([^}]*)\}/)?.[1] ?? '';
-    expect(rule).toContain('outline: 2px solid var(--color-primary)');
-    expect(rule).toContain('outline-offset: 2px');
+    expect(rule).toContain('outline: 3px solid var(--color-focus)');
+    expect(rule).toContain('outline-offset: 4px');
   });
 
-  it('REQ-101 AC-7: 평상시에도 외곽선 색이 primary라 전환 유틸리티가 포커스 색을 ink에서 서서히 바꾸지 않는다', () => {
-    expect(css).toMatch(/:where\([^)]*\)\s*\{\s*outline-color:\s*var\(--color-primary\);\s*\}/);
+  it('REQ-101 AC-7: 평상시에도 외곽선 색이 focus 색이라 전환 유틸리티가 포커스 색을 서서히 바꾸지 않는다', () => {
+    expect(css).toMatch(/:where\([^)]*\)\s*\{\s*outline-color:\s*var\(--color-focus\);\s*\}/);
+  });
+
+  it('REQ-410: focus 색은 canvas와 surface 위에서 3:1 이상이다', () => {
+    for (const bg of ['canvas', 'surface']) expect(contrast(color('focus'), color(bg)), bg).toBeGreaterThanOrEqual(3);
   });
 });

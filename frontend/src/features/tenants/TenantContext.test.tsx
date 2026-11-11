@@ -4,6 +4,7 @@ import userEvent from '../../test/userEvent';
 import { afterEach, expect, it, vi } from 'vitest';
 import App from '../../App';
 import { json, mockApi, PACKAGES } from '../../test/mockFetch';
+import { navLink, setHash } from '../../test/appRoutes';
 import { TENANTS_OK, TENANT_STATUS_OK } from '../../test/tenantFixtures';
 import { TenantProvider, useTenants } from './TenantContext';
 import { TestTenantProvider } from '../../test/tenantProvider';
@@ -17,15 +18,16 @@ function Probe() {
     <button onClick={() => void c.reload()}>reload</button><button onClick={() => void c.refreshStatus()}>refresh</button>
     <button onClick={() => c.setSourceTenantId('other')}>select</button></>;
 }
-it('REQ-302 AC-7: App 두 API는 최초 1회, 탭 전환은 재요청하지 않음', async () => {
+it('REQ-302 AC-7: App 두 API는 최초 1회, 화면 전환은 재요청하지 않음', async () => {
   const fn = mockApi({ 'GET /tenants': () => json(TENANTS_OK), 'GET /tenants/status': () => json(TENANT_STATUS_OK),
-    'GET /packages?tenantId=DEV': () => json(PACKAGES), 'GET /transport/history': () => json([]) });
+    'GET /packages?tenantId=DEV': () => json(PACKAGES), 'GET /transport/history': () => json([]), 'GET /templates': () => json([]) });
+  setHash('#/transport');
   render(<StrictMode><App /></StrictMode>);
   await screen.findByLabelText('패키지 검색');
-  await userEvent.click(screen.getByRole('tab', { name: '테넌트' }));
-  await screen.findByText('등록된 테넌트');
-  await userEvent.click(screen.getByRole('tab', { name: '이력' }));
-  await userEvent.click(screen.getByRole('tab', { name: '이관' }));
+  await userEvent.click(navLink('테넌트'));
+  await screen.findByRole('row', { name: /DEV/ });
+  await userEvent.click(navLink('이관 이력'));
+  await userEvent.click(navLink('새 이관'));
   expect(fn.mock.calls.filter(([url]) => url === '/tenants')).toHaveLength(1);
   expect(fn.mock.calls.filter(([url]) => url === '/tenants/status')).toHaveLength(1);
 });

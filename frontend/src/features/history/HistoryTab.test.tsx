@@ -3,8 +3,8 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TransportResponse } from '../../api/types';
-import App from '../../App';
 import { PACKAGES, json, mockApi } from '../../test/mockFetch';
+import { navLink, renderAt } from '../../test/appRoutes';
 import { formatTime } from '../../lib/formatTime';
 import { HistoryTab } from './HistoryTab';
 
@@ -177,11 +177,11 @@ describe('이력 탭', () => {
       'GET /packages?tenantId=DEV': () => json(PACKAGES),
       'GET /transport/history': () => json([entry('t-1')]),
     });
-    render(<App />);
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    renderAt('#/transport');
+    await userEvent.click(navLink('이관 이력'));
     await screen.findByRole('table');
-    await userEvent.click(screen.getByRole('tab', { name: '이관' }));
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    await userEvent.click(navLink('새 이관'));
+    await userEvent.click(navLink('이관 이력'));
     await screen.findByRole('table');
     await waitFor(() =>
       expect(fn.mock.calls.filter((c) => String(c[0]) === '/transport/history')).toHaveLength(2),
@@ -226,12 +226,12 @@ describe('이력 탭', () => {
       'GET /packages?tenantId=DEV': () => json(PACKAGES),
       'GET /transport/history': () => json([entry('t-1'), entry('t-2')]),
     });
-    render(<App />);
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    renderAt('#/transport');
+    await userEvent.click(navLink('이관 이력'));
     await userEvent.click(await screen.findByRole('button', { name: 't-1' }));
     await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
-    await userEvent.click(screen.getByRole('tab', { name: '이관' }));
-    const historyTab = screen.getByRole('tab', { name: '이력' });
+    await userEvent.click(navLink('새 이관'));
+    const historyTab = navLink('이관 이력');
     await userEvent.click(historyTab);
     await screen.findByRole('button', { name: 't-1' });
     expect(document.activeElement).not.toBe(screen.getByRole('button', { name: 't-1' }));

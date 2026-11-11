@@ -3,8 +3,8 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from './userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ArtifactResult, TransportResponse } from '../api/types';
-import App from '../App';
 import { ARTIFACTS, PACKAGES, json, mockApi } from './mockFetch';
+import { navLink, renderAt } from './appRoutes';
 
 // 접근성 조건(REQ-108 AC-2·AC-3)을 화면 전체(이관 탭 결과 표시 상태, 이력 탭, 확인 대화상자)에서 확인한다.
 // jsdom은 배치를 계산하지 않으므로 REQ-108 AC-1·AC-4(가로 스크롤, 상단 바 한 줄)는 브라우저에서 확인한다.
@@ -48,7 +48,7 @@ function setupApp(historyError = false) {
       historyError && ++historyCalls === 1 ? json({ error: 'CPI_UNAVAILABLE', message: 'down' }, 502) : json([RESULT]),
     'POST /transport': (init) => json({ ...RESULT, dryRun: JSON.parse(init?.body as string).dryRun }),
   });
-  return render(<App />);
+  return renderAt('#/transport');
 }
 
 // AI-NOTE: 키보드 접근 테스트는 병렬 전체 실행에서 호출마다 setTimeout 양보(delay 기본 0)가 쌓여 느려진다. 동작은 같고 양보만 없애려고 delay: null 인스턴스를 쓴다 (근거: REQ-313 AC-1, run 20261020-defect-fix)
@@ -86,9 +86,9 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
     const reached = (el: HTMLElement) => order.includes(el);
     const anyOf = (els: HTMLElement[]) => els.some(reached);
 
-    // 탭 목록: 선택된 탭만 Tab 정지이고 나머지는 화살표로 이동한다(ADR-012)
-    expect(reached(screen.getByRole('tab', { name: '이관' }))).toBe(true);
-    expect(screen.getByRole('tab', { name: '이력' })).toHaveAttribute('tabindex', '-1');
+    // 주 메뉴(REQ-410): 링크마다 Tab 정지이고 상단 검색 버튼도 Tab 순서에 있다
+    for (const name of ['대시보드', '새 이관', '템플릿', '이관 이력', '테넌트', '감사 이력'] as const) expect(reached(navLink(name)), name).toBe(true);
+    expect(reached(within(screen.getByRole('banner')).getByRole('button', { name: /검색/ }))).toBe(true);
     expect(reached(screen.getByLabelText('패키지 검색'))).toBe(true);
     // 라디오 그룹은 그룹당 Tab 정지 하나(선택된 라디오)이고 나머지는 화살표로 이동한다
     expect(anyOf(within(screen.getByRole('list', { name: '패키지 목록' })).getAllByRole('radio'))).toBe(true);
@@ -101,9 +101,9 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
     expect(reached(screen.getByRole('switch', { name: '문제 항목만 보기' }))).toBe(true);
     for (const id of ['A_Mismatch', 'B_Failed', 'C_Clean']) expect(reached(screen.getByRole('button', { name: id })), id).toBe(true);
 
-    // 도달한 요소는 모두 네이티브 button/input이고 tabindex 음수나 disabled가 아니다
+    // 도달한 요소는 모두 네이티브 a/button/input이고 tabindex 음수나 disabled가 아니다
     for (const el of order) {
-      expect(['BUTTON', 'INPUT'], el.outerHTML.slice(0, 60)).toContain(el.tagName);
+      expect(['A', 'BUTTON', 'INPUT'], el.outerHTML.slice(0, 60)).toContain(el.tagName);
       expect(el).toBeEnabled();
       expect(el.tabIndex).toBeGreaterThanOrEqual(0);
     }
@@ -139,16 +139,16 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
     screen.getByRole('button', { name: '선택 해제' }).focus();
     await user.keyboard('{Enter}');
     expect(boxes.every((b) => !(b as HTMLInputElement).checked)).toBe(true);
-    // 탭 목록: 화살표 키
-    screen.getByRole('tab', { name: '이관' }).focus();
-    await user.keyboard('{ArrowRight}');
-    expect(screen.getByRole('tab', { name: '이력' })).toHaveAttribute('aria-selected', 'true');
+    // 주 메뉴 링크: Enter
+    navLink('이관 이력').focus();
+    await user.keyboard('{Enter}');
+    expect(navLink('이관 이력')).toHaveAttribute('aria-current', 'page');
   });
 
   it('REQ-108 AC-2: 이력 탭(목록·상세·오류)의 컨트롤이 Tab 순서에 있고 Enter/Space로 조작된다', async () => {
     const user = keyboardUser();
     setupApp(true);
-    await user.click(screen.getByRole('tab', { name: '이력' }));
+    await user.click(navLink('이관 이력'));
     // 오류 상태: 다시 시도
     const retry = await screen.findByRole('button', { name: '다시 시도' });
     expect((await tabOrder(user)).includes(retry)).toBe(true);
@@ -203,7 +203,7 @@ describe('접근 가능한 이름과 색 외 구분 (REQ-108 AC-3)', () => {
 
   it('REQ-108 AC-3: 이력 탭의 입력·버튼도 이름과 글자가 있다', async () => {
     setupApp();
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    await userEvent.click(navLink('이관 이력'));
     await screen.findByRole('table');
     for (const b of Array.from(document.querySelectorAll<HTMLElement>('button'))) expect((b.textContent ?? '').trim().length).toBeGreaterThan(0);
     await userEvent.click(screen.getByRole('button', { name: 't-a11y' }));

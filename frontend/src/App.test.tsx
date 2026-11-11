@@ -6,7 +6,7 @@ import userEvent from './test/userEvent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TransportResponse } from './api/types';
 import { PACKAGES, json, mockApi } from './test/mockFetch';
-import App from './App';
+import { navLink, renderAt } from './test/appRoutes';
 
 const HISTORY_ENTRY: TransportResponse = {
   transportId: 't-hist-1',
@@ -42,30 +42,29 @@ describe('App', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('REQ-001 AC-2: App이 렌더링된다', () => {
-    render(<App />);
+    renderAt('#/transport');
     expect(screen.getByRole('heading', { name: 'CPI Transport Tool' })).toBeInTheDocument();
   });
 
-  it('REQ-009 AC-1: 탭은 tablist/tab/aria-selected를 쓰고 기본은 이관', () => {
-    render(<App />);
-    expect(screen.getByRole('tablist')).toBeInTheDocument();
-    const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['이관', '이력', '테넌트']);
-    expect(screen.getByRole('tab', { name: '이관' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: '이력' })).toHaveAttribute('aria-selected', 'false');
+  it('REQ-009 AC-1 / REQ-410: 탭 대신 주 메뉴 링크를 쓰고 현재 화면은 aria-current다', () => {
+    renderAt('#/transport');
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(within(screen.getByRole('navigation', { name: '주 메뉴' })).getAllByRole('link')).toHaveLength(6);
+    expect(navLink('새 이관')).toHaveAttribute('aria-current', 'page');
+    expect(navLink('이관 이력')).not.toHaveAttribute('aria-current');
   });
 
-  it('REQ-009 AC-1: 탭을 누르면 패널이 전환되고 이전 패널은 언마운트된다', async () => {
-    render(<App />);
+  it('REQ-009 AC-1: 메뉴를 누르면 화면이 전환되고 이전 패널은 언마운트된다', async () => {
+    renderAt('#/transport');
     expect(await screen.findByLabelText('패키지 검색')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
-    expect(screen.getByRole('tab', { name: '이력' })).toHaveAttribute('aria-selected', 'true');
+    await userEvent.click(navLink('이관 이력'));
+    expect(navLink('이관 이력')).toHaveAttribute('aria-current', 'page');
     expect(await screen.findByRole('button', { name: '새로고침' })).toBeInTheDocument();
     expect(screen.queryByLabelText('패키지 검색')).toBeNull();
   });
 
   it('REQ-009 AC-3: 본문은 max-w 가운데 정렬, min-w-0, 좌우 padding 16px 이상', () => {
-    render(<App />);
+    renderAt('#/transport');
     const main = screen.getByRole('main');
     expect(main.className).toContain('max-w-[1200px]');
     expect(main.className).toContain('mx-auto');
@@ -73,32 +72,28 @@ describe('App', () => {
     expect(main.className).toContain('px-4');
   });
 
-  it('REQ-102 AC-1: 상단 바는 높이 56px·canvas 배경·아래 hairline·sticky top-0이고 안에 h1 제품명과 탭 목록이 있다', () => {
-    render(<App />);
+  it('REQ-102 AC-1 / REQ-410: 상단 바는 sticky top-0이고 안에 h1 제품명과 주 메뉴가 있으며 본문에는 메뉴가 없다', () => {
+    renderAt('#/transport');
     const bar = screen.getByRole('banner');
     expect(bar.className).toContain('sticky');
     expect(bar.className).toContain('top-0');
-    expect(bar.className).toContain('h-14');
-    expect(bar.className).toContain('bg-canvas');
-    expect(bar.className).toContain('border-b border-hairline');
     expect(within(bar).getByRole('heading', { level: 1, name: 'CPI Transport Tool' })).toBeInTheDocument();
-    expect(within(bar).getByRole('tablist')).toBeInTheDocument();
-    expect(bar.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
-    expect(within(screen.getByRole('main')).queryByRole('tablist')).toBeNull();
+    expect(within(bar).getByRole('navigation', { name: '주 메뉴' })).toBeInTheDocument();
+    expect(within(screen.getByRole('main')).queryByRole('navigation')).toBeNull();
   });
 
   it('REQ-102 AC-3: body 배경은 surface 토큰이고 App 최상위·상단 바·카드는 그에 맞는 배경이다', () => {
     const css = readFileSync(join(__dirname, 'index.css'), 'utf8');
     const body = css.match(/\nbody\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(body).toContain('background-color: var(--color-surface)');
-    expect(css).toContain('--color-surface: #f7f7f5;');
-    const { container } = render(<App />);
+    expect(css).toContain('--color-surface: #f4f6f2;');
+    const { container } = renderAt('#/transport');
     expect((container.firstElementChild as HTMLElement).className).toContain('bg-surface');
     expect(screen.getByRole('banner').className).toContain('bg-canvas');
   });
 
   it('REQ-102 AC-4: 본문 상자(main)가 최대 폭 1200px·가운데 정렬·안쪽 여백 16/24px를 같은 요소에 갖고 상단 바 안쪽 상자도 같은 정의다', () => {
-    render(<App />);
+    renderAt('#/transport');
     const main = screen.getByRole('main');
     for (const c of ['max-w-[1200px]', 'mx-auto', 'px-4', 'md:px-6', 'min-w-0']) {
       expect(main.className, c).toContain(c);
@@ -112,8 +107,8 @@ describe('App', () => {
   });
 
   it('REQ-102 AC-5: 이관 탭 맨 위에 제목 "패키지 이관"(h2)과 설명이 있고 카드 제목은 h3이다', async () => {
-    render(<App />);
-    const panel = screen.getByRole('tabpanel');
+    renderAt('#/transport');
+    const panel = screen.getByRole('main');
     expect(within(panel).getAllByRole('heading')[0]).toHaveTextContent('패키지 이관');
     expect(within(panel).getByRole('heading', { level: 2, name: '패키지 이관' })).toBeInTheDocument();
     expect(
@@ -126,10 +121,10 @@ describe('App', () => {
   });
 
   it('REQ-102 AC-5: 이력 탭 목록에는 제목 "이관 이력"(h2)·설명·새로고침이 있고 상세에서는 새로고침만 없다', async () => {
-    render(<App />);
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    renderAt('#/transport');
+    await userEvent.click(navLink('이관 이력'));
     const refresh = await screen.findByRole('button', { name: '새로고침' });
-    const panel = screen.getByRole('tabpanel');
+    const panel = screen.getByRole('main');
     expect(within(panel).getByRole('heading', { level: 2, name: '이관 이력' })).toBeInTheDocument();
     expect(within(panel).getByText('지난 이관 기록을 확인합니다.')).toBeInTheDocument();
     expect(refresh).toBeInTheDocument();
@@ -141,8 +136,8 @@ describe('App', () => {
   });
 
   it('REQ-102 AC-5: 제목 수준을 건너뛰지 않는다(h1 → h2 → h3 이관 결과 → h4 아티팩트 ID → h5 소제목)', async () => {
-    render(<App />);
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    renderAt('#/transport');
+    await userEvent.click(navLink('이관 이력'));
     await userEvent.click(await screen.findByRole('button', { name: 't-hist-1' }));
     const levels = screen.getAllByRole('heading').map((h) => Number(h.tagName.slice(1)));
     expect(levels[0]).toBe(1);
@@ -153,20 +148,20 @@ describe('App', () => {
   });
 
   it('REQ-101 AC-4: 페이지 제목은 24px·굵기 600·음수 자간 클래스이고 이력 표의 packageId·transportId 값은 고정폭이다', async () => {
-    render(<App />);
+    renderAt('#/transport');
     const title = screen.getByRole('heading', { level: 2, name: '패키지 이관' });
     expect(title.className).toContain('text-2xl');
     expect(title.className).toContain('font-semibold');
     expect(title.className).toContain('tracking-tight');
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    await userEvent.click(navLink('이관 이력'));
     const idButton = await screen.findByRole('button', { name: 't-hist-1' });
     expect(idButton.className).toContain('font-mono');
     expect(screen.getByRole('cell', { name: 'PkgTransportDemo' }).className).toContain('font-mono');
   });
 
   it('REQ-101 AC-6: 이력 표의 transportId 버튼은 색 전환 150ms가 있고 포커스 외곽선을 지우지 않는다', async () => {
-    render(<App />);
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    renderAt('#/transport');
+    await userEvent.click(navLink('이관 이력'));
     const idButton = await screen.findByRole('button', { name: 't-hist-1' });
     expect(idButton.className).toContain('transition-colors');
     expect(idButton.className).toContain('duration-150');
