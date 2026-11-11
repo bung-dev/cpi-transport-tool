@@ -15,8 +15,7 @@ import {
   watch,
   type ScanResult,
   type Watch,
-  tabBtn,
-} from '../../lib/ui';
+  tabBtn, gotoFresh } from '../../lib/ui';
 
 test.afterEach(async ({ request }) => {
   await after(request);
@@ -36,7 +35,7 @@ test('QA-225: 테넌트 0개 앱 - 안내 문구와 이름 유지', async ({ pag
   const w = watch(page);
   rec.tenantsAtStart = (await tenantList(request)).length;
   expect(rec.tenantsAtStart, '테넌트 0개로 시작').toBe(0);
-  await page.goto('/#/transport');
+  await gotoFresh(page, '/#/transport');
   await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
   await page.waitForTimeout(800);
   rec.scannerControl = await scannerControl(page, w);

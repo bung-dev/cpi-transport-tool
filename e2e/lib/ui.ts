@@ -187,8 +187,13 @@ export async function openTab(page: Page, name: OldTab): Promise<void> {
   await tabBtn(page, name).click();
   await expect(tabBtn(page, name)).toHaveAttribute('aria-current', 'page');
 }
+/** 해시만 다른 주소로 goto하면 브라우저가 새로 읽지 않는다(해시 이동). 예전 goto('/')처럼 항상 새로 읽게 빈 페이지를 거친다. */
+export async function gotoFresh(page: Page, url: string, opts?: Parameters<Page['goto']>[1]) {
+  await page.goto('about:blank');
+  return page.goto(url, opts);
+}
 export async function openTransport(page: Page): Promise<void> {
-  await page.goto('/#/transport');
+  await gotoFresh(page, '/#/transport');
   await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
   await expect(page.getByRole('list', { name: '패키지 목록' }).getByRole('radio').first()).toBeVisible();
 }

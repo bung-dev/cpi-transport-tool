@@ -2,7 +2,7 @@
 // 앱: --profile stub --dev unset --prd unset (테넌트 0개로 시작, 읽기 전용 기본값). 케이스는 파일 순서대로 한다.
 import { expect, test, type Page } from '@playwright/test';
 import { after, app, key, R, shot, tenantList } from '../../lib/qa';
-import { foreignHosts, grp, openTab, previewBtn, registerViaUi, tabBtn, watch } from '../../lib/ui';
+import { foreignHosts, grp, openTab, previewBtn, registerViaUi, tabBtn, watch, gotoFresh } from '../../lib/ui';
 import { countAny, P_DST, P_GO, P_NONE, P_REGISTER, P_SAME, P_SRC, phraseReport } from '../../lib/r2';
 
 test.afterEach(async ({ request }) => {
@@ -34,7 +34,7 @@ test('QA-160: 테넌트 0개 - 비활성 이유와 패키지 영역 안내', asy
   const t0 = await app(request, 'GET', '/tenants');
   rec.tenantsAtStart = { store: t0.json?.store, count: (t0.json?.tenants ?? []).length };
   expect(rec.tenantsAtStart.count).toBe(0);
-  await page.goto('/#/transport');
+  await gotoFresh(page, '/#/transport');
   await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
   await page.waitForTimeout(800);
   const rep = await phraseReport(page, ALL);
@@ -53,7 +53,7 @@ test('QA-160: 테넌트 0개 - 비활성 이유와 패키지 영역 안내', asy
 test('QA-161: 테넌트 0개 - 실행 비활성, 등록 안내, 탭 이동', async ({ page }) => {
   const rec = R('QA-161');
   const w = watch(page);
-  await page.goto('/#/transport');
+  await gotoFresh(page, '/#/transport');
   await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
   await page.waitForTimeout(600);
   rec.previewBtnDisabled = await previewBtn(page).isDisabled();
@@ -84,7 +84,7 @@ test('QA-162: 테넌트 1개 이상 - 기존 문구 규칙', async ({ page, requ
   test.setTimeout(180000);
   const rec = R('QA-162');
   const w = watch(page);
-  await page.goto('/#/transport');
+  await gotoFresh(page, '/#/transport');
   await registerViaUi(page, 'QA-ONE', svcKey());
   const list = await tenantList(request);
   rec.tenantsAfterRegister = list.map((t) => t.name);
@@ -112,7 +112,7 @@ test('QA-163: 등록 -> 삭제 -> 새로고침 - 문구 복귀와 유지', async
   test.setTimeout(240000);
   const rec = R('QA-163');
   const w = watch(page);
-  await page.goto('/#/transport');
+  await gotoFresh(page, '/#/transport');
   // 1. QA-ONE 삭제 (확인 대화상자 승인)
   await openTab(page, '테넌트');
   const delOne = async (name: string) => {
@@ -183,7 +183,7 @@ test('QA-164: 테넌트 목록을 읽는 중에는 등록 안내를 쓰지 않�
     },
   );
   const t0 = Date.now();
-  await page.goto('/#/transport', { waitUntil: 'commit' });
+  await gotoFresh(page, '/#/transport', { waitUntil: 'commit' });
   await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
   await page.waitForTimeout(500 - Math.min(500, Date.now() - t0 - 0));
   const mid = async (label: string) => {
@@ -246,7 +246,7 @@ test('QA-165: 테넌트 목록 읽기 실패와 다시 시도', async ({ page, r
       else await route.continue();
     };
     await page.route(isTenants, handler);
-    await page.goto('/#/transport');
+    await gotoFresh(page, '/#/transport');
     await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
     await page.waitForTimeout(1200);
     const rep = await phraseReport(page, ALL);

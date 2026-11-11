@@ -1,7 +1,7 @@
 // round 02 공용 도우미 (REQ-312·315·316·317·318 묶음). qa.ts·ui.ts 를 그대로 쓰고 여기서는 새 것만 더한다.
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { app, call, STUB } from './qa';
-import { resultRegion } from './ui';
+import { resultRegion, gotoFresh } from './ui';
 
 export const NOTICE = '대상 테넌트에서 이 아티팩트가 편집 중(잠김)일 수 있습니다. CPI 화면에서 편집을 저장하거나 취소한 뒤 다시 시도하세요.';
 export const countOf = (s: string, sub: string): number => (sub ? s.split(sub).length - 1 : 0);
@@ -176,7 +176,7 @@ export async function replaceHistory(page: Page, rows: any[]): Promise<() => Pro
   };
 }
 export async function openHistory(page: Page): Promise<void> {
-  await page.goto('/#/history');
+  await gotoFresh(page, '/#/history');
   await expect(page.getByRole('columnheader', { name: '모드', exact: true })).toBeVisible();
   await expect(page.locator('table tbody tr').first()).toBeVisible();
   await page.waitForTimeout(300);
