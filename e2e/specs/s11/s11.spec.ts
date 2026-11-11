@@ -15,6 +15,7 @@ import {
   watch,
   type ScanResult,
   type Watch,
+  tabBtn,
 } from '../../lib/ui';
 
 test.afterEach(async ({ request }) => {
@@ -35,7 +36,7 @@ test('QA-225: 테넌트 0개 앱 - 안내 문구와 이름 유지', async ({ pag
   const w = watch(page);
   rec.tenantsAtStart = (await tenantList(request)).length;
   expect(rec.tenantsAtStart, '테넌트 0개로 시작').toBe(0);
-  await page.goto('/');
+  await page.goto('/#/transport');
   await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
   await page.waitForTimeout(800);
   rec.scannerControl = await scannerControl(page, w);
@@ -69,7 +70,7 @@ test('QA-225: 테넌트 0개 앱 - 안내 문구와 이름 유지', async ({ pag
   rec.goButtonCount = await go.count();
   if (rec.goButtonCount) await go.click();
   else await openTab(page, '테넌트');
-  await expect(page.getByRole('tab', { name: '테넌트', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(tabBtn(page, '테넌트')).toHaveAttribute('aria-current', 'page');
   await scan(page, rec, '0개-테넌트', w);
   await shot(page, 'QA-225-tenants');
   // 4. 이력 탭

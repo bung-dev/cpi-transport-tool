@@ -2,7 +2,7 @@
 // 앱: --profile stub --read-only false. 이력 응답은 page.route 로 대체한다(QA-199 만 실제 백엔드 이력).
 import { expect, test, type Page } from '@playwright/test';
 import { after, app, historyOf, key, R, registerTenant, shot } from '../../lib/qa';
-import { confirmDialogRun, foreignHosts, grp, historyTable, modeRadio, openTab, realBtn, resultRegion, watch } from '../../lib/ui';
+import { confirmDialogRun, foreignHosts, grp, historyTable, modeRadio, openTab, realBtn, resultRegion, watch, registerViaUi } from '../../lib/ui';
 import { fakeUuid, measureHistory, openHistory, plainRow, rMax, replaceHistory, SET_A, SET_B, SET_C, UUID_MAX, type StrSet } from '../../lib/r2';
 
 test.use({ actionTimeout: 20000 });
@@ -166,13 +166,7 @@ test('QA-199: 실제 백엔드 이력의 40자 테넌트 이름', async ({ page,
   await page.goto('/');
   // 화면 테넌트 탭에서 등록
   for (const [name, k] of [[SRC, key(18081, '127.0.0.1')], [TGT, key(18082, 'localhost')]] as Array<[string, any]>) {
-    await openTab(page, '테넌트');
-    const g = page.getByRole('group', { name: '테넌트 등록' });
-    await g.getByRole('textbox', { name: '이름' }).fill(name);
-    await g.getByRole('textbox', { name: '서비스 키 붙여넣기' }).fill(JSON.stringify(k));
-    const resp = page.waitForResponse((r) => r.url() === 'http://localhost:8080/tenants' && r.request().method() === 'POST');
-    await g.getByRole('button', { name: '등록', exact: true }).click();
-    expect((await resp).status(), `${name.slice(0, 10)} 등록`).toBe(201);
+    await registerViaUi(page, name, k);
   }
   const tl = (await app(request, 'GET', '/tenants')).json.tenants.map((t: any) => t.name);
   rec.tenantNames = tl;
@@ -307,7 +301,7 @@ test('QA-201: 크기 전환과 새로고침 반복', async ({ page }) => {
   rec.reloads = [];
   for (let i = 1; i <= 3; i++) {
     await page.reload();
-    await page.getByRole('tab', { name: '이력', exact: true }).click();
+    await openTab(page, '이력');
     await expect(page.locator('table tbody tr').first()).toBeVisible();
     const early = await measureHistory(page, 0);
     await page.waitForTimeout(600);

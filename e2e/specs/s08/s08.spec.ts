@@ -34,7 +34,9 @@ test('QA-213: 대표 사용자 흐름 1~7단계 (최종 코드)', async ({ page,
     // 1. 테넌트 탭에서 붙여넣기로 등록 (성공 시 입력 비움)
     await page.goto('/');
     await registerViaUi(page, NAME, key(18082, '127.0.0.1'));
-    const g = page.getByRole('group', { name: '테넌트 등록' });
+    // S2(REQ-412): 성공하면 서랍이 닫힌다. 다시 열어 입력이 비었는지 보고 닫는다.
+    await page.getByRole('button', { name: '테넌트 등록', exact: true }).click();
+    const g = page.getByRole('dialog', { name: '테넌트 등록' });
     rec.step1 = {
       nameAfter: await g.getByRole('textbox', { name: '이름' }).inputValue(),
       keyAfterLen: (await g.getByRole('textbox', { name: '서비스 키 붙여넣기' }).inputValue()).length,
@@ -44,6 +46,8 @@ test('QA-213: 대표 사용자 흐름 1~7단계 (최종 코드)', async ({ page,
     expect(rec.step1.nameAfter, '성공하면 이름 입력 비움').toBe('');
     expect(rec.step1.keyAfterLen, '성공하면 서비스 키 입력 비움').toBe(0);
     expect(rec.step1.tenantsAfter).toContain(NAME);
+    await page.keyboard.press('Escape');
+    await expect(g).toBeHidden();
 
     // 2~3. 이관 탭으로 가서 키보드만으로 원본 DEV·대상 QA-FLOW-TGT·패키지 선택 (포커스 판정은 kbdFlow 안에서)
     const steps = await kbdFlow(page, w, NAME);

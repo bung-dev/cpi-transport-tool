@@ -49,6 +49,7 @@ import {
   watch,
   type ScanResult,
   type Watch,
+  tabBtn,
 } from '../../lib/ui';
 
 test.afterEach(async ({ request }) => {
@@ -269,7 +270,7 @@ test('QA-218: 이력 목록과 상세의 모드 배지', async ({ page, request 
   rec.api = { rows: hist.length, preview: P, real: Rn };
   expect(P).toBeGreaterThan(0);
   expect(Rn).toBeGreaterThan(0);
-  await page.goto('/');
+  await page.goto('/#/transport');
   await openTab(page, '이력');
   const read = async (label: string) => {
     const t = await historyTable(page);
@@ -354,7 +355,7 @@ test('QA-219: 이 변경 전에 저장된 이력 항목의 표시 (응답 대체
     if (route.request().method() === 'GET') await route.fulfill({ status: 200, contentType: 'application/json', body });
     else await route.continue();
   });
-  await page.goto('/');
+  await page.goto('/#/transport');
   await openTab(page, '이력');
   const t = await historyTable(page);
   const idx = { src: t.headers.indexOf('원본'), tgt: t.headers.indexOf('대상'), mode: t.headers.indexOf('모드'), dep: t.headers.indexOf('배포'), res: t.headers.indexOf('결과'), id: t.headers.indexOf('이관 ID') };
@@ -445,7 +446,7 @@ test('QA-220: 모든 탭 전수 스캔, 번들 정적 스캔, 새로고침 반�
   await openTab(page, '테넌트');
   await scan(page, rec, '테넌트-목록과-등록폼', w);
   rec.sweeps.push(await hoverFocusSweep(page, '테넌트-목록'));
-  const row = page.getByRole('listitem').filter({ hasText: 'QA319-T1' });
+  const row = page.getByRole('row').filter({ hasText: 'QA319-T1' });
   await row.getByRole('button', { name: '수정' }).click();
   await scan(page, rec, '테넌트-수정폼', w);
   const cancelEdit = page.getByRole('button', { name: '취소', exact: true });
@@ -476,10 +477,10 @@ test('QA-220: 모든 탭 전수 스캔, 번들 정적 스캔, 새로고침 반�
   // 7. 새로고침 반복 3회: 각 탭의 초기 로딩 직후와 안정된 뒤
   for (let i = 1; i <= 3; i++) {
     for (const tab of ['이관', '이력', '테넌트'] as const) {
-      await page.goto('/', { waitUntil: 'commit' });
+      await page.goto('/#/transport', { waitUntil: 'commit' });
       await scan(page, rec, `새로고침${i}-${tab}-로딩직후`, w);
       await page.waitForLoadState('load');
-      await expect(page.getByRole('tab', { name: tab, exact: true })).toBeVisible();
+      await expect(tabBtn(page, tab)).toBeVisible();
       await openTab(page, tab);
       await page.waitForTimeout(700);
       await scan(page, rec, `새로고침${i}-${tab}-안정`, w);
@@ -562,7 +563,7 @@ test('QA-221: 확인 대화상자 - 열기·닫기 반복과 문구', async ({ p
   expect.soft(rec.approve.badge).toBe('실제 이관');
   // 7. 테넌트 삭제 확인 대화상자(열고 취소)
   await openTab(page, '테넌트');
-  const row = page.getByRole('listitem').filter({ hasText: 'QA319-T1' });
+  const row = page.getByRole('row').filter({ hasText: 'QA319-T1' });
   await row.getByRole('button', { name: '삭제' }).click();
   await expect(dlg).toBeVisible();
   rec.deleteDialog = await readDlg();
@@ -620,7 +621,7 @@ test('QA-222: 오류·안내 상태 전수', async ({ page, request }) => {
   // 1. 패키지 목록 읽기 실패
   for (const [nm, mode] of [['abort', ABORT], ['500json', JSON500], ['500html', HTML500]] as const) {
     const off = await replaceWith(isPkgList, 'GET', mode, `GET /packages -> ${nm}`);
-    await page.goto('/');
+    await page.goto('/#/transport');
     await expect(page.getByRole('alert').first()).toBeVisible();
     await guide(`패키지목록-${nm}`, { retry: true });
     await off();
@@ -628,7 +629,7 @@ test('QA-222: 오류·안내 상태 전수', async ({ page, request }) => {
   // 2. 아티팩트 목록 읽기 실패
   for (const [nm, mode] of [['abort', ABORT], ['500json', JSON500], ['500html', HTML500]] as const) {
     const off = await replaceWith(isArtifacts, 'GET', mode, `GET /packages/*/artifacts -> ${nm}`);
-    await page.goto('/');
+    await page.goto('/#/transport');
     await page.getByRole('list', { name: '패키지 목록' }).getByRole('radio').first().check();
     await expect(page.getByRole('alert').first()).toBeVisible();
     await guide(`아티팩트목록-${nm}`);
@@ -721,7 +722,7 @@ test('QA-222: 오류·안내 상태 전수', async ({ page, request }) => {
   // 6. 이력
   for (const [nm, mode] of [['500', JSON500], ['abort', ABORT], ['빈배열', { status: 200, contentType: 'application/json', body: '[]' } as Mode]] as const) {
     const off = await replaceWith(isHistory, 'GET', mode, `GET /transport/history -> ${nm}`);
-    await page.goto('/');
+    await page.goto('/#/transport');
     await openTab(page, '이력');
     await page.waitForTimeout(800);
     if (nm === '빈배열') {
@@ -734,13 +735,15 @@ test('QA-222: 오류·안내 상태 전수', async ({ page, request }) => {
   }
   // 7. 테넌트
   const offT = await replaceWith(isTenants, 'GET', ABORT, 'GET /tenants -> abort');
-  await page.goto('/');
+  await page.goto('/#/transport');
   await openTab(page, '테넌트');
   await guide('테넌트-목록abort', { retry: true });
   await offT();
-  await page.goto('/');
+  await page.goto('/#/transport');
   await openTab(page, '테넌트');
-  const g = page.getByRole('group', { name: '테넌트 등록' });
+  // S2(REQ-412): 등록 폼은 "테넌트 등록" 버튼으로 여는 서랍이다.
+  await page.getByRole('button', { name: '테넌트 등록', exact: true }).click();
+  const g = page.getByRole('dialog', { name: '테넌트 등록' });
   const tryReg = async (nm: string, name: string, text: string) => {
     await g.getByRole('textbox', { name: '이름' }).fill(name);
     await g.getByRole('textbox', { name: '서비스 키 붙여넣기' }).fill(text);
@@ -754,7 +757,7 @@ test('QA-222: 오류·안내 상태 전수', async ({ page, request }) => {
   await tryReg('키형식400', 'QA222-bad', '{"oauth":{}}');
   // 8. 연결 상태 칩
   const chipBtns = page.locator('header').getByRole('button');
-  await page.goto('/');
+  await page.goto('/#/transport');
   await page.waitForTimeout(800);
   rec.chipTexts = (await chipBtns.allInnerTexts()).map((s) => s.replace(/\s+/g, ' '));
   await guide('칩-PRD기존오류', { expectAlert: false });
@@ -786,9 +789,11 @@ test('QA-223: 사용자가 입력한 데이터는 치환되지 않는다', async
   const c = (await tenantList(request)).length;
   rec.tenantCountBefore = c;
   rec.hadT1 = !!(await findTenant(request, 'QA319-T1'));
-  await page.goto('/');
+  await page.goto('/#/transport');
   await openTab(page, '테넌트');
-  const g = page.getByRole('group', { name: '테넌트 등록' });
+  // S2(REQ-412): 등록 폼은 "테넌트 등록" 버튼으로 여는 서랍이다.
+  await page.getByRole('button', { name: '테넌트 등록', exact: true }).click();
+  const g = page.getByRole('dialog', { name: '테넌트 등록' });
   await g.getByRole('textbox', { name: '이름' }).fill(NAME);
   await g.getByRole('textbox', { name: '서비스 키 붙여넣기' }).fill(JSON.stringify(key(18082, 'localhost')));
   const resp = page.waitForResponse((r) => r.url() === 'http://localhost:8080/tenants' && r.request().method() === 'POST');
@@ -798,9 +803,9 @@ test('QA-223: 사용자가 입력한 데이터는 치환되지 않는다', async
   rec.storedName = stored?.name;
   expect(stored?.name, '저장된 이름이 입력 그대로').toBe(NAME);
   // 등록 응답(201) 뒤에 앱이 GET /tenants로 목록을 다시 읽어 그린다. 응답 직후 바로 읽으면 이전 목록을 읽으므로 새 항목이 보일 때까지 기다린다.
-  const mine = page.getByRole('listitem').filter({ hasText: NAME });
+  const mine = page.getByRole('row').filter({ hasText: NAME });
   await expect.soft(mine.first(), '테넌트 탭 목록에 입력한 이름 그대로').toBeVisible();
-  const listText = await page.getByRole('listitem').filter({ hasText: 'QA319-' }).allInnerTexts();
+  const listText = await page.getByRole('row').filter({ hasText: 'QA319-' }).allInnerTexts();
   rec.tenantTabItems = listText.map((s) => s.replace(/\s+/g, ' '));
   expect.soft(rec.tenantTabItems.some((s: string) => s.includes(NAME)), '테넌트 탭 목록에 입력한 이름 그대로').toBe(true);
   await openTab(page, '이관');

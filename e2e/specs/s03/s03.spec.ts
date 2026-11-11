@@ -34,7 +34,7 @@ test('QA-160: 테넌트 0개 - 비활성 이유와 패키지 영역 안내', asy
   const t0 = await app(request, 'GET', '/tenants');
   rec.tenantsAtStart = { store: t0.json?.store, count: (t0.json?.tenants ?? []).length };
   expect(rec.tenantsAtStart.count).toBe(0);
-  await page.goto('/');
+  await page.goto('/#/transport');
   await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
   await page.waitForTimeout(800);
   const rep = await phraseReport(page, ALL);
@@ -53,7 +53,7 @@ test('QA-160: 테넌트 0개 - 비활성 이유와 패키지 영역 안내', asy
 test('QA-161: 테넌트 0개 - 실행 비활성, 등록 안내, 탭 이동', async ({ page }) => {
   const rec = R('QA-161');
   const w = watch(page);
-  await page.goto('/');
+  await page.goto('/#/transport');
   await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
   await page.waitForTimeout(600);
   rec.previewBtnDisabled = await previewBtn(page).isDisabled();
@@ -71,10 +71,11 @@ test('QA-161: 테넌트 0개 - 실행 비활성, 등록 안내, 탭 이동', asy
   expect(rec.noneVisible, '"등록된 테넌트가 없습니다"').toBe(true);
   expect(rec.goVisible, '"테넌트 탭으로 이동" 버튼').toBe(true);
   await go.click();
-  rec.tenantTabSelected = await tabBtn(page, '테넌트').getAttribute('aria-selected');
-  rec.registerFormVisible = await page.getByRole('group', { name: '테넌트 등록' }).isVisible().catch(() => false);
+  rec.tenantTabSelected = await tabBtn(page, '테넌트').getAttribute('aria-current');
+  // S2(REQ-412): 등록 폼은 서랍이다. 테넌트 화면에서 서랍을 여는 "테넌트 등록" 버튼이 보이면 등록할 수 있다.
+  rec.registerFormVisible = await page.getByRole('button', { name: '테넌트 등록', exact: true }).isVisible().catch(() => false);
   await shot(page, 'QA-161-tenants');
-  expect(rec.tenantTabSelected).toBe('true');
+  expect(rec.tenantTabSelected).toBe('page');
   expect(rec.registerFormVisible, '등록 폼이 보임').toBe(true);
   finish(rec, w);
 });
@@ -83,7 +84,7 @@ test('QA-162: 테넌트 1개 이상 - 기존 문구 규칙', async ({ page, requ
   test.setTimeout(180000);
   const rec = R('QA-162');
   const w = watch(page);
-  await page.goto('/');
+  await page.goto('/#/transport');
   await registerViaUi(page, 'QA-ONE', svcKey());
   const list = await tenantList(request);
   rec.tenantsAfterRegister = list.map((t) => t.name);
@@ -111,11 +112,11 @@ test('QA-163: 등록 -> 삭제 -> 새로고침 - 문구 복귀와 유지', async
   test.setTimeout(240000);
   const rec = R('QA-163');
   const w = watch(page);
-  await page.goto('/');
+  await page.goto('/#/transport');
   // 1. QA-ONE 삭제 (확인 대화상자 승인)
   await openTab(page, '테넌트');
   const delOne = async (name: string) => {
-    const row = page.getByRole('listitem').filter({ hasText: name });
+    const row = page.getByRole('row').filter({ hasText: name });
     await row.getByRole('button', { name: '삭제' }).click();
     const dlg = page.getByRole('dialog');
     await expect(dlg).toBeVisible();
@@ -182,7 +183,7 @@ test('QA-164: 테넌트 목록을 읽는 중에는 등록 안내를 쓰지 않�
     },
   );
   const t0 = Date.now();
-  await page.goto('/', { waitUntil: 'commit' });
+  await page.goto('/#/transport', { waitUntil: 'commit' });
   await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
   await page.waitForTimeout(500 - Math.min(500, Date.now() - t0 - 0));
   const mid = async (label: string) => {
@@ -245,7 +246,7 @@ test('QA-165: 테넌트 목록 읽기 실패와 다시 시도', async ({ page, r
       else await route.continue();
     };
     await page.route(isTenants, handler);
-    await page.goto('/');
+    await page.goto('/#/transport');
     await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
     await page.waitForTimeout(1200);
     const rep = await phraseReport(page, ALL);

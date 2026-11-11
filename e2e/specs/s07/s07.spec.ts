@@ -18,7 +18,13 @@ const KEYJSON = (n: string, over: Record<string, any> = {}) => ({
 const KEYTXT = (n: string) => JSON.stringify(KEYJSON(n));
 const marks = (n: string) => [`qa318-${n}-id`, `qa318-${n}-secret`];
 
-const regGroup = (page: Page) => page.getByRole('group', { name: '테넌트 등록' });
+// S2(REQ-412): 등록 폼은 "테넌트 등록" 버튼으로 여는 오른쪽 서랍이다. 성공하면 서랍이 닫히므로 다시 열어 입력이 빈 것을 확인한다.
+const regGroup = (page: Page) => page.getByRole('dialog', { name: '테넌트 등록' });
+async function ensureDrawer(page: Page): Promise<void> {
+  if (await regGroup(page).isVisible().catch(() => false)) return;
+  await page.getByRole('button', { name: '테넌트 등록', exact: true }).click();
+  await expect(regGroup(page)).toBeVisible();
+}
 const nameBox = (page: Page) => regGroup(page).getByRole('textbox', { name: '이름' });
 const keyBox = (page: Page) => regGroup(page).getByRole('textbox', { name: '서비스 키 붙여넣기' });
 const fileBox = (page: Page) => regGroup(page).locator('input[type=file]');
@@ -39,13 +45,15 @@ async function scan(page: Page, strs: string[]): Promise<Record<string, number>>
 }
 const alertTexts = async (page: Page) => (await page.getByRole('alert').allInnerTexts()).map((s) => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
 async function state(page: Page) {
+  const alerts = await alertTexts(page);
+  await ensureDrawer(page);
   return {
     name: await nameBox(page).inputValue(),
     key: await keyBox(page).inputValue(),
     keyLen: (await keyBox(page).inputValue()).length,
     files: await fileBox(page).evaluate((e: HTMLInputElement) => e.files?.length ?? 0),
     fileValue: await fileBox(page).evaluate((e: HTMLInputElement) => e.value),
-    alerts: await alertTexts(page),
+    alerts,
   };
 }
 const postCount = (w: Watch) => w.reqs.filter((r) => r.method === 'POST' && new URL(r.url).pathname === '/tenants').length;
@@ -62,6 +70,7 @@ const countT = async (request: any) => (await tenantList(request)).length;
 
 /** 이름·키 입력 후 등록 클릭. POST 응답이 오면 상태를 돌려준다(요청 전 검사 실패면 null). */
 async function submit(page: Page, name: string, keyText: string | null, opts: { fill?: boolean } = {}): Promise<{ status: number | null; body: string | null }> {
+  await ensureDrawer(page);
   await nameBox(page).fill(name);
   if (keyText !== null) await keyBox(page).fill(keyText);
   let status: number | null = null;
@@ -81,9 +90,9 @@ async function submit(page: Page, name: string, keyText: string | null, opts: { 
 }
 
 async function toTenants(page: Page): Promise<void> {
-  await page.goto('/');
-  await openTab(page, '테넌트');
-  await expect(regGroup(page)).toBeVisible();
+  await page.goto('/#/tenants');
+  await expect(page.getByRole('heading', { level: 2, name: '테넌트', exact: true })).toBeVisible();
+  await ensureDrawer(page);
 }
 
 test('QA-203: 서버 오류(409 이름 중복) 뒤 입력 비움', async ({ page, request }) => {
@@ -239,12 +248,11 @@ test('QA-208: 수정(PUT) 실패 뒤 입력 비움', async ({ page, request }) =
     t = (await tenantList(request)).find((x) => x.name === 'QA318-E');
   }
   rec.tenantId = t.id;
-  await page.goto('/');
-  await openTab(page, '테넌트');
-  const row = page.getByRole('listitem').filter({ hasText: 'QA318-E' });
+  await page.goto('/#/tenants');
+  const row = page.getByRole('row').filter({ hasText: 'QA318-E' });
   await row.getByRole('button', { name: '수정' }).click();
   await page.waitForTimeout(300);
-  const group = page.getByRole('group', { name: /수정/ }).first();
+  const group = page.getByRole('dialog', { name: '테넌트 수정' });
   const scope = (await group.count()) ? group : page.locator('main');
   const nb = scope.getByRole('textbox', { name: '이름' });
   const kb = scope.getByRole('textbox', { name: /서비스 키/ }).first();
@@ -292,6 +300,8 @@ test('QA-209: 실패 뒤 DOM에 서비스 키 문자열 없음, 안내는 유지
     if (abort) await page.unroute(pred, handler);
     const st = await state(page);
     const sc1 = await scan(page, marks(n));
+    await page.keyboard.press('Escape');
+    await expect(regGroup(page)).toBeHidden();
     await openTab(page, '이관');
     await page.waitForTimeout(300);
     await openTab(page, '테넌트');
@@ -325,6 +335,7 @@ test('QA-210: 성공 때 이름·키 모두 비움, 저장 재조회', async ({ 
   fs.mkdirSync(ART(), { recursive: true });
   const f = path.join(ART(), 'qa318-key-210b.json');
   fs.writeFileSync(f, KEYTXT('210b'), 'utf8');
+  await ensureDrawer(page);
   await nameBox(page).fill('QA318-OK2');
   await fileBox(page).setInputFiles(f);
   await page.waitForTimeout(300);
@@ -342,7 +353,8 @@ test('QA-210: 성공 때 이름·키 모두 비움, 저장 재조회', async ({ 
   expect(rec.step3.name).toBe('');
   expect(rec.step3.keyLen).toBe(0);
   expect(rec.step3.files).toBe(0);
-  const items = (await page.getByRole('listitem').allInnerTexts()).map((s) => s.replace(/\s+/g, ' '));
+  if (await regGroup(page).isVisible()) await page.keyboard.press('Escape');
+  const items = (await page.getByRole('row').allInnerTexts()).map((s) => s.replace(/\s+/g, ' '));
   rec.listItems = items.filter((s) => /QA318-OK/.test(s));
   expect(rec.listItems.length, '목록에 두 테넌트').toBe(2);
   expect(rec.listItems.join(' '), 'source 등록').toContain('등록');
