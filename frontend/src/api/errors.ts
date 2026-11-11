@@ -5,6 +5,10 @@ export interface ApiError {
 }
 
 const TITLES: Record<string, string> = {
+  TEMPLATE_NAME_DUPLICATE: '같은 이름의 템플릿이 이미 있습니다',
+  TEMPLATE_NOT_FOUND: '템플릿을 찾을 수 없습니다',
+  TEMPLATE_MISMATCH: '템플릿이 바뀌었거나 삭제되었습니다',
+  TEMPLATE_STORE_UNREADABLE: '템플릿 저장 파일을 읽지 못했습니다',
   READ_ONLY_MODE: '읽기 전용 모드에서는 실제 이관을 할 수 없습니다',
   INVALID_SERVICE_KEY: '서비스 키가 올바르지 않습니다',
   TENANT_NAME_DUPLICATE: '같은 이름의 테넌트가 이미 있습니다',

@@ -9,15 +9,15 @@ import { RunPanel } from './RunPanel';
 import { TenantSelect } from './TenantSelect';
 import { useTenants } from '../tenants/TenantContext';
 
-export function TransportTab() {
+export function TransportTab({ initialPackage = null }: { initialPackage?: ArtifactSummary | null }) {
   const { sourceTenantId } = useTenants();
   // AI-NOTE: 원본마다 폼을 분리해 선택·결과·마지막 요청과 진행 중인 이전 원본의 응답을 격리한다(REQ-308 AC-5).
-  return <TransportForm key={sourceTenantId} />;
+  return <TransportForm key={sourceTenantId} initialPackage={initialPackage} />;
 }
 
-function TransportForm() {
+function TransportForm({ initialPackage }: { initialPackage: ArtifactSummary | null }) {
   // 선택 상태는 여기서 들고 있고, 옵션·실행(TODO-007)이 같은 값을 쓴다.
-  const [selectedPackage, setSelectedPackage] = useState<ArtifactSummary | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<ArtifactSummary | null>(initialPackage);
   const selectedPackageId = selectedPackage?.id ?? null;
   const [selectedArtifactIds, setSelectedArtifactIds] = useState<string[]>([]);
 
@@ -26,6 +26,20 @@ function TransportForm() {
   const [lastRequestIds, setLastRequestIds] = useState<string[]>([]);
   const [realRequest, setRealRequest] = useState(0);
   const resultRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!initialPackage) return;
+    const focusSelection = () => {
+      const selected = formRef.current?.querySelector<HTMLInputElement>('input[name="package"]:checked');
+      if (!selected) return false;
+      selected.focus({ preventScroll: true });
+      return true;
+    };
+    if (focusSelection()) return;
+    const observer = new MutationObserver(() => { if (focusSelection()) observer.disconnect(); });
+    if (formRef.current) observer.observe(formRef.current, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [initialPackage]);
 
   // REQ-105 AC-7: 이 탭에서 응답을 받아 결과가 나타나면 결과 영역의 시작이 뷰포트 안에 들어오도록 스크롤한다. 포커스는 옮기지 않는다.
   // 이력 상세는 TransportResult를 직접 쓰므로 스크롤하지 않는다(D-019 ③).
@@ -48,7 +62,7 @@ function TransportForm() {
   }
 
   return (
-    <div className="min-w-0">
+    <div ref={formRef} className="min-w-0">
       <PageHeader
         title="패키지 이관"
         description="DEV 테넌트의 패키지를 PRD 테넌트로 이관합니다. 미리보기로 변경 내용을 먼저 확인할 수 있습니다."

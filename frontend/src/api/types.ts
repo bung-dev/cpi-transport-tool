@@ -84,3 +84,15 @@ export type TenantCheck = 'OK' | 'TOKEN_FAILED' | 'API_FORBIDDEN' | 'UNREACHABLE
 export interface TenantStatusItem { id: string; name: string; source: TenantSource; apiHost: string; check: TenantCheck }
 export interface TenantStatusResponse { readOnly: boolean; tenants: TenantStatusItem[] }
 export interface TenantRef { id: string; name: string }
+
+export interface TemplateInput { name: string; sourceTenantId: string; targetTenantId: string; packageId?: string | null }
+export interface TransportTemplate extends TemplateInput {
+  id: string; createdAt: string; updatedAt: string; usable: boolean;
+  unusableReason?: 'SOURCE_TENANT_MISSING' | 'TARGET_TENANT_MISSING';
+}
+export type AuditCategory = 'tenant' | 'template' | 'transport';
+export interface AuditEntry {
+  id: string; time: string; category: AuditCategory;
+  action: 'created' | 'updated' | 'deleted' | 'preview' | 'transport';
+  objectId: string; objectName: string; detail: string;
+}
