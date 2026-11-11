@@ -3,8 +3,8 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TransportResponse } from '../../api/types';
-import App from '../../App';
 import { ARTIFACTS, PACKAGES, json, mockApi } from '../../test/mockFetch';
+import { navLink, renderAt } from '../../test/appRoutes';
 
 // REQ-319: 화면 명칭이 "미리보기"로 바뀌었다(이전 명칭은 아래 상수). 요청 필드·내부 코드 dryRun은 그대로다.
 // AI-NOTE: 옛 명칭은 화면에 없음을 확인하는 이 상수 한 줄에만 둔다(AC-2). 다른 테스트에 옛 문구가 남으면 부재 단언이 항상 통과해 버린다.
@@ -41,7 +41,7 @@ function setup(opts: { postFail?: PostFail } = {}) {
       return json({ ...PREVIEW_RESULT, transportId: body.dryRun ? 't-preview-1' : 't-real-1', dryRun: body.dryRun, deploy: body.deploy });
     },
   });
-  render(<App />);
+  renderAt('#/transport');
   return fn;
 }
 
@@ -78,7 +78,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('미리보기 명칭 (REQ-319)', () => {
   it('REQ-319 AC-1: 실행 방식 제목·실행 버튼·결과 머리 배지·이력 배지·탭 설명이 "미리보기"다', async () => {
     setup();
-    const panel = screen.getByRole('tabpanel');
+    const panel = screen.getByRole('main');
     expect(within(panel).getByText(/미리보기로 변경 내용을 먼저 확인할 수 있습니다\.$/)).toBeInTheDocument();
     expect(within(panel).getByText('DEV 테넌트의 패키지를 PRD 테넌트로 이관합니다. 미리보기로 변경 내용을 먼저 확인할 수 있습니다.')).toBeInTheDocument();
     expect(await screen.findByRole('radio', { name: '미리보기' })).toBeChecked();
@@ -89,7 +89,7 @@ describe('미리보기 명칭 (REQ-319)', () => {
     const result = await screen.findByRole('region', { name: '이관 결과' });
     expect(within(result).getByText('미리보기')).toBeInTheDocument();
     expect(within(result).queryByText('실제 이관')).toBeNull();
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    await userEvent.click(navLink('이관 이력'));
     const table = await screen.findByRole('table');
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows).toHaveLength(2);
@@ -114,14 +114,14 @@ describe('미리보기 명칭 (REQ-319)', () => {
     expectNoOldTerm('확인 대화상자');
     await userEvent.click(screen.getByRole('button', { name: '취소' }));
     expect(postBodies(fn)).toHaveLength(1);
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    await userEvent.click(navLink('이관 이력'));
     await screen.findByRole('table');
     expectNoOldTerm('이력 탭');
     await userEvent.click(screen.getByRole('button', { name: 't-saved-preview' }));
     await screen.findByRole('button', { name: '목록으로' });
     expectNoOldTerm('이력 상세');
-    await userEvent.click(screen.getByRole('tab', { name: '테넌트' }));
-    await screen.findByRole('tabpanel');
+    await userEvent.click(navLink('테넌트'));
+    await screen.findByRole('main');
     expectNoOldTerm('테넌트 탭');
   });
 
@@ -158,7 +158,7 @@ describe('미리보기 명칭 (REQ-319)', () => {
 
   it('REQ-319 AC-3·AC-5: 이전 버전이 저장한 이력(dryRun:true)이 "미리보기"로 보이고 옛 명칭 부재 검사가 실제로 옛 명칭을 잡아낸다', async () => {
     setup();
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    await userEvent.click(navLink('이관 이력'));
     await screen.findByRole('table');
     const saved = screen.getByRole('button', { name: 't-saved-preview' }).closest('tr') as HTMLElement;
     expect(within(saved).getByText('미리보기')).toBeInTheDocument();

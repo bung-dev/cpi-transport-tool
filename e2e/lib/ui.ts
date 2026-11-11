@@ -178,13 +178,17 @@ export function expectFocus(step: ArrowStep, side: '원본' | '대상', name: st
 }
 
 // ---------------------------------------------------------------- 화면 구역
-export const tabBtn = (page: Page, name: '이관' | '이력' | '테넌트') => page.getByRole('tab', { name, exact: true });
-export async function openTab(page: Page, name: '이관' | '이력' | '테넌트'): Promise<void> {
+// S2(REQ-410): 탭 대신 주 메뉴 링크. 옛 이름(이관·이력·테넌트)을 새 메뉴 이름으로 바꿔 부른다.
+export type OldTab = '이관' | '이력' | '테넌트';
+export const NAV_OF: Record<OldTab, string> = { 이관: '새 이관', 이력: '이관 이력', 테넌트: '테넌트' };
+export const navLink = (page: Page, name: string) => page.getByRole('navigation', { name: '주 메뉴' }).getByRole('link', { name, exact: true });
+export const tabBtn = (page: Page, name: OldTab) => navLink(page, NAV_OF[name]);
+export async function openTab(page: Page, name: OldTab): Promise<void> {
   await tabBtn(page, name).click();
-  await expect(tabBtn(page, name)).toHaveAttribute('aria-selected', 'true');
+  await expect(tabBtn(page, name)).toHaveAttribute('aria-current', 'page');
 }
 export async function openTransport(page: Page): Promise<void> {
-  await page.goto('/');
+  await page.goto('/#/transport');
   await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
   await expect(page.getByRole('list', { name: '패키지 목록' }).getByRole('radio').first()).toBeVisible();
 }
@@ -282,7 +286,8 @@ export async function bodyText(page: Page): Promise<string> {
 // ---------------------------------------------------------------- 서비스 키 붙여넣기 등록(테넌트 탭)
 export async function registerViaUi(page: Page, name: string, keyJson: unknown): Promise<void> {
   await openTab(page, '테넌트');
-  const g = page.getByRole('group', { name: '테넌트 등록' });
+  await page.getByRole('button', { name: '테넌트 등록', exact: true }).click();
+  const g = page.getByRole('dialog', { name: '테넌트 등록' });
   await g.getByRole('textbox', { name: '이름' }).fill(name);
   await g.getByRole('textbox', { name: '서비스 키 붙여넣기' }).fill(JSON.stringify(keyJson));
   const resp = page.waitForResponse((r) => r.url() === `${APP}/tenants` && r.request().method() === 'POST');

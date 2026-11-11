@@ -176,8 +176,7 @@ export async function replaceHistory(page: Page, rows: any[]): Promise<() => Pro
   };
 }
 export async function openHistory(page: Page): Promise<void> {
-  await page.goto('/');
-  await page.getByRole('tab', { name: '이력', exact: true }).click();
+  await page.goto('/#/history');
   await expect(page.getByRole('columnheader', { name: '모드', exact: true })).toBeVisible();
   await expect(page.locator('table tbody tr').first()).toBeVisible();
   await page.waitForTimeout(300);

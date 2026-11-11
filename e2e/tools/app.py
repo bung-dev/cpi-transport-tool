@@ -56,6 +56,8 @@ def main():
             f"--cpi.tenants.store-file={work / 'tenants.enc'}",
             f"--cpi.transport.mapping-file={MAPPING}",
             f"--cpi.transport.history.file={work / f'history-{a.label}.jsonl'}",
+            f"--cpi.templates.store-file={work / 'templates.json'}",
+            f"--cpi.audit.file={work / 'audit.jsonl'}",
             f"--logging.file.name={work / f'app-{a.label}.log'}", *STUB_DEPLOY_ARGS]
     print(f"E2E 앱 시작: label={a.label} read_only={a.read_only} tenants={a.tenants}", flush=True)
     sys.exit(subprocess.call(args, cwd=str(ROOT), env=env))
