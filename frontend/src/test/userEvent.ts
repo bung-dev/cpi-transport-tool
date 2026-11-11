@@ -18,6 +18,8 @@ export const userEvent = {
   paste: (data: Parameters<typeof base.paste>[0], options: Parameters<typeof base.paste>[1] = {}) => base.paste(data, { ...NO_WAIT, ...options }),
   upload: (element: HTMLElement, files: Parameters<typeof base.upload>[1], options: Parameters<typeof base.upload>[2] = {}) =>
     base.upload(element, files, { ...NO_WAIT, ...options }),
+  selectOptions: (element: Element, values: Parameters<typeof base.selectOptions>[1], options: Parameters<typeof base.selectOptions>[2] = {}) =>
+    base.selectOptions(element, values, { ...NO_WAIT, ...options }),
   clear: (element: Element) => fresh().clear(element),
   tab: (options: Parameters<typeof base.tab>[0] = {}) => fresh().tab(options),
 };

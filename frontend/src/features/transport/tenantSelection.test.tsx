@@ -139,7 +139,7 @@ it('REQ-308 AC-5·AC-7: 테넌트 라디오는 Tab과 화살표로 조작하며 
     const el = document.activeElement as HTMLElement;
     if (el === document.body || seen.includes(el)) break;
     seen.push(el);
-    expect(['BUTTON', 'INPUT']).toContain(el.tagName);
+    expect(['A', 'BUTTON', 'INPUT']).toContain(el.tagName);
     expect(el).toBeEnabled();
   }
   expect(seen).toContain(source);

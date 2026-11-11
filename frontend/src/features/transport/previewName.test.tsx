@@ -1,5 +1,5 @@
 import { TENANTS_OK, TENANT_STATUS_OK } from '../../test/tenantFixtures';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TransportResponse } from '../../api/types';
