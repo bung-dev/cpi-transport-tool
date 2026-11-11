@@ -33,12 +33,13 @@ public class ApiExceptionHandler {
 
     private ResponseEntity<ErrorResponse> response(Code code) {
         int status = switch (code) {
-            case INVALID_REQUEST, INVALID_SERVICE_KEY -> 400;
+            case INVALID_REQUEST, INVALID_SERVICE_KEY, TEMPLATE_MISMATCH -> 400;
             case ENVIRONMENT_NOT_CONFIGURED -> 503;
             case MAPPING_INVALID -> 422;
-            case PACKAGE_NOT_FOUND, TENANT_NOT_FOUND -> 404;
+            case PACKAGE_NOT_FOUND, TENANT_NOT_FOUND, TEMPLATE_NOT_FOUND -> 404;
+            case TEMPLATE_STORE_UNREADABLE -> 500;
             case CPI_UNAVAILABLE -> 502;
-            case TENANT_NAME_DUPLICATE, TENANT_READ_ONLY, TENANT_STORE_NOT_CONFIGURED,
+            case TEMPLATE_NAME_DUPLICATE, TENANT_NAME_DUPLICATE, TENANT_READ_ONLY, TENANT_STORE_NOT_CONFIGURED,
                     TENANT_STORE_UNREADABLE, READ_ONLY_MODE -> 409;
         };
         return ResponseEntity.status(status).body(new ErrorResponse(code.name(), message(code)));
@@ -58,6 +59,10 @@ public class ApiExceptionHandler {
             case TENANT_READ_ONLY -> "Tenant is read only";
             case TENANT_STORE_NOT_CONFIGURED -> "Tenant store not configured";
             case TENANT_STORE_UNREADABLE -> "Tenant store unreadable";
+            case TEMPLATE_NAME_DUPLICATE -> "Template name already exists";
+            case TEMPLATE_NOT_FOUND -> "Template not found";
+            case TEMPLATE_MISMATCH -> "Template does not match the requested route";
+            case TEMPLATE_STORE_UNREADABLE -> "Template store unreadable";
         };
     }
 }
