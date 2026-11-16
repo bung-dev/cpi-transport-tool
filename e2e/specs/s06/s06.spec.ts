@@ -22,7 +22,7 @@ const finish = (rec: any, w: ReturnType<typeof watch>) => {
 const judge1280 = (m: any, label: string) => {
   expect.soft(m.m1_scrollMinusClient, `${label}: ① scrollWidth - clientWidth = 0 (wrapper ${m.wrapper.tag}.${m.wrapper.cls} ${m.wrapper.scrollWidth}/${m.wrapper.clientWidth})`).toBe(0);
   expect.soft(m.m2_ok, `${label}: ② 마지막 열 셀 오른쪽 ${m.m2_lastCellRight} <= 카드 안쪽 오른쪽 ${m.card.innerRight}`).toBe(true);
-  expect.soft(m.m3_allInside, `${label}: ③ 8개 열 머리가 래퍼 안 (${m.m3_headerCount}개, ${JSON.stringify(m.m3_headers.filter((h: any) => !h.inside))})`).toBe(true);
+  expect.soft(m.m3_allInside, `${label}: ③ 모든 열 머리가 래퍼 안 (${m.m3_headerCount}개, ${JSON.stringify(m.m3_headers.filter((h: any) => !h.inside))})`).toBe(true);
 };
 const asHeaderMap = (ht: { headers: string[]; rows: string[][] }, ri: number) => Object.fromEntries(ht.headers.map((h, i) => [h, ht.rows[ri]?.[i]]));
 
@@ -39,7 +39,7 @@ test('QA-195: spec 판정 데이터(세트 A) 1280px - 모든 열이 표 래퍼 
   rec.row = asHeaderMap(ht, 0);
   await shot(page, 'QA-195-1280');
   judge1280(m, 'QA-195');
-  expect(ht.headers, '8개 열').toEqual(['시작 시각', '패키지', '원본', '대상', '모드', '배포', '결과', '이관 ID']);
+  expect(ht.headers, '9개 열(S3 REQ-425 템플릿 열)').toEqual(['시작 시각', '템플릿', '원본', '대상', '패키지', '모드', '배포', '결과', '이관 ID']);
   const r = rec.row as Record<string, string>;
   expect(r['모드']).toBe('실제 이관');
   expect(r['배포'], '배포 열 "배포" 배지').toContain('배포');
