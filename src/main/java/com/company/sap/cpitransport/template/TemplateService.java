@@ -96,14 +96,9 @@ public class TemplateService {
 
     public void deleteTenant(String id) {
         // Validate the tenant first so env/unknown IDs cannot delete any templates.
-        // Read templates before changing the tenant, so a damaged template store is left untouched.
+        // Commit template deletion first so a template write failure leaves the tenant intact.
         synchronized (tenants) {
             tenants.requireDeletable(id);
-            store.findAll();
-        }
-        // Tenant cache invalidation must run outside the registry monitor (REQ-301).
-        tenants.delete(id);
-        synchronized (tenants) {
             var deleted = new ArrayList<StoredTemplate>();
             store.update(entries -> {
                 var next = new ArrayList<StoredTemplate>();
@@ -115,6 +110,8 @@ public class TemplateService {
             });
             deleted.forEach(t -> record(t, "deleted"));
         }
+        // Tenant cache invalidation must run outside the registry monitor (REQ-301).
+        tenants.delete(id);
     }
 
     private void record(StoredTemplate t, String action) {
