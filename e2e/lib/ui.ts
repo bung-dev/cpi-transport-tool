@@ -278,7 +278,8 @@ export async function runInfo(page: Page): Promise<RunInfo> {
   const steps = stepTexts.map((t) => t.split('|')[0].replace(/^\d+\.\s*/, ''));
   const cur = stepTexts.find((t) => t.endsWith('|step'));
   const all = [...(await page.locator('main').getByRole('button').allInnerTexts()), ...(await page.getByRole('dialog').getByRole('button').allInnerTexts())];
-  const buttons = all.map((s) => s.trim()).filter((s) => /미리보기|로 이관$|실제 이관$/.test(s));
+  // 단계 줄 버튼("<n>. <단계>")은 실행 버튼이 아니므로 뺀다.
+  const buttons = all.map((s) => s.trim()).filter((s) => !/^\d+\./.test(s) && /미리보기|로 이관$|실제 이관$/.test(s));
   const dep: string[] = [];
   for (const role of ['switch', 'checkbox'] as const) {
     const els = page.getByRole(role);
