@@ -81,7 +81,7 @@ test('QA-197: 줄여 보인 값의 전체 확인과 이관 ID 확인', async ({ 
         const wrap = els.some((e) => getComputedStyle(e).whiteSpace.startsWith('normal')) && !truncated.length;
         return { text: (td.textContent || '').trim(), textHasFull: textFull, truncatedElements: truncated, titlesAndLabels: labels, someLabelEqualsFull: labels.includes(full), ellipsis: els.some((e) => getComputedStyle(e).textOverflow === 'ellipsis'), wraps: wrap };
       };
-      return { pkg: info(tds[1], pkg), src: info(tds[2], src), tgt: info(tds[3], tgt), id: info(tds[7], id) };
+      return { pkg: info(tds[4], pkg), src: info(tds[2], src), tgt: info(tds[3], tgt), id: info(tds[8], id) };
     },
     { pkg: SET_A.pkg, src: SET_A.src, tgt: SET_A.tgt, id: UUID_MAX },
   );
