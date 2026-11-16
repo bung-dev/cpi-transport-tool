@@ -3,7 +3,8 @@ import { flushSync } from 'react-dom';
 import { BrandIcon } from './components/ui/icons';
 import { Button } from './components/ui/Button';
 import { HistoryTab } from './features/history/HistoryTab';
-import { TransportTab } from './features/transport/TransportTab';
+import { TransportWizard } from './features/transport/TransportWizard';
+import { useWizard } from './features/transport/useWizard';
 import { TenantProvider, useTenants } from './features/tenants/TenantContext';
 import { TenantTab } from './features/tenants/TenantTab';
 import { StatusChips } from './features/tenants/StatusChips';
@@ -11,8 +12,7 @@ import { TemplatesScreen } from './features/templates/TemplatesScreen';
 import { AuditScreen } from './features/audit/AuditScreen';
 import { CommandPalette, type Command } from './features/palette/CommandPalette';
 import { navigate, readRoute, ROUTES } from './app/routes';
-import { runTransportCommand, transportCommandReason } from './app/legacyTransport';
-import type { ArtifactSummary, TransportTemplate } from './api/types';
+import type { TransportTemplate } from './api/types';
 
 export default function App() {
   return <TenantProvider openTenantsTab={() => navigate('tenants')}><AppShell /></TenantProvider>;
@@ -22,26 +22,26 @@ function AppShell() {
   const [route, setRoute] = useState(readRoute);
   const [revision, setRevision] = useState(0);
   const [create, setCreate] = useState<'tenant' | 'template' | null>(null);
-  const [initial, setInitial] = useState<{ source: string | null; package: ArtifactSummary } | null>(null);
-  const [palette, setPalette] = useState<{ overlaid: boolean; reason?: string } | null>(null);
+  const [palette, setPalette] = useState<{ overlaid: boolean } | null>(null);
   const main = useRef<HTMLElement>(null);
   const { tenants, sourceTenantId, targetTenantId, setSourceTenantId, setTargetTenantId, readOnly } = useTenants();
-  useEffect(() => { if (initial && initial.source !== sourceTenantId) setInitial(null); }, [initial, sourceTenantId]);
+  // 새 이관 마법사의 상태는 여기서 들고 있어 팔레트 명령(미리보기 실행·실제 이관·원본·대상 변경)이 같은 상태로 동작한다(REQ-411).
+  const wizard = useWizard();
   const routeRef = useRef(route);
   routeRef.current = route;
   useEffect(() => {
-    const change = () => { const next = readRoute(); if (next !== routeRef.current) { setCreate(null); setInitial(null); } setRoute(next); };
+    const change = () => { const next = readRoute(); if (next !== routeRef.current) setCreate(null); setRoute(next); };
     window.addEventListener('hashchange', change);
     return () => window.removeEventListener('hashchange', change);
   }, []);
   function openPalette() {
-    setPalette({ overlaid: Boolean(document.querySelector('[role="dialog"], dialog[open]')), reason: transportCommandReason() });
+    setPalette({ overlaid: Boolean(document.querySelector('[role="dialog"], dialog[open]')) });
   }
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault(); e.stopPropagation();
-        setPalette(current => current ? null : { overlaid: Boolean(document.querySelector('[role="dialog"], dialog[open]')), reason: transportCommandReason() });
+        setPalette(current => current ? null : { overlaid: Boolean(document.querySelector('[role="dialog"], dialog[open]')) });
       }
     };
     window.addEventListener('keydown', key, true);
@@ -53,13 +53,15 @@ function AppShell() {
   }
   function useTemplate(t: TransportTemplate) {
     if (!t.usable) return;
-    setSourceTenantId(t.sourceTenantId); setTargetTenantId(t.targetTenantId);
-    setInitial(t.packageId ? { source: t.sourceTenantId, package: { id: t.packageId, name: t.packageId, version: '' } } : null);
+    wizard.applyTemplate(t);
     go('transport');
   }
+  /** 새 이관 화면으로 가되, 이미 그 화면이면 다시 마운트하지 않는다(아티팩트 목록을 다시 부르지 않음). */
+  function showTransport() { if (route !== 'transport') go('transport'); }
   function command(c: Command) {
     // Recheck live eligibility before closing any draft window.
-    if ((c.type === 'preview' || c.type === 'real') && (transportCommandReason() || (c.type === 'real' && readOnly !== false))) return;
+    if (c.type === 'preview' && wizard.previewReason) return;
+    if (c.type === 'real' && (wizard.realReason || readOnly !== false)) return;
     if (c.type === 'source' && c.id === targetTenantId || c.type === 'target' && c.id === sourceTenantId) return;
     if (c.type === 'createTenant' && (tenants.state !== 'success' || tenants.data.store !== 'OK')) return;
     if (c.type === 'createTemplate' && (tenants.state !== 'success' || !tenants.data.tenants.length)) return;
@@ -67,24 +69,27 @@ function AppShell() {
     if (c.type === 'preview' || c.type === 'real') {
       const open = document.querySelector<HTMLElement>('[role="dialog"], dialog[open]');
       if (open) flushSync(() => open.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
-      runTransportCommand(c.type === 'real');
+      flushSync(() => {
+        showTransport();
+        if (c.type === 'preview') wizard.runPreview();
+        else wizard.openConfirm();
+      });
+      if (c.type === 'preview') main.current?.focus();
       return;
     }
     flushSync(() => {
       if (c.type === 'template') useTemplate(c.template);
-      else if (c.type === 'package') { setInitial({ source: sourceTenantId, package: c.package }); go('transport'); }
+      else if (c.type === 'package') { wizard.openPackage(c.package); go('transport'); }
       else if (c.type === 'createTenant') go('tenants', 'tenant');
       else if (c.type === 'createTemplate') go('templates', 'template');
-      else if (c.type === 'navigate') { setInitial(null); go(c.route); }
-      else if (c.type === 'new' || c.type === 'route') { setInitial(null); go('transport'); }
-      else if (c.type === 'source' || c.type === 'target') { if (c.type === 'source') setSourceTenantId(c.id); else setTargetTenantId(c.id); setInitial(null); go(route); }
+      else if (c.type === 'navigate') { if (c.route === 'transport') wizard.restart(); go(c.route); }
+      else if (c.type === 'new') { wizard.restart(); go('transport'); }
+      else if (c.type === 'route') { showTransport(); wizard.openRouteDialog(); }
+      else if (c.type === 'source' || c.type === 'target') { if (c.type === 'source') setSourceTenantId(c.id); else setTargetTenantId(c.id); go(route); }
     });
-    if (c.type === 'createTenant' || c.type === 'createTemplate') return;
-    if (c.type === 'route') main.current?.querySelector<HTMLInputElement>('input[name$="-source"]')?.focus();
-    else if (c.type === 'package' || c.type === 'template') {
-      // Package options arrive asynchronously; the form remains usable while loading.
-      main.current?.focus();
-    } else main.current?.focus();
+    // 경로 선택 창은 열리면서 창 안으로 포커스를 옮긴다.
+    if (c.type === 'createTenant' || c.type === 'createTemplate' || c.type === 'route') return;
+    main.current?.focus();
   }
   return <div className="min-h-screen min-w-0 bg-surface text-ink">
     <header className="sticky top-0 z-10 border-b border-hairline bg-canvas">
@@ -96,7 +101,7 @@ function AppShell() {
       <nav aria-label="주 메뉴" className="mx-auto flex max-w-[1200px] gap-2 overflow-x-auto px-4 py-2 md:px-6">
         {ROUTES.map(([id, label]) => <a key={id} href={`#/${id}`} aria-current={route === id ? 'page' : undefined} onClick={e => {
           if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-          e.preventDefault(); setInitial(null); go(id);
+          e.preventDefault(); if (id === 'transport') wizard.restart(); go(id);
         }}
           className={`shrink-0 rounded-md px-4 py-2 font-medium ${route === id ? 'bg-primary-soft text-primary' : 'text-ink-secondary hover:bg-surface-hover'}`}>{label}</a>)}
       </nav>
@@ -104,13 +109,13 @@ function AppShell() {
     <main ref={main} tabIndex={-1} className="mx-auto w-full max-w-[1200px] min-w-0 px-4 py-8 md:px-6">
       <div key={`${route}-${revision}`} className="min-w-0">
         {route === 'dashboard' && <section className="rounded-xl border border-hairline bg-canvas p-6"><h2 className="text-2xl font-semibold">대시보드</h2><p className="mt-3 text-ink-secondary">경로를 확인하고 새 이관을 준비하세요. 템플릿과 이관 이력은 주 메뉴에서 확인할 수 있습니다.</p></section>}
-        {route === 'transport' && <TransportTab initialPackage={initial?.source === sourceTenantId ? initial.package : null} />}
+        {route === 'transport' && <TransportWizard wizard={wizard} />}
         {route === 'history' && <HistoryTab />}
         {route === 'tenants' && <TenantTab initiallyCreate={create === 'tenant'} />}
         {route === 'templates' && <TemplatesScreen initiallyCreate={create === 'template'} onUse={useTemplate} />}
         {route === 'audit' && <AuditScreen />}
       </div>
     </main>
-    {palette && <CommandPalette overlaid={palette.overlaid} previewReason={palette.reason} realReason={palette.reason} onClose={() => setPalette(null)} onCommand={command} />}
+    {palette && <CommandPalette overlaid={palette.overlaid} previewReason={wizard.previewReason} realReason={wizard.realReason} onClose={() => setPalette(null)} onCommand={command} />}
   </div>;
 }

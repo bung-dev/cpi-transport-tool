@@ -23,6 +23,11 @@ const TITLES: Record<string, string> = {
   CPI_UNAVAILABLE: 'CPI에 연결할 수 없습니다',
 };
 
+/** 템플릿이 없거나(TEMPLATE_NOT_FOUND) 경로가 달라진(TEMPLATE_MISMATCH) 이관 요청 오류인지. 제목은 코드와 1:1이다. */
+export function isTemplateError(error: ApiError): boolean {
+  return error.title === TITLES.TEMPLATE_MISMATCH || error.title === TITLES.TEMPLATE_NOT_FOUND;
+}
+
 export const NETWORK_ERROR_TITLE = '서버에 연결할 수 없습니다';
 
 export function unknownError(status: number): ApiError {
