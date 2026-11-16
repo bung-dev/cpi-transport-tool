@@ -298,6 +298,16 @@ describe('REQ-412 삭제', () => {
     await waitFor(() => expect(screen.queryByRole('row', { name: /새 테넌트/ })).toBeNull());
   });
 
+  it('REQ-412 (리뷰 결함): 템플릿 목록을 읽지 못해도 오류를 보이고 기본 삭제(deleteTemplates 없이)는 할 수 있다. 함께 삭제 선택은 없다', async () => {
+    const { dialog, deletes } = await openDelete(USING, { 'GET /templates': () => json({ error: 'TEMPLATE_STORE_UNREADABLE', message: 'x' }, 500) });
+    expect(await within(dialog).findByRole('alert')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('checkbox')).toBeNull();
+    const confirm = within(dialog).getByRole('button', { name: '삭제' });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await userEvent.click(confirm);
+    await waitFor(() => expect(deletes).toEqual(['/tenants/t-new']));
+  });
+
   it('REQ-412: 체크하고 삭제하면 deleteTemplates=true로 보낸다', async () => {
     const { dialog, deletes } = await openDelete(USING);
     await userEvent.click(await within(dialog).findByRole('checkbox', { name: '템플릿 2개도 함께 삭제' }));

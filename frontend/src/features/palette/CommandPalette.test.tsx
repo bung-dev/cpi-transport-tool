@@ -132,6 +132,17 @@ describe('REQ-411 묶음과 검색', () => {
     expect(within(list()).queryByRole('option', { name: /^대시보드/ })).toBeNull();
   });
 
+  it('REQ-411 (리뷰 결함): 소문자로 바꿀 때 길이가 달라지는 글자(İ)가 앞에 있어도 강조 위치가 어긋나지 않는다', async () => {
+    setup('', { 'GET /templates': () => json([tpl({ id: 'tp-i', name: 'İstanbul Sync', sourceTenantId: 'QAS', targetTenantId: 'PRD' })]) });
+    await ready();
+    await openWithKeys();
+    await within(group('템플릿')).findByRole('option', { name: /İstanbul Sync/ });
+    await userEvent.type(input(), 'stanbul');
+    const hit = option(/İstanbul Sync/);
+    expect(hit.querySelector('mark')?.textContent).toBe('stanbul');
+    expect(hit.textContent).toContain('İstanbul Sync');
+  });
+
   it('REQ-411 실패: 결과가 없으면 "일치하는 항목이 없습니다"를 보인다', async () => {
     setup();
     await ready();
