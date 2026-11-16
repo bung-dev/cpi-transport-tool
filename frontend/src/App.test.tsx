@@ -1,7 +1,7 @@
 import { TENANTS_OK, TENANT_STATUS_OK } from './test/tenantFixtures';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from './test/userEvent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TransportResponse } from './api/types';
@@ -34,6 +34,7 @@ describe('App', () => {
     mockApi({
       'GET /tenants': () => json(TENANTS_OK),
       'GET /tenants/status': () => json(TENANT_STATUS_OK),
+      'GET /templates': () => json([]),
       'GET /packages?tenantId=DEV': () => json(PACKAGES),
       'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json([]),
       'GET /transport/history': () => json([HISTORY_ENTRY]),
@@ -56,11 +57,11 @@ describe('App', () => {
 
   it('REQ-009 AC-1: 메뉴를 누르면 화면이 전환되고 이전 패널은 언마운트된다', async () => {
     renderAt('#/transport');
-    expect(await screen.findByLabelText('패키지 검색')).toBeInTheDocument();
+    expect(await screen.findByRole('navigation', { name: '이관 단계' })).toBeInTheDocument();
     await userEvent.click(navLink('이관 이력'));
     expect(navLink('이관 이력')).toHaveAttribute('aria-current', 'page');
     expect(await screen.findByRole('button', { name: '새로고침' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('패키지 검색')).toBeNull();
+    expect(screen.queryByRole('navigation', { name: '이관 단계' })).toBeNull();
   });
 
   it('REQ-009 AC-3: 본문은 max-w 가운데 정렬, min-w-0, 좌우 padding 16px 이상', () => {
@@ -106,18 +107,18 @@ describe('App', () => {
     expect((main.parentElement as HTMLElement).className).not.toContain('max-w-');
   });
 
-  it('REQ-102 AC-5: 이관 탭 맨 위에 제목 "패키지 이관"(h2)과 설명이 있고 카드 제목은 h3이다', async () => {
+  it('REQ-102 AC-5 / REQ-420: 새 이관 화면 맨 위에 제목 "새 이관"(h2)과 실제 경로를 보이는 설명이 있다', async () => {
     renderAt('#/transport');
     const panel = screen.getByRole('main');
-    expect(within(panel).getAllByRole('heading')[0]).toHaveTextContent('패키지 이관');
-    expect(within(panel).getByRole('heading', { level: 2, name: '패키지 이관' })).toBeInTheDocument();
-    expect(
-      within(panel).getByText('DEV 테넌트의 패키지를 PRD 테넌트로 이관합니다. 미리보기로 변경 내용을 먼저 확인할 수 있습니다.'),
-    ).toBeInTheDocument();
-    expect(within(panel).getByRole('heading', { level: 3, name: '패키지' })).toBeInTheDocument();
-    expect(within(panel).getByRole('heading', { level: 3, name: '실행' })).toBeInTheDocument();
-    await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
-    expect(await screen.findByRole('heading', { level: 3, name: '아티팩트' })).toBeInTheDocument();
+    expect(within(panel).getAllByRole('heading')[0]).toHaveTextContent('새 이관');
+    const title = within(panel).getByRole('heading', { level: 2, name: '새 이관' });
+    await waitFor(() => expect(title.nextElementSibling).toHaveTextContent('DEV → PRD'));
+    expect(panel.textContent).not.toContain('DEV 테넌트의 패키지를 PRD 테넌트로 이관합니다');
+    // 제목 수준을 건너뛰지 않는다
+    await userEvent.click(await screen.findByRole('button', { name: '템플릿 없이 진행' }));
+    await screen.findByRole('radio', { name: /Transport Demo/ });
+    const levels = screen.getAllByRole('heading').map((h) => Number(h.tagName.slice(1)));
+    for (let i = 1; i < levels.length; i++) expect(levels[i] - levels[i - 1], `제목 ${i}`).toBeLessThanOrEqual(1);
   });
 
   it('REQ-102 AC-5: 이력 탭 목록에는 제목 "이관 이력"(h2)·설명·새로고침이 있고 상세에서는 새로고침만 없다', async () => {
@@ -149,7 +150,7 @@ describe('App', () => {
 
   it('REQ-101 AC-4: 페이지 제목은 24px·굵기 600·음수 자간 클래스이고 이력 표의 packageId·transportId 값은 고정폭이다', async () => {
     renderAt('#/transport');
-    const title = screen.getByRole('heading', { level: 2, name: '패키지 이관' });
+    const title = screen.getByRole('heading', { level: 2, name: '새 이관' });
     expect(title.className).toContain('text-2xl');
     expect(title.className).toContain('font-semibold');
     expect(title.className).toContain('tracking-tight');

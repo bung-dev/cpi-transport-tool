@@ -2,8 +2,9 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Tenant, TenantsResponse, TenantStatusResponse } from '../../api/types';
-import { json, mockApi, PACKAGES } from '../../test/mockFetch';
+import { ARTIFACTS, json, mockApi, PACKAGES } from '../../test/mockFetch';
 import { baseRoutes, navLink, renderAt, routeGroup, tpl } from '../../test/appRoutes';
+import { artifactRow, currentStep, findArtifactGrid, postBodies, startManual, stepButton, toArtifacts } from '../../test/wizard';
 
 // REQ-411 ⌘K 팔레트
 afterEach(() => vi.unstubAllGlobals());
@@ -28,7 +29,12 @@ function setup(hash = '', extra: Parameters<typeof mockApi>[0] = {}) {
       'GET /templates': () => json(TEMPLATES),
       'GET /packages?tenantId=DEV': () => json(PACKAGES),
       'GET /packages?tenantId=QAS': () => json(PACKAGES),
-      'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json([]),
+      'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json(ARTIFACTS),
+      'POST /transport': (init) => {
+        const body = JSON.parse(init?.body as string);
+        return json({ transportId: body.dryRun ? 't-dry' : 't-real', packageId: body.packageId, dryRun: body.dryRun, deploy: body.deploy,
+          startedAt: '', finishedAt: '', summary: { total: 0, succeeded: 0, failed: 0 }, results: [] });
+      },
       'GET /packages/PkgTransportDemo/artifacts?tenantId=QAS': () => json([]),
       'GET /transport/history': () => json([]),
       'GET /audit?category=all': () => json([]),
@@ -72,6 +78,7 @@ describe('REQ-411 열기와 닫기', () => {
 
   it('REQ-411: 입력란에 포커스가 있어도 Ctrl+K로 열리고, Esc로 닫으면 그 입력란으로 포커스가 돌아간다', async () => {
     setup('#/transport');
+    await startManual();
     const search = await screen.findByLabelText('패키지 검색');
     search.focus();
     await openWithKeys();
@@ -188,7 +195,10 @@ describe('REQ-411 키보드와 실행', () => {
     await userEvent.type(input(), 'Transport Demo');
     await userEvent.keyboard('{Enter}');
     expect(window.location.hash).toBe('#/transport');
-    expect(await screen.findByRole('radio', { name: /Transport Demo/ })).toBeChecked();
+    // REQ-411: 그 패키지가 선택된 아티팩트 단계로 열린다
+    await waitFor(() => expect(currentStep()).toBe('아티팩트'));
+    expect(stepButton('패키지')).toHaveTextContent('Transport Demo');
+    expect(await findArtifactGrid()).toBeInTheDocument();
   });
 
   it('REQ-411: 템플릿 항목은 그 템플릿의 경로와 패키지로 새 이관 화면을 연다', async () => {
@@ -267,5 +277,50 @@ describe('REQ-411 키보드와 실행', () => {
     await ready();
     await openWithKeys();
     expect(within(palette()).queryByText('명령을 실행하면 열린 창이 닫힙니다')).toBeNull();
+  });
+});
+
+describe('REQ-411 마법사 동작 (S3b)', () => {
+  it('REQ-411: "원본·대상 변경"은 새 이관 화면의 경로 선택 창을 연다', async () => {
+    setup();
+    await ready();
+    await openWithKeys();
+    await userEvent.type(input(), '원본·대상');
+    await userEvent.keyboard('{Enter}');
+    expect(window.location.hash).toBe('#/transport');
+    expect(await screen.findByRole('dialog', { name: '원본과 대상 선택' })).toBeInTheDocument();
+  });
+
+  it('REQ-411: 아티팩트 단계에서 "미리보기 실행"은 지금 선택으로 미리보기를 보낸다(확인창 없음)', async () => {
+    const fn = setup('#/transport');
+    await toArtifacts();
+    await userEvent.click(artifactRow('IF_Order_Sync'));
+    await openWithKeys();
+    await userEvent.type(input(), '미리보기 실행');
+    expect(option(/미리보기 실행/)).toHaveAttribute('aria-disabled', 'false');
+    await userEvent.keyboard('{Enter}');
+    expect(await screen.findByRole('region', { name: '이관 결과' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(postBodies(fn)).toEqual([
+      { packageId: 'PkgTransportDemo', artifactIds: ['IF_Order_Sync'], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
+    ]);
+  });
+
+  it('REQ-411: "이 구성으로 실제 이관"은 미리보기 결과 전에는 비활성이고, 결과 뒤에는 확인창만 열고 보내지 않는다', async () => {
+    const fn = setup('#/transport');
+    await toArtifacts();
+    await openWithKeys();
+    await userEvent.type(input(), '이 구성으로 실제 이관');
+    expect(option(/이 구성으로 실제 이관/)).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
+    await screen.findByRole('region', { name: '이관 결과' });
+    await openWithKeys();
+    await userEvent.type(input(), '이 구성으로 실제 이관');
+    expect(option(/이 구성으로 실제 이관/)).toHaveAttribute('aria-disabled', 'false');
+    await userEvent.keyboard('{Enter}');
+    const dialog = await screen.findByRole('dialog', { name: '실제 이관 확인' });
+    expect(within(dialog).getByRole('switch', { name: '배포' })).not.toBeChecked();
+    expect(postBodies(fn)).toHaveLength(1);
   });
 });
