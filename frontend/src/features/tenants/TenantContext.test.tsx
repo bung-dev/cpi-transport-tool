@@ -8,10 +8,14 @@ import { navLink, setHash } from '../../test/appRoutes';
 import { TENANTS_OK, TENANT_STATUS_OK } from '../../test/tenantFixtures';
 import { TenantProvider, useTenants } from './TenantContext';
 import { TestTenantProvider } from '../../test/tenantProvider';
-import { TransportTab } from '../transport/TransportTab';
-import { PackagePicker } from '../transport/PackagePicker';
-import { RunPanel } from '../transport/RunPanel';
+import { TransportWizard } from '../transport/TransportWizard';
+import { useWizard } from '../transport/useWizard';
 afterEach(() => vi.unstubAllGlobals());
+/** 새 이관 마법사(상태 + 화면)를 App 없이 그린다 */
+function Wizard() {
+  const w = useWizard();
+  return <TransportWizard wizard={w} />;
+}
 function Probe() {
   const c = useTenants();
   return <><output>{String(c.readOnly)}|{c.sourceTenantId ?? '-'}|{c.targetTenantId ?? '-'}</output>
@@ -59,16 +63,12 @@ it('REQ-302 AC-7: 초기 등록 없으면 선택 없음, refresh 중복 요청 �
   expect(screen.getByRole('status')).toHaveTextContent('undefined|-|-');
   await act(async () => release(json(TENANT_STATUS_OK)));
 });
-it('REQ-302 AC-7: 하위 컴포넌트는 테넌트 조회 API를 부르지 않음', async () => {
-  const fn = mockApi({ 'GET /packages?tenantId=DEV': () => json(PACKAGES) });
-  render(<TestTenantProvider><TransportTab /></TestTenantProvider>);
+it('REQ-302 AC-7: 하위 컴포넌트(새 이관 마법사 단독 렌더)는 테넌트 조회 API를 부르지 않음', async () => {
+  const fn = mockApi({ 'GET /templates': () => json([]), 'GET /packages?tenantId=DEV': () => json(PACKAGES) });
+  render(<TestTenantProvider><Wizard /></TestTenantProvider>);
+  await userEvent.click(await screen.findByRole('button', { name: '템플릿 없이 진행' }));
   await screen.findByLabelText('패키지 검색');
-  expect(fn.mock.calls.every(([url]) => !String(url).startsWith('/tenants'))).toBe(true);
-});
-
-it('REQ-302 AC-7: PackagePicker와 RunPanel 단독 렌더도 테넌트 요청 없음', async () => {
-  const fn = mockApi({ 'GET /packages?tenantId=DEV': () => json(PACKAGES) });
-  render(<TestTenantProvider><PackagePicker selectedId={null} onSelect={() => {}} /><RunPanel packageId={null} artifactIds={[]} onResult={() => {}} /></TestTenantProvider>);
-  await screen.findByLabelText('패키지 검색');
+  await userEvent.click(screen.getByRole('button', { name: '경로 변경' }));
+  await screen.findByRole('dialog', { name: '원본과 대상 선택' });
   expect(fn.mock.calls.every(([url]) => !String(url).startsWith('/tenants'))).toBe(true);
 });
