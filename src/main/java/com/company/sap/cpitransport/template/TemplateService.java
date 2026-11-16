@@ -26,7 +26,9 @@ public class TemplateService {
         this.clock = clock;
     }
 
-    public List<TemplateView> list() {
+    // Serialize template operations with the entire cascade, including rollback.
+    // This monitor is separate from the registry monitor used by tenant caches.
+    public synchronized List<TemplateView> list() {
         var entries = store.findAll();
         var ids = new HashSet<String>();
         tenants.list().forEach(t -> ids.add(t.id()));
@@ -41,11 +43,11 @@ public class TemplateService {
         return new TemplateRef(template.id(), template.name());
     }
 
-    public TemplateView create(Supplier<JsonNode> body) { return save(null, body); }
-    public TemplateView update(String id, Supplier<JsonNode> body) { return save(id, body); }
+    public synchronized TemplateView create(Supplier<JsonNode> body) { return save(null, body); }
+    public synchronized TemplateView update(String id, Supplier<JsonNode> body) { return save(id, body); }
 
     private TemplateView save(String id, Supplier<JsonNode> bodyReader) {
-        // Registry before store is the shared lock order for mutations and tenant cascade deletion.
+        // Lock order: template service, registry, then template store.
         synchronized (tenants) {
             var saved = new ArrayList<StoredTemplate>();
             store.update(entries -> {
@@ -80,7 +82,7 @@ public class TemplateService {
         }
     }
 
-    public void delete(String id) {
+    public synchronized void delete(String id) {
         synchronized (tenants) {
             var deleted = new ArrayList<StoredTemplate>();
             store.update(entries -> {
@@ -94,13 +96,14 @@ public class TemplateService {
         }
     }
 
-    public void deleteTenant(String id) {
-        // Validate the tenant first so env/unknown IDs cannot delete any templates.
-        // Commit template deletion first so a template write failure leaves the tenant intact.
+    public synchronized void deleteTenant(String id) {
+        // Validate first; a template write failure must leave the tenant intact.
+        var original = new ArrayList<StoredTemplate>();
+        var deleted = new ArrayList<StoredTemplate>();
         synchronized (tenants) {
             tenants.requireDeletable(id);
-            var deleted = new ArrayList<StoredTemplate>();
             store.update(entries -> {
+                original.addAll(entries);
                 var next = new ArrayList<StoredTemplate>();
                 for (var t : entries) {
                     if (t.sourceTenantId().equals(id) || t.targetTenantId().equals(id)) deleted.add(t);
@@ -108,10 +111,16 @@ public class TemplateService {
                 }
                 return next;
             });
-            deleted.forEach(t -> record(t, "deleted"));
         }
         // Tenant cache invalidation must run outside the registry monitor (REQ-301).
-        tenants.delete(id);
+        // Keep the service monitor through commit/rollback so create/update cannot leave dangling templates.
+        try {
+            tenants.delete(id);
+        } catch (ApiException failure) {
+            store.update(entries -> original);
+            throw failure;
+        }
+        deleted.forEach(t -> record(t, "deleted"));
     }
 
     private void record(StoredTemplate t, String action) {

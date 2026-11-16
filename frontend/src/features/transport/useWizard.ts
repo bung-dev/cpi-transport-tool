@@ -46,7 +46,7 @@ function initial(source: string | null, target: string | null): WizardData {
 
 export function useWizard() {
   const { tenants, sourceTenantId, targetTenantId, setSourceTenantId, setTargetTenantId } = useTenants();
-  const { realDisabled } = useReadOnlyState();
+  const { realDisabled, notice } = useReadOnlyState();
   const [stored, setData] = useState(() => initial(sourceTenantId, targetTenantId));
   let data = stored;
   // AI-NOTE: 같은 틱의 연속 클릭은 상태 갱신(busy)만으로 막지 못한다. 동기 플래그로 중복 전송을 막는다 (근거: REQ-005 AC-4, REQ-423)
@@ -64,7 +64,7 @@ export function useWizard() {
     };
     setData(data);
   }
-  // AI-NOTE: 확인창이 열린 채 읽기 전용(켜짐·모름·조회 실패)이 되면 같은 렌더에서 닫는다 (근거: REQ-423, REQ-302 AC-5)
+  // AI-NOTE: 읽기 전용(켜짐·모름·조회 실패) 또는 대상 연결 확인 실패면 같은 렌더에서 확인창을 닫는다 (근거: REQ-423, REQ-430, REQ-302 AC-5)
   if (realDisabled && data.confirm) {
     data = { ...data, confirm: null };
     setData(data);
@@ -87,7 +87,7 @@ export function useWizard() {
     : sourceTenantId === targetTenantId ? '원본과 대상이 같습니다' : null;
   const tooMany = data.artifactIds.length > MAX_ARTIFACTS;
   const previewReason = !data.pkg ? '패키지를 먼저 선택하세요' : routeReason ?? (tooMany ? TOO_MANY_ARTIFACTS : data.busy ? '이관 실행 중입니다' : undefined);
-  const realReason = !data.preview ? '미리보기를 먼저 실행하세요' : data.busy ? '이관 실행 중입니다' : routeReason ?? undefined;
+  const realReason = notice ?? (!data.preview ? '미리보기를 먼저 실행하세요' : data.busy ? '이관 실행 중입니다' : routeReason ?? undefined);
 
   async function submit(real: boolean, deploy: boolean, options: { withoutTemplate?: boolean; allArtifacts?: boolean } = {}) {
     const d = latest.current;

@@ -36,7 +36,7 @@ export function Dashboard({ onForward }: { onForward: (template: TransportTempla
           <span className="break-all text-xl font-semibold">{tenantName(node.id)}</span>
           <span aria-hidden="true" className="rounded-md bg-primary-soft p-2 text-primary"><BrandIcon /></span>
         </span>
-        <TenantCheckBadge check={check} failed={status.state === 'error'} />
+        <TenantCheckBadge check={check} failed={status.state === 'error' || check !== undefined && check !== 'OK'} />
         <span className="mt-auto flex w-full flex-wrap justify-between gap-2 border-t border-hairline pt-3 text-xs">
           <span className="font-medium text-primary">대기 {waiting}건</span>
           <span className="text-ink-secondary">노드 상세 ↗</span>
