@@ -57,6 +57,8 @@ export interface TransportSummary {
 export interface TransportResponse {
   sourceTenant?: TenantRef;
   targetTenant?: TenantRef;
+  /** 템플릿으로 실행한 경우 실행 당시의 템플릿 id·이름. 템플릿 없이 실행했으면 필드가 없다(REQ-424·425). */
+  template?: { id: string; name: string };
   transportId: string;
   packageId: string;
   dryRun: boolean;
