@@ -184,3 +184,43 @@ test('REQ-430: 대시보드 대기 항목의 "전달"이 그 템플릿·패키�
   expect(w.errors).toEqual([]);
   expect(foreignHosts(w)).toEqual([]);
 });
+
+test('REQ-403·REQ-425: 템플릿으로 시작한 화면 실제 이관은 templateId를 보내고, 이력 목록·API에 그 템플릿이 남는다', async ({ page, request }) => {
+  const NAME = 'S12 템플릿 실제 이관';
+  const t = await app(request, 'POST', '/templates', { name: NAME, sourceTenantId: 'DEV', targetTenantId: 'PRD', packageId: 'PkgTransportDemo' });
+  expect(t.status, 'POST /templates').toBe(201);
+  createdTemplates.push(t.json.id);
+  const w = watch(page);
+  await page.goto('/#/transport');
+  const card = page.getByRole('listitem', { name: NAME });
+  await card.getByRole('button', { name: '이 템플릿으로 시작', exact: true }).click();
+  await expect(page.getByRole('list', { name: '패키지 목록' }).getByRole('radio', { name: /PkgTransportDemo/ })).toBeChecked();
+  await page.getByRole('button', { name: '다음', exact: true }).click();
+  const grid = page.getByRole('grid', { name: '이관할 아티팩트' });
+  await grid.getByRole('row').filter({ has: page.getByText('IF_Order_Sync', { exact: true }) }).click();
+  const post = () => page.waitForResponse((r) => new URL(r.url()).pathname === '/transport' && r.request().method() === 'POST');
+  const p1 = post();
+  await page.getByRole('button', { name: '미리보기 실행', exact: true }).click();
+  const preview = await p1;
+  expect(JSON.parse(preview.request().postData() || '{}').templateId, '미리보기 templateId').toBe(t.json.id);
+  await page.getByRole('button', { name: '이 구성으로 실제 이관', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '실제 이관 확인' });
+  await expect(dialog.getByRole('switch', { name: '배포', exact: true })).not.toBeChecked();
+  const p2 = post();
+  await dialog.getByRole('button', { name: '실행', exact: true }).click();
+  const realRes = await p2;
+  const realBody = JSON.parse(realRes.request().postData() || '{}');
+  expect(realBody.dryRun).toBe(false);
+  expect(realBody.templateId, '실제 이관 templateId').toBe(t.json.id);
+  const real = await realRes.json();
+  expect(real.template, '응답의 실행 당시 템플릿').toEqual({ id: t.json.id, name: NAME });
+  // 이력 목록의 템플릿 열과 API 이력의 template 필드
+  await navLink(page, '이관 이력').click();
+  const row = page.getByRole('row').filter({ hasText: real.transportId });
+  await expect(row).toContainText(NAME);
+  const hist = await app(request, 'GET', '/transport/history');
+  const mine = (hist.json as any[]).find((h) => h.transportId === real.transportId);
+  expect(mine?.template).toEqual({ id: t.json.id, name: NAME });
+  expect(w.errors).toEqual([]);
+  expect(foreignHosts(w)).toEqual([]);
+});

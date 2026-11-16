@@ -281,4 +281,18 @@ describe('REQ-430 실패와 빈 상태', () => {
     await userEvent.click(stepButton('실제 이관'));
     expect(screen.getByRole('button', { name: '운영로 이관' })).toBeDisabled();
   });
+
+  it('REQ-430 실패(노드별): 상태 조회는 됐지만 한 노드의 연결 확인이 실패하면 그 노드에 실패 종류 글자와 아이콘이 보이고, 그 노드로 가는 전달은 할 수 있다', async () => {
+    const status: TenantStatusResponse = { readOnly: false, tenants: STATUS.tenants.map((t) => (t.id === 'PRD' ? { ...t, check: 'TOKEN_FAILED' as const } : t)) };
+    mockApi(routes({ 'GET /tenants/status': () => json(status) }));
+    renderAt('#/dashboard');
+    await flowList();
+    // 실패 종류 글자는 상단 상태 칩과 같은 기존 표(인증 실패·권한 없음·연결 안 됨·오류)를 쓴다
+    await waitFor(() => expect(nodeButton('운영')).toHaveTextContent('인증 실패'));
+    expect(nodeButton('운영').querySelector('svg, [data-badge-dot]')).not.toBeNull();
+    expect(nodeButton('품질')).toHaveTextContent('연결됨');
+    const queue = within(await queueRegion());
+    const item = queue.getAllByRole('listitem').find((li) => li.textContent?.includes('PkgTransportDemo'))!;
+    expect(within(item).getByRole('button', { name: '전달' })).toBeEnabled();
+  });
 });
