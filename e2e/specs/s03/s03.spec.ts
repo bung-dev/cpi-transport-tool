@@ -5,7 +5,7 @@
 // REQ-312 규칙(목록을 읽었고 0개일 때만 등록 안내, 읽는 중·실패면 쓰지 않음)은 그대로 판정한다.
 import { expect, test, type Page } from '@playwright/test';
 import { after, app, key, R, shot, tenantList } from '../../lib/qa';
-import { applyRouteBtn, foreignHosts, grp, openRouteDialog, openTab, openWizard, registerViaUi, routeDialog, startManual, stepBtn, tabBtn, watch } from '../../lib/ui';
+import { applyRouteBtn, blocked, foreignHosts, grp, openRouteDialog, openTab, openWizard, registerViaUi, routeDialog, startManual, stepBtn, tabBtn, watch } from '../../lib/ui';
 import { countAny, P_DST, P_GO, P_NONE, P_REGISTER, P_SAME, P_SRC, phraseReport } from '../../lib/r2';
 
 test.afterEach(async ({ request }) => {
@@ -56,8 +56,8 @@ test('QA-160: 테넌트 0개 - 비활성 이유와 패키지 영역 안내', asy
   const rep = await phraseReport(page, ALL);
   rec.phrases = slim(rep);
   rec.registerLocations = headingsOf(rep, P_REGISTER);
-  rec.nextDisabled = await nextBtn(page).isDisabled();
-  rec.allPreviewDisabled = await allPreviewBtn(page).isDisabled();
+  rec.nextDisabled = await blocked(nextBtn(page));
+  rec.allPreviewDisabled = await blocked(allPreviewBtn(page));
   await shot(page, 'QA-160-transport');
   expect(countAny(rep, P_REGISTER), '"먼저 테넌트를 등록하세요" 가 패키지 단계에 보임').toBeGreaterThanOrEqual(1);
   expect(rec.registerLocations, '패키지 영역(머리글 "패키지")').toContain('패키지');
@@ -72,8 +72,8 @@ test('QA-161: 테넌트 0개 - 실행 비활성, 등록 안내, 탭 이동', asy
   const rec = R('QA-161');
   const w = watch(page);
   await freshPackageStep(page);
-  rec.nextDisabled = await nextBtn(page).isDisabled();
-  rec.allPreviewDisabled = await allPreviewBtn(page).isDisabled();
+  rec.nextDisabled = await blocked(nextBtn(page));
+  rec.allPreviewDisabled = await blocked(allPreviewBtn(page));
   rec.previewStepDisabled = await stepBtn(page, '미리보기').isDisabled();
   rec.realStepDisabled = await stepBtn(page, '실제 이관').isDisabled();
   rec.realButtons = (await page.locator('main').getByRole('button').allInnerTexts()).map((s) => s.trim()).filter((s) => /로 이관$|이관 실행|실제 이관$/.test(s) && !/^\d\./.test(s));
@@ -130,7 +130,7 @@ test('QA-162: 테넌트 1개 이상 - 기존 문구 규칙', async ({ page, requ
     await page.waitForTimeout(500);
     const rep = await phraseReport(page, ALL);
     const applyDisabled = (await routeDialog(page).count()) ? await applyRouteBtn(page).isDisabled() : null;
-    rec.steps.push({ name, phrases: slim(rep), nextDisabled: await nextBtn(page).isDisabled(), applyDisabled });
+    rec.steps.push({ name, phrases: slim(rep), nextDisabled: await blocked(nextBtn(page)), applyDisabled });
     await shot(page, `QA-162-${name.slice(0, 1)}`);
     if (expectPhrase) expect(countAny(rep, expectPhrase), `${name}: "${expectPhrase}" 보임`).toBeGreaterThanOrEqual(1);
     if (applyDisabled !== null) expect(applyDisabled, `${name}: "이 경로 사용" 비활성`).toBe(true);

@@ -4,6 +4,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { after, app, R, shot, tenantList } from '../../lib/qa';
 import {
+  blocked,
   brief,
   foreignHosts,
   OLD_TERM,
@@ -57,8 +58,8 @@ test('QA-225: 테넌트 0개 앱 - 안내 문구와 이름 유지', async ({ pag
   expect.soft(ri.steps, '단계 줄 이름').toEqual([...STEP_LABELS]);
   for (const s of ri.steps) expect.soft(hasOld(s), `단계 이름에 옛 명칭 없음: ${s}`).toBe(false);
   rec.disabled = {
-    next: await page.getByRole('button', { name: '다음', exact: true }).isDisabled(),
-    allPreview: await page.getByRole('button', { name: '전체 아티팩트로 미리보기', exact: true }).isDisabled(),
+    next: await blocked(page.getByRole('button', { name: '다음', exact: true })),
+    allPreview: await blocked(page.getByRole('button', { name: '전체 아티팩트로 미리보기', exact: true })),
     previewStep: await stepBtn(page, '미리보기').isDisabled(),
   };
   expect.soft(rec.disabled, '패키지 단계 버튼과 미리보기 단계 비활성').toEqual({ next: true, allPreview: true, previewStep: true });

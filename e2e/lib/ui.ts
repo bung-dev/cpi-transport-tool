@@ -217,6 +217,8 @@ export async function openTransport(page: Page): Promise<void> {
   await startManual(page);
   await expect(pkgRadios(page).first()).toBeVisible();
 }
+/** 버튼이 없거나(원본 없음·목록 읽기 오류로 패키지 목록을 그리지 않음) 비활성이면 진행할 수 없다. */
+export const blocked = async (loc: Locator): Promise<boolean> => (await loc.count()) === 0 || (await loc.isDisabled());
 export const routeBar = (page: Page) => page.getByRole('group', { name: '이관 경로', exact: true });
 export async function openRouteDialog(page: Page): Promise<void> {
   await routeBar(page).getByRole('button', { name: '경로 변경', exact: true }).click();
