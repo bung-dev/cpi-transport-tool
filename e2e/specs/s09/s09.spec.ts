@@ -1,5 +1,7 @@
 // 묶음 s09 — REQ-319 AC-1~AC-3 (QA-215~223, 파일 안에서 번호 순). qa_cases.md "REQ-319" 절 그대로.
 // 앱: --profile stub --read-only false. 한 파일에서 번호 순으로 실행하며 앱·이력·저장소를 함께 쓴다.
+// S3b(REQ-420~423): 실행 모드 라디오(미리보기/실제 이관)와 그 설명 문장은 없어졌다. 단계 줄의 "미리보기"·"실제 이관" 단계,
+// 아티팩트 단계의 "미리보기 실행", 미리보기 결과의 "이 구성으로 실제 이관", 실제 이관 단계의 "<대상>로 이관", 확인창 안의 배포 스위치로 옮겨 판정한다.
 import { expect, test, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import {
@@ -25,21 +27,26 @@ import {
 import {
   bundleScan,
   brief,
-  CLOSING_SENTENCE,
   choosePackage,
+  confirmDialog,
   confirmDialogRun,
-  descOf,
   foreignHosts,
-  grp,
   historyTable,
   hoverFocusSweep,
-  modeInfo,
-  modeRadio,
   OLD_TERM,
   openTab,
   openTransport,
+  openWizard,
+  pkgRadios,
   previewBtn,
   realBtn,
+  realFromResult,
+  runInfo,
+  setRoute,
+  startManual,
+  STEP_LABELS,
+  stepBtn,
+  subtitleOf,
   resultBadge,
   resultRegion,
   runPreview,
@@ -87,41 +94,36 @@ test('QA-215: 이관 탭 문구와 기본 선택', async ({ page }) => {
   expect(rec.scannerControl.allFound, 'H-9 변형 5종 모두 찾음').toBe(true);
   expect(rec.scannerControl.cleanZero, 'H-9 제거 뒤 0건').toBe(true);
 
+  // 부제: 실제 경로와 미리보기 안내(REQ-420, 고정 "DEV→PRD" 문구 아님)
   const para = (await page.locator('main p').first().innerText()).trim();
   rec.paragraph = para;
-  expect(para.endsWith(CLOSING_SENTENCE), `설명 문단이 '${CLOSING_SENTENCE}'로 끝남`).toBe(true);
-  const mi = await modeInfo(page);
-  rec.modeInfo = mi;
-  rec.radioRoleChecks = {
-    preview: await modeRadio(page, '미리보기').count(),
-    real: await modeRadio(page, '실제 이관').count(),
-    note: '실행 방식 항목은 접근성 트리상 radio(radiogroup "실행 모드")',
+  expect(norm(para), 'H-11 부제 문자열 완전 일치').toBe(subtitleOf('DEV → PRD'));
+  expect(para).not.toContain(OLD_TERM);
+  const ri = await runInfo(page);
+  rec.runInfo = ri;
+  expect(ri.steps, '단계 줄 이름').toEqual([...STEP_LABELS]);
+  expect(ri.current, '템플릿 없이 진행 뒤 현재 단계 = 패키지').toBe('패키지');
+  // 패키지 선택 전: 다음·전체 미리보기 비활성, 미리보기·실제 이관 단계 비활성
+  rec.buttonBeforePackage = {
+    next: await page.getByRole('button', { name: '다음', exact: true }).isDisabled(),
+    allPreview: await page.getByRole('button', { name: '전체 아티팩트로 미리보기', exact: true }).isDisabled(),
+    previewStep: await stepBtn(page, '미리보기').isDisabled(),
+    realStep: await stepBtn(page, '실제 이관').isDisabled(),
   };
-  expect(mi.items.map((i) => i.title), '두 제목').toEqual(['미리보기', '실제 이관']);
-  expect(mi.items.map((i) => i.checked), '기본 선택 = 미리보기').toEqual([true, false]);
-  rec.descPreview = { raw: mi.items[0].desc, normalized: norm(mi.items[0].desc), expected: descOf('PRD') };
-  expect(norm(mi.items[0].desc), 'H-11 설명 문장 문자열 완전 일치').toBe(descOf('PRD'));
-  expect(mi.items[0].desc).not.toContain(OLD_TERM);
-  rec.realItemDesc_INFO = mi.items[1].desc;
+  expect(rec.buttonBeforePackage, '패키지 선택 전 비활성').toEqual({ next: true, allPreview: true, previewStep: true, realStep: true });
+  expect(ri.deployControls, '미리보기 전에는 배포 관련 컨트롤 없음').toEqual([]);
+  await scan(page, rec, '이관-초기', w);
+  await choosePackage(page, 'PkgTransportDemo');
   // 실행 버튼
   rec.previewBtnCount = await previewBtn(page).count();
   expect(rec.previewBtnCount, '실행 버튼 이름 정확히 미리보기 실행').toBe(1);
-  rec.buttonBeforePackage = await previewBtn(page).isDisabled();
-  expect(rec.buttonBeforePackage, '패키지 선택 전 비활성').toBe(true);
-  expect(mi.deployControls, '미리보기에는 배포 관련 컨트롤 없음').toEqual([]);
-  await scan(page, rec, '이관-초기', w);
-  await choosePackage(page, 'PkgTransportDemo');
   rec.buttonAfterPackage = await previewBtn(page).isDisabled();
   expect(rec.buttonAfterPackage, '패키지 선택 뒤 활성').toBe(false);
-  rec.deployControlsAfterPackage = (await modeInfo(page)).deployControls;
-  expect((await modeInfo(page)).deployControls).toEqual([]);
+  rec.runInfoAfterPackage = await runInfo(page);
+  expect(rec.runInfoAfterPackage.deployControls).toEqual([]);
+  expect(rec.runInfoAfterPackage.buttons.filter((b: string) => /로 이관$|실제 이관$/.test(b)), '미리보기 전에는 실제 이관 실행 버튼 없음').toEqual([]);
   await scan(page, rec, '이관-패키지선택', w);
   await shot(page, 'QA-215-transport');
-  // 9. INFO: 대상 DEV 에서의 설명 문장
-  await grp(page, '대상').getByRole('radio', { name: 'DEV', exact: true }).check();
-  const miDev = await modeInfo(page);
-  rec.info_descWithTargetDEV = miDev.items.map((i) => i.desc);
-  await grp(page, '대상').getByRole('radio', { name: 'PRD', exact: true }).check();
   finish(rec, w);
 });
 
@@ -187,62 +189,65 @@ test('QA-217: 미리보기 ↔ 실제 이관 오가기 3회 - 버튼 문구, 배
   rec.historyBefore = n;
   rec.rounds = [];
   const made: string[] = [];
-  const ensurePkg = async (r: any) => {
-    const pkgChecked = await page.getByRole('list', { name: '패키지 목록' }).getByRole('radio').evaluateAll((es) => es.filter((e: any) => e.checked).length);
-    if (pkgChecked === 0) {
-      r.packageSelectionLostOnModeSwitch_INFO = true;
-      await choosePackage(page, 'PkgTransportDemo');
-    }
-  };
+  const postCount = () => w.reqs.filter((r) => r.method === 'POST' && r.url === 'http://localhost:8080/transport').length;
   for (let i = 1; i <= 3; i++) {
     const r: any = { i };
-    // 상태 A
-    const mA = await modeInfo(page);
-    r.A = { checked: mA.items.filter((x) => x.checked).map((x) => x.title), buttons: mA.buttons, deployControls: mA.deployControls };
-    expect.soft(r.A.checked, `i=${i} A: 선택 항목 미리보기`).toEqual(['미리보기']);
+    // 상태 A: 아티팩트 단계(미리보기 실행)
+    if ((await stepBtn(page, '아티팩트').getAttribute('aria-current')) !== 'step') await stepBtn(page, '아티팩트').click();
+    const mA = await runInfo(page);
+    r.A = { current: mA.current, buttons: mA.buttons, deployControls: mA.deployControls };
+    expect.soft(r.A.current, `i=${i} A: 현재 단계 아티팩트`).toBe('아티팩트');
     expect.soft(mA.buttons, `i=${i} A: 실행 버튼 이름`).toEqual(['미리보기 실행']);
     expect.soft(mA.deployControls, `i=${i} A: 배포 컨트롤 없음`).toEqual([]);
     await scan(page, rec, `오가기-${i}-A`, w);
     if (i !== 2) {
-      await ensurePkg(r);
       await stubReset(request);
       const out = await runPreview(page);
       r.A.run = { status: out.status, requestDryRun: out.postData?.dryRun, requestDeploy: out.postData?.deploy, badge: await resultBadge(page), prdRequestsDelta: await stubCount(request, 18082), transportId: out.body?.transportId };
       made.push(out.body?.transportId);
       expect.soft(out.postData?.dryRun, `i=${i} A: dryRun true`).toBe(true);
+      expect.soft(out.postData?.deploy, `i=${i} A: 미리보기는 deploy false`).toBe(false);
       expect.soft(r.A.run.badge, `i=${i} A: 결과 배지`).toBe('미리보기');
       expect.soft(r.A.run.prdRequestsDelta, `i=${i} A: 대상 요청 변화 0`).toBe(0);
     }
-    // 상태 B
-    await modeRadio(page, '실제 이관').check();
-    const mB = await modeInfo(page);
-    r.B = { checked: mB.items.filter((x) => x.checked).map((x) => x.title), buttons_INFO: mB.buttons, deployControls: mB.deployControls, staleBadgeBeforeRun_INFO: (await resultRegion(page).count()) > 0 ? await resultBadge(page) : null };
-    expect.soft(r.B.checked, `i=${i} B: 선택 항목 실제 이관`).toEqual(['실제 이관']);
-    expect.soft(mB.deployControls.length, `i=${i} B: 배포 스위치가 나타남`).toBeGreaterThan(0);
+    // 상태 B: 실제 이관 단계 → "PRD로 이관" → 확인창(배포 스위치는 확인창 안, 꺼짐으로 시작)
+    await stepBtn(page, '실제 이관').click();
+    await realBtn(page, 'PRD').click();
+    const dlg = confirmDialog(page);
+    await expect(dlg).toBeVisible();
+    const mB = await runInfo(page);
+    const sw = dlg.getByRole('switch', { name: '배포', exact: true });
+    r.B = { current: mB.current, buttons_INFO: mB.buttons, deployControls: mB.deployControls, switchStartsChecked: await sw.isChecked() };
+    expect.soft(r.B.current, `i=${i} B: 현재 단계 실제 이관`).toBe('실제 이관');
+    expect.soft(mB.deployControls.length, `i=${i} B: 확인창에 배포 스위치가 나타남`).toBeGreaterThan(0);
+    expect.soft(r.B.switchStartsChecked, `i=${i} B: 배포 스위치는 꺼짐으로 시작(ADR-008)`).toBe(false);
     expect.soft(mB.buttons.includes('미리보기 실행'), `i=${i} B: 실행 버튼이 미리보기 실행이 아님`).toBe(false);
     await scan(page, rec, `오가기-${i}-B`, w);
     if (i === 2) {
-      await ensurePkg(r);
       // 배포 스위치를 한 번 켰다 끄고 끈 채로 실행
-      const sw = page.getByRole('switch', { name: /배포/ }).first();
       await sw.click();
-      r.B.switchAfterOn = await sw.getAttribute('aria-checked');
+      r.B.switchAfterOn = await sw.isChecked();
       await sw.click();
-      r.B.switchAfterOff = await sw.getAttribute('aria-checked');
+      r.B.switchAfterOff = await sw.isChecked();
       await stubReset(request);
-      await realBtn(page, 'PRD').click();
       const out = await confirmDialogRun(page);
       r.B.run = { status: out.status, requestDryRun: out.postData?.dryRun, requestDeploy: out.postData?.deploy, badge: await resultBadge(page), prdRequests: await stubCount(request, 18082), transportId: out.body?.transportId };
       made.push(out.body?.transportId);
       expect.soft(out.postData?.dryRun, 'i=2 B: dryRun false').toBe(false);
+      expect.soft(out.postData?.deploy, 'i=2 B: 끈 채로 실행하면 deploy false').toBe(false);
       expect.soft(r.B.run.badge, 'i=2 B: 결과 배지 = 실제 이관 (미리보기 아님)').toBe('실제 이관');
       expect.soft(r.B.run.prdRequests, 'i=2 B: 대상에 요청 1건 이상').toBeGreaterThanOrEqual(1);
+    } else {
+      const before = postCount();
+      await dlg.getByRole('button', { name: '취소', exact: true }).click();
+      await expect(dlg).toHaveCount(0);
+      expect.soft(postCount() - before, `i=${i} B: 취소하면 POST 0건`).toBe(0);
     }
-    // 상태 C
-    await modeRadio(page, '미리보기').check();
-    const mC = await modeInfo(page);
-    r.C = { checked: mC.items.filter((x) => x.checked).map((x) => x.title), buttons: mC.buttons, deployControls: mC.deployControls };
-    expect.soft(r.C.checked, `i=${i} C: 선택 항목 미리보기`).toEqual(['미리보기']);
+    // 상태 C: 아티팩트 단계로 돌아오면 배포 컨트롤 없음, 실행 버튼은 미리보기 실행
+    await stepBtn(page, '아티팩트').click();
+    const mC = await runInfo(page);
+    r.C = { current: mC.current, buttons: mC.buttons, deployControls: mC.deployControls };
+    expect.soft(r.C.current, `i=${i} C: 현재 단계 아티팩트`).toBe('아티팩트');
     expect.soft(mC.buttons, `i=${i} C: 실행 버튼`).toEqual(['미리보기 실행']);
     expect.soft(mC.deployControls, `i=${i} C: 배포 컨트롤 없음`).toEqual([]);
     await scan(page, rec, `오가기-${i}-C`, w);
@@ -412,15 +417,12 @@ test('QA-220: 모든 탭 전수 스캔, 번들 정적 스캔, 새로고침 반�
   await choosePackage(page, 'PkgTransportDemo');
   await scan(page, rec, '이관-미리보기-패키지선택-아티팩트표시', w);
   rec.sweeps.push(await hoverFocusSweep(page, '이관-미리보기'));
-  await modeRadio(page, '실제 이관').check();
-  await scan(page, rec, '이관-실제이관', w);
-  rec.sweeps.push(await hoverFocusSweep(page, '이관-실제이관'));
-  await modeRadio(page, '미리보기').check();
   await runPreview(page);
   await scan(page, rec, '이관-미리보기결과', w);
   rec.sweeps.push(await hoverFocusSweep(page, '이관-미리보기결과'));
-  await modeRadio(page, '실제 이관').check();
-  await realBtn(page, 'PRD').click();
+  await realFromResult(page).click();
+  await expect(confirmDialog(page)).toBeVisible();
+  await scan(page, rec, '이관-실제이관확인창', w);
   await confirmDialogRun(page);
   await expect(resultRegion(page).first()).toBeVisible();
   await scan(page, rec, '이관-실제이관결과', w);
@@ -497,24 +499,33 @@ test('QA-221: 확인 대화상자 - 열기·닫기 반복과 문구', async ({ p
   await stubReset(request);
   await openTransport(page);
   await choosePackage(page, 'PkgTransportDemo');
-  await modeRadio(page, '실제 이관').check();
+  // S3b(REQ-423): 실제 이관 확인창은 미리보기 결과의 "이 구성으로 실제 이관"으로 연다. 미리보기 요청은 기준값에서 뺀다.
+  await runPreview(page);
   const n = (await historyOf(request)).length;
   rec.historyBefore = n;
-  const postCount = () => w.reqs.filter((r) => r.method === 'POST' && r.url === 'http://localhost:8080/transport').length;
-  const dlg = page.getByRole('dialog');
+  const posts = () => w.reqs.filter((r) => r.method === 'POST' && r.url === 'http://localhost:8080/transport').length;
+  const base = posts();
+  const postCount = () => posts() - base;
+  const dlg = confirmDialog(page);
+  const sw = dlg.getByRole('switch', { name: '배포', exact: true });
   const open = async () => {
-    await realBtn(page, 'PRD').click();
+    await realFromResult(page).click();
     await expect(dlg).toBeVisible();
   };
   const readDlg = async () => ({
     name: await dlg.evaluate((d: any) => (document.getElementById(d.getAttribute('aria-labelledby') || '')?.textContent || d.getAttribute('aria-label') || '').trim()),
     text: (await dlg.innerText()).replace(/\s+/g, ' ').trim(),
     buttons: (await dlg.getByRole('button').allInnerTexts()).map((s) => s.trim()),
+    deployChecked: await sw.isChecked(),
   });
   await open();
   const first = await readDlg();
   rec.first = first;
+  expect.soft(first.name, '확인창 이름').toBe('실제 이관 확인');
   expect.soft(first.text, '대상 테넌트 이름 PRD 가 보임').toContain('PRD');
+  expect.soft(first.text, '경로가 보임').toContain('DEV → PRD');
+  expect.soft(first.text, '되돌릴 수 없다는 경고').toContain('되돌릴 수 없습니다');
+  expect.soft(first.deployChecked, '배포 스위치는 꺼짐으로 시작(ADR-008)').toBe(false);
   await scan(page, rec, '확인대화상자-기본', w);
   await shot(page, 'QA-221-dialog-1');
   const texts: string[] = [first.text];
@@ -540,36 +551,39 @@ test('QA-221: 확인 대화상자 - 열기·닫기 반복과 문구', async ({ p
   }
   rec.repeat = { closing, texts, allSame: texts.every((x) => x === texts[0]) };
   expect.soft(rec.repeat.allSame, '5회 반복에서 문구가 같다').toBe(true);
-  // 5. 배포 스위치를 켠 상태
-  const sw = page.getByRole('switch', { name: /배포/ }).first();
-  await sw.click();
+  // 5. 확인창 안 배포 스위치를 켠 상태
   await open();
+  await sw.click();
   const dep = await readDlg();
   rec.deployOn = dep;
   rec.deployOnChanged_INFO = dep.text !== first.text;
+  expect.soft(dep.deployChecked, '배포 스위치 켜짐').toBe(true);
   await scan(page, rec, '확인대화상자-배포', w);
   await shot(page, 'QA-221-dialog-deploy');
   await dlg.getByRole('button', { name: '취소', exact: true }).click();
   await expect(dlg).toHaveCount(0);
   expect.soft(postCount(), '배포 켠 상태에서 취소 뒤 POST 0건').toBe(0);
-  // 6. 스위치를 끄고 승인
-  await sw.click();
+  // 6. 다시 열면 배포는 꺼짐으로 돌아와 있고, 그대로 승인
   await open();
+  rec.deployAfterReopen = await sw.isChecked();
+  expect.soft(rec.deployAfterReopen, '다시 연 확인창의 배포 스위치는 꺼짐(ADR-008)').toBe(false);
   const out = await confirmDialogRun(page);
   rec.approve = { status: out.status, dryRun: out.postData?.dryRun, deploy: out.postData?.deploy, badge: await resultBadge(page), postCount: postCount() };
   expect.soft(rec.approve.postCount, '승인하면 POST /transport 정확히 1건').toBe(1);
   expect.soft(out.postData?.dryRun).toBe(false);
+  expect.soft(out.postData?.deploy, '배포 꺼짐으로 승인').toBe(false);
   expect.soft(rec.approve.badge).toBe('실제 이관');
   // 7. 테넌트 삭제 확인 대화상자(열고 취소)
   await openTab(page, '테넌트');
+  const anyDlg = page.getByRole('dialog');
   const row = page.getByRole('row').filter({ hasText: 'QA319-T1' });
   await row.getByRole('button', { name: '삭제' }).click();
-  await expect(dlg).toBeVisible();
-  rec.deleteDialog = await readDlg();
+  await expect(anyDlg).toBeVisible();
+  rec.deleteDialog = { text: (await anyDlg.innerText()).replace(/\s+/g, ' ').trim(), buttons: (await anyDlg.getByRole('button').allInnerTexts()).map((s) => s.trim()) };
   await scan(page, rec, '삭제확인', w);
   await shot(page, 'QA-221-dialog-delete');
-  await dlg.getByRole('button', { name: '취소', exact: true }).click();
-  await expect(dlg).toHaveCount(0);
+  await anyDlg.getByRole('button', { name: '취소', exact: true }).click();
+  await expect(anyDlg).toHaveCount(0);
   rec.tenantStillThere = !!(await findTenant(request, 'QA319-T1'));
   expect.soft(rec.tenantStillThere, '삭제는 하지 않았다').toBe(true);
   finish(rec, w);
@@ -620,7 +634,8 @@ test('QA-222: 오류·안내 상태 전수', async ({ page, request }) => {
   // 1. 패키지 목록 읽기 실패
   for (const [nm, mode] of [['abort', ABORT], ['500json', JSON500], ['500html', HTML500]] as const) {
     const off = await replaceWith(isPkgList, 'GET', mode, `GET /packages -> ${nm}`);
-    await gotoFresh(page, '/#/transport');
+    await openWizard(page);
+    await startManual(page);
     await expect(page.getByRole('alert').first()).toBeVisible();
     await guide(`패키지목록-${nm}`, { retry: true });
     await off();
@@ -628,8 +643,9 @@ test('QA-222: 오류·안내 상태 전수', async ({ page, request }) => {
   // 2. 아티팩트 목록 읽기 실패
   for (const [nm, mode] of [['abort', ABORT], ['500json', JSON500], ['500html', HTML500]] as const) {
     const off = await replaceWith(isArtifacts, 'GET', mode, `GET /packages/*/artifacts -> ${nm}`);
-    await gotoFresh(page, '/#/transport');
-    await page.getByRole('list', { name: '패키지 목록' }).getByRole('radio').first().check();
+    await openTransport(page);
+    await pkgRadios(page).first().check();
+    await page.getByRole('button', { name: '다음', exact: true }).click();
     await expect(page.getByRole('alert').first()).toBeVisible();
     await guide(`아티팩트목록-${nm}`);
     await off();
@@ -652,18 +668,21 @@ test('QA-222: 오류·안내 상태 전수', async ({ page, request }) => {
     rec.apiMessages.push({ case: nm, status: r.status, error: r.json?.error, message: msg, oldTermInMessage: hasOld });
     expect.soft(hasOld, `3 ${nm}: 서버 응답 message 에 옛 명칭 없음 (있으면 AC-2·AC-3 충돌 NEEDS_DECISION, Q-17)`).toBe(false);
   }
-  // 4. 그 실제 응답을 화면에 재현 (미리보기·실제 이관 둘 다)
+  // 4. 그 실제 응답을 화면에 재현 (미리보기·실제 이관 둘 다). 실제 이관은 성공한 미리보기 결과의 "이 구성으로 실제 이관" → 확인창 "실행"으로 낸다.
   const runUi = async (mode: '미리보기' | '실제 이관') => {
     if (mode === '미리보기') await previewBtn(page).click();
     else {
-      await realBtn(page, 'PRD').click();
-      await page.getByRole('dialog').getByRole('button', { name: '실행', exact: true }).click();
+      await realFromResult(page).click();
+      await confirmDialog(page).getByRole('button', { name: '실행', exact: true }).click();
     }
   };
   await openTransport(page);
   await choosePackage(page, 'PkgTransportDemo');
   for (const mode of ['미리보기', '실제 이관'] as const) {
-    await modeRadio(page, mode).check();
+    if (mode === '실제 이관') {
+      await runPreview(page);
+      await expect(realFromResult(page)).toBeEnabled();
+    }
     const cases: Array<[string, Mode]> = [
       ['가', { status: real['가-원본=대상'].status, contentType: 'application/json', body: real['가-원본=대상'].body }],
       ['나', { status: real['나-규칙밖ID'].status, contentType: 'application/json', body: real['나-규칙밖ID'].body }],
@@ -689,8 +708,8 @@ test('QA-222: 오류·안내 상태 전수', async ({ page, request }) => {
   });
   await openTransport(page);
   await choosePackage(page, 'PkgTransportDemo');
-  await modeRadio(page, '실제 이관').check();
-  await realBtn(page, 'PRD').click();
+  await runPreview(page);
+  await realFromResult(page).click();
   const outPut = await confirmDialogRun(page);
   rec.resultCard_update400 = { status: outPut.status, results: (outPut.body?.results ?? []).map((r: any) => `${r.artifactId}:${r.status}:${r.error?.code ?? ''}:${r.error?.message ?? ''}`) };
   await expect(resultRegion(page).first()).toBeVisible();
@@ -706,7 +725,7 @@ test('QA-222: 오류·안내 상태 전수', async ({ page, request }) => {
     request: { method: 'GET', urlPath: "/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Order_Sync',Version='active')/$value" },
     response: { status: 500, body: 'download fail', headers: { 'Content-Type': 'text/plain' } },
   });
-  await modeRadio(page, '미리보기').check();
+  await stepBtn(page, '아티팩트').click();
   const outGet = await waitTransport(page, async () => {
     await previewBtn(page).click();
   });
@@ -808,17 +827,20 @@ test('QA-223: 사용자가 입력한 데이터는 치환되지 않는다', async
   rec.tenantTabItems = listText.map((s) => s.replace(/\s+/g, ' '));
   expect.soft(rec.tenantTabItems.some((s: string) => s.includes(NAME)), '테넌트 탭 목록에 입력한 이름 그대로').toBe(true);
   await openTab(page, '이관');
-  await expect(page.getByRole('list', { name: '패키지 목록' }).getByRole('radio').first()).toBeVisible();
-  const targetRadio = grp(page, '대상').getByRole('radio', { name: NAME, exact: true });
+  await startManual(page);
+  await expect(pkgRadios(page).first()).toBeVisible();
+  await page.getByRole('group', { name: '이관 경로' }).getByRole('button', { name: '경로 변경', exact: true }).click();
+  const targetRadio = page.getByRole('dialog', { name: '원본과 대상 선택' }).getByRole('radiogroup', { name: '대상', exact: true }).getByRole('radio', { name: NAME, exact: true });
   rec.targetRadioCount = await targetRadio.count();
-  expect.soft(rec.targetRadioCount, '이관 탭 대상 그룹 레이블이 입력한 이름 그대로').toBe(1);
-  await targetRadio.check();
+  expect.soft(rec.targetRadioCount, '경로 변경 창 대상 그룹 레이블이 입력한 이름 그대로').toBe(1);
+  await page.keyboard.press('Escape');
+  await setRoute(page, 'DEV', NAME);
   await choosePackage(page, 'PkgTransportDemo');
-  const mi = await modeInfo(page);
-  rec.descWithUserName = mi.items[0].desc;
-  expect.soft(norm(mi.items[0].desc), '설명 문장이 대상 이름을 그대로 넣은 틀').toBe(descOf(NAME));
+  rec.subtitleWithUserName = (await page.locator('main p').first().innerText()).trim();
+  expect.soft(norm(rec.subtitleWithUserName), '부제가 대상 이름을 그대로 넣은 틀').toBe(subtitleOf(`DEV → ${NAME}`));
+  const buttonCount = await previewBtn(page).count();
   const out = await runPreview(page);
-  rec.run = { status: out.status, badge: await resultBadge(page), buttonCount: await previewBtn(page).count(), targetName: out.body?.targetTenant?.name };
+  rec.run = { status: out.status, badge: await resultBadge(page), buttonCount, targetName: out.body?.targetTenant?.name };
   expect.soft(rec.run.badge).toBe('미리보기');
   expect.soft(rec.run.buttonCount).toBe(1);
   expect.soft(out.body?.targetTenant?.name, '응답 targetTenant.name').toBe(NAME);

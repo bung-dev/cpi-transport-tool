@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { addMap, after, call, delMap, historyFile, historyOf, R, shot, stubReset, writeText } from '../../lib/qa';
-import { checkedLabels, confirmDialogRun, foreignHosts, modeRadio, openTab, openTransport, realBtn, resultRegion, watch } from '../../lib/ui';
+import { foreignHosts, openTab, openTransport, realFlow, resultRegion, watch } from '../../lib/ui';
 import { countOf, NOTICE, openAllCards, putCount, putMapping, resultText, stubAll, xport } from '../../lib/r2';
 
 test.afterEach(async ({ request }) => {
@@ -46,13 +46,10 @@ test('QA-177: 400 빈 본문 - 아티팩트 FAILED 와 안내 (API 와 화면)',
   await stubReset(request);
   const w = watch(page);
   await openTransport(page);
-  await page.getByRole('list', { name: '패키지 목록' }).getByRole('radio', { name: /PkgTransportDemo/ }).first().check();
-  await expect(page.getByRole('list', { name: '아티팩트 목록' })).toBeVisible();
-  await page.getByRole('list', { name: '아티팩트 목록' }).getByRole('checkbox', { name: /IF_Order_Sync/ }).check();
-  rec.selectedArtifacts = await checkedLabels(page.getByRole('list', { name: '아티팩트 목록' }).getByRole('checkbox'));
-  await modeRadio(page, '실제 이관').check();
-  await realBtn(page, 'PRD').click();
-  const ui = await confirmDialogRun(page);
+  // S3b(REQ-423): 화면의 실제 이관은 미리보기 뒤 "이 구성으로 실제 이관" → 확인창. 미리보기는 대상에 요청하지 않아 PUT 수는 그대로다.
+  const { real: ui } = await realFlow(page, { artifacts: ['IF_Order_Sync'] });
+  rec.selectedArtifacts = ui.postData?.artifactIds;
+  expect(rec.selectedArtifacts, '고른 아티팩트 IF_Order_Sync 하나').toEqual(['IF_Order_Sync']);
   rec.ui = { http: ui.status, request: ui.postData, results: brief({ status: ui.status, json: ui.body }).results };
   expect(ui.status).toBe(200);
   await expect(resultRegion(page).first()).toBeVisible();

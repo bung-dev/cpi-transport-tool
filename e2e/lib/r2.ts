@@ -80,7 +80,7 @@ export const P_SRC = '원본 테넌트를 선택하세요';
 export const P_DST = '대상 테넌트를 선택하세요';
 export const P_SAME = '원본과 대상이 같습니다';
 export const P_NONE = '등록된 테넌트가 없습니다';
-export const P_GO = '테넌트 탭으로 이동';
+export const P_GO = '테넌트 화면으로 이동';
 
 /** 화면(body.innerText + 접근성 트리)에서 문구 개수와, 문구를 담은 가장 작은 요소의 가까운 머리글 */
 export async function phraseReport(page: Page, phrases: string[]): Promise<Record<string, any>> {

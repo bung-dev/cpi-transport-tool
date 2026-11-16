@@ -8,7 +8,7 @@ test.use({ actionTimeout: 20000 });
 
 const ROUTES: Array<[string, string]> = [
   ['#/dashboard', '대시보드'],
-  ['#/transport', '패키지 이관'],
+  ['#/transport', '새 이관'],
   ['#/templates', '템플릿'],
   ['#/history', '이관 이력'],
   ['#/tenants', '테넌트'],
@@ -61,6 +61,8 @@ test('REQ-410: 메뉴로 바꾼 화면은 주소 해시에 남고 새로고침�
 
 test('REQ-411: Ctrl+K로 팔레트를 열어 화면을 이동하고 Esc로 닫는다', async ({ page }) => {
   await page.goto('/#/transport');
+  // S3b(REQ-420): 새 이관은 템플릿 단계로 열린다. 패키지 검색은 "템플릿 없이 진행" 뒤 패키지 단계에 있다.
+  await page.getByRole('button', { name: '템플릿 없이 진행', exact: true }).click();
   const search = page.getByLabel('패키지 검색');
   await search.focus();
   await page.keyboard.press('Control+k');

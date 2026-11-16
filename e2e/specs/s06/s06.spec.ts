@@ -2,7 +2,7 @@
 // 앱: --profile stub --read-only false. 이력 응답은 page.route 로 대체한다(QA-199 만 실제 백엔드 이력).
 import { expect, test, type Page } from '@playwright/test';
 import { after, app, historyOf, key, R, registerTenant, shot } from '../../lib/qa';
-import { confirmDialogRun, foreignHosts, grp, historyTable, modeRadio, openTab, realBtn, resultRegion, watch, registerViaUi } from '../../lib/ui';
+import { foreignHosts, historyTable, openTab, realFlow, resultRegion, setRoute, startManual, watch, registerViaUi } from '../../lib/ui';
 import { fakeUuid, measureHistory, openHistory, plainRow, rMax, replaceHistory, SET_A, SET_B, SET_C, UUID_MAX, type StrSet } from '../../lib/r2';
 
 test.use({ actionTimeout: 20000 });
@@ -172,15 +172,11 @@ test('QA-199: 실제 백엔드 이력의 40자 테넌트 이름', async ({ page,
   rec.tenantNames = tl;
   try {
     await openTab(page, '이관');
+    await startManual(page);
+    await setRoute(page, SRC, TGT);
     await expect(page.getByRole('list', { name: '패키지 목록' }).getByRole('radio').first()).toBeVisible();
-    await grp(page, '원본').getByRole('radio', { name: SRC, exact: true }).check();
-    await grp(page, '대상').getByRole('radio', { name: TGT, exact: true }).check();
-    await page.waitForTimeout(800);
-    await page.getByRole('list', { name: '패키지 목록' }).getByRole('radio', { name: /PkgTransportDemo/ }).first().check();
-    await expect(page.getByRole('list', { name: '아티팩트 목록' })).toBeVisible();
-    await modeRadio(page, '실제 이관').check();
-    await realBtn(page, TGT).click();
-    const out = await confirmDialogRun(page);
+    // S3b(REQ-423): 미리보기 → "이 구성으로 실제 이관" → 확인창
+    const { real: out } = await realFlow(page);
     rec.run = { http: out.status, summary: out.body?.summary, transportId: out.body?.transportId, request: out.postData };
     expect(out.status).toBe(200);
     await openTab(page, '이력');
@@ -202,7 +198,8 @@ test('QA-199: 실제 백엔드 이력의 40자 테넌트 이름', async ({ page,
     const hist = await historyOf(request);
     const apiRow = hist.find((h: any) => h.transportId === out.body.transportId);
     rec.api = { count: hist.length, srcLen: apiRow?.sourceTenant?.name?.length, tgtLen: apiRow?.targetTenant?.name?.length };
-    expect(hist.length, '이력 n0+1').toBe(n0 + 1);
+    // S3b(REQ-423): 화면의 실제 이관은 미리보기를 먼저 하므로 미리보기 1건 + 실제 이관 1건
+    expect(hist.length, '이력 n0+2(미리보기·실제 이관)').toBe(n0 + 2);
     expect(rec.api.srcLen).toBe(40);
     expect(rec.api.tgtLen).toBe(40);
   } finally {

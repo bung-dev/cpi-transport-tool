@@ -2,7 +2,7 @@
 // 앱: --profile stub --read-only false. FAILED 는 18082 의 PUT(Version=active) 400 / 생성 POST 400 임시 매핑(본문 있음)으로 만든다.
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { addMap, after, delMap, historyOf, R, shot, stubReset } from '../../lib/qa';
-import { confirmDialogRun, foreignHosts, modeRadio, openTab, openTransport, previewBtn, realBtn, resultRegion, waitTransport, watch } from '../../lib/ui';
+import { choosePackage, confirmDialogRun, foreignHosts, openTab, openTransport, previewBtn, realBtn, realFlow, resultRegion, waitTransport, watch } from '../../lib/ui';
 import { filterSwitch, flat, headStats, openAllCards, putMapping } from '../../lib/r2';
 
 test.use({ actionTimeout: 20000 });
@@ -15,19 +15,18 @@ const failPut = (request: APIRequestContext) => addMap(request, 18082, putMappin
 const failCreate = (request: APIRequestContext) =>
   addMap(request, 18082, { priority: 1, request: { method: 'POST', urlPath: '/api/v1/IntegrationDesigntimeArtifacts' }, response: { status: 400, body: 'bad', headers: { 'Content-Type': 'text/plain' } } });
 
-/** 화면에서 PkgTransportDemo 의 두 아티팩트(모두)를 실제 이관 */
+/** 화면에서 PkgTransportDemo 의 두 아티팩트(모두)를 실제 이관. S3b(REQ-423): 미리보기 → "이 구성으로 실제 이관" → 확인창. */
 async function runRealUi(page: Page, request: APIRequestContext) {
   await stubReset(request);
   await openTransport(page);
-  await page.getByRole('list', { name: '패키지 목록' }).getByRole('radio', { name: /PkgTransportDemo/ }).first().check();
-  await expect(page.getByRole('list', { name: '아티팩트 목록' })).toBeVisible();
-  await page.getByRole('button', { name: '전체 선택', exact: true }).click();
-  await modeRadio(page, '실제 이관').check();
-  await realBtn(page, 'PRD').click();
-  const out = await confirmDialogRun(page);
-  await expect(resultRegion(page).first()).toBeVisible();
+  const { real: out } = await realFlow(page, { artifacts: 'all' });
   await page.waitForTimeout(300);
   return out;
+}
+/** 실제 이관 단계에서 같은 구성으로 다시 실제 이관("PRD로 이관" → 확인창) */
+async function rerunReal(page: Page) {
+  await realBtn(page, 'PRD').click();
+  return confirmDialogRun(page);
 }
 const statuses = (body: any) => (body?.results ?? []).map((r: any) => `${r.artifactId}:${r.status}`);
 const failedCount = (body: any) => (body?.results ?? []).filter((r: any) => r.status === 'FAILED').length;
@@ -94,9 +93,7 @@ test('QA-190: 실패 없음(M=0) - 보이지 않음, 실패 뒤 성공 재실행
   const id = await failPut(request);
   const o2 = await (async () => {
     await stubReset(request);
-    await modeRadio(page, '실제 이관').check();
-    await realBtn(page, 'PRD').click();
-    return confirmDialogRun(page);
+    return rerunReal(page);
   })();
   await page.waitForTimeout(300);
   rec.step2 = { failed: failedCount(o2.body), head: await headStats(page), transportId: o2.body?.transportId };
@@ -106,9 +103,7 @@ test('QA-190: 실패 없음(M=0) - 보이지 않음, 실패 뒤 성공 재실행
   // 3. 매핑 삭제 + 초기화 뒤 같은 이관을 다시 (새로고침 없이 연속)
   await delMap(request, 18082, id);
   await stubReset(request);
-  await modeRadio(page, '실제 이관').check();
-  await realBtn(page, 'PRD').click();
-  const o3 = await confirmDialogRun(page);
+  const o3 = await rerunReal(page);
   await page.waitForTimeout(300);
   rec.step3 = { ...(await noFail('성공 재실행')), failed: failedCount(o3.body), transportId: o3.body?.transportId };
   await shot(page, 'QA-190-3-rerun-ok');
@@ -142,8 +137,7 @@ test('QA-191: 미리보기 FAILED도 같은 규칙', async ({ page, request }) =
   });
   await stubReset(request);
   await openTransport(page);
-  await page.getByRole('list', { name: '패키지 목록' }).getByRole('radio', { name: /PkgTransportDemo/ }).first().check();
-  await expect(page.getByRole('list', { name: '아티팩트 목록' })).toBeVisible();
+  await choosePackage(page, 'PkgTransportDemo');
   await page.getByRole('button', { name: '전체 선택', exact: true }).click();
   const out = await waitTransport(page, async () => {
     await previewBtn(page).click();
