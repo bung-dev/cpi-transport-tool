@@ -95,12 +95,13 @@ describe('REQ-410 앱 셸', () => {
     expect(navLink('테넌트')).toHaveAttribute('aria-current', 'page');
   });
 
-  it('REQ-410: 앱을 열 때 셸과 대시보드(S2)는 테넌트 두 API 외의 요청을 보내지 않는다', async () => {
+  it('REQ-410 / REQ-430: 앱을 열 때 셸과 대시보드는 테넌트 두 API와 대시보드·템플릿 조회 외의 요청을 보내지 않는다', async () => {
     const fn = mockApi(screenRoutes());
     renderAt('');
     await within(routeGroup()).findByRole('button', { name: '원본 DEV 연결됨' });
+    await screen.findByRole('region', { name: '오늘 요약' });
     const urls = fn.mock.calls.map(([url]) => String(url));
-    expect(urls.every((u) => u === '/tenants' || u === '/tenants/status'), urls.join(', ')).toBe(true);
+    expect(urls.every((u) => ['/tenants', '/tenants/status', '/dashboard', '/templates'].includes(u)), urls.join(', ')).toBe(true);
   });
 
   it('REQ-410: 읽기 전용이 켜짐이면 상단에 "읽기 전용" 표시가 있다', async () => {

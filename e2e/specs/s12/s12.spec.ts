@@ -159,3 +159,28 @@ test('REQ-414: 테넌트 변경이 감사 이력에 남고 분류 필터로 좁�
   await expect(page.getByRole('row', { name: /S12 감사 대상/ })).toBeVisible();
   expect(await page.locator('body').innerText()).not.toContain('s12-audit-secret');
 });
+
+test('REQ-430: 대시보드 대기 항목의 "전달"이 그 템플릿·패키지로 채운 마법사 아티팩트 단계를 열고, 자동 실행은 없다', async ({ page, request }) => {
+  // 운영(PRD)에서 개발(DEV)로 가는 템플릿 + DEV → PRD 실제 이관 성공 1건 = (PkgTransportDemo, PRD, 이 템플릿) 대기 항목
+  const t = await app(request, 'POST', '/templates', { name: 'S12 대기 운영에서 개발', sourceTenantId: 'PRD', targetTenantId: 'DEV', packageId: null });
+  expect(t.status, 'POST /templates').toBe(201);
+  createdTemplates.push(t.json.id);
+  const real = await app(request, 'POST', '/transport', { packageId: 'PkgTransportDemo', artifactIds: ['IF_Order_Sync'], dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
+  expect(real.status, '실제 이관').toBe(200);
+  expect(real.json.summary.failed, '성공(실패 0)').toBe(0);
+  const w = watch(page);
+  await page.goto('/#/dashboard');
+  await expect(page.getByRole('region', { name: '오늘 요약' })).toBeVisible();
+  const queue = page.getByRole('region', { name: '대기 항목' });
+  const item = queue.getByRole('listitem').filter({ hasText: 'S12 대기 운영에서 개발' }).filter({ hasText: 'PkgTransportDemo' });
+  await expect(item).toHaveCount(1);
+  const posts = () => w.reqs.filter((r) => r.method === 'POST' && new URL(r.url).pathname === '/transport').length;
+  await item.getByRole('button', { name: '전달', exact: true }).click();
+  await expect(page).toHaveURL(/#\/transport$/);
+  await expect(page.getByRole('navigation', { name: '이관 단계' }).getByRole('button', { name: /^3\. 아티팩트/ })).toHaveAttribute('aria-current', 'step');
+  await expect(page.getByRole('group', { name: '이관 경로' })).toContainText('PRD → DEV');
+  await page.waitForTimeout(500);
+  expect(posts(), '전달은 자동 실행하지 않는다').toBe(0);
+  expect(w.errors).toEqual([]);
+  expect(foreignHosts(w)).toEqual([]);
+});

@@ -50,12 +50,21 @@ export const tpl = (over: Partial<TemplateFixture> & Pick<TemplateFixture, 'id' 
 
 export const REGISTERED: Tenant = { id: 't-new', name: '새 테넌트', apiHost: 'localhost', source: 'registered', createdAt: null };
 
+export const EMPTY_DASHBOARD = {
+  nodes: [{ id: 'DEV', name: 'DEV', origin: 'env' }, { id: 'PRD', name: 'PRD', origin: 'env' }],
+  edges: [],
+  queue: [],
+  today: { previews: 0, transports: 0, succeeded: 0, failed: 0 },
+};
+
 /** 기본 테넌트 두 개(DEV·PRD, env)와 상태 OK. 추가 경로를 덮어쓸 수 있다. */
 export function baseRoutes(extra: Parameters<typeof mockApi>[0] = {}): Parameters<typeof mockApi>[0] {
   return {
     'GET /tenants': () => json(TENANTS_OK),
     'GET /tenants/status': () => json(TENANT_STATUS_OK),
     'GET /templates': () => json([]),
+    // S4(REQ-430): 대시보드 화면이 읽는다. 기본은 경로·대기 없는 DEV·PRD 두 노드
+    'GET /dashboard': () => json(EMPTY_DASHBOARD),
     ...extra,
   };
 }
