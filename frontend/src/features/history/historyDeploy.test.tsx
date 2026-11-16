@@ -82,7 +82,7 @@ describe('이력 배포 결과', () => {
     expect(within(region).getByText('배포 실패 1개 · 시간 초과 1개 · 배포 성공 1개 · 배포 안 됨 1개')).toHaveClass('text-danger-fg');
     expect(within(region).getByRole('heading', { level: 5, name: '배포 오류 상세' }).nextElementSibling?.textContent).toBe('첫 줄\n둘째 줄 <img src=x>');
     expect(container.querySelector('img')).toBeNull();
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls.filter(([url]) => String(url) === '/transport/history')).toHaveLength(1);
   });
 
   it('REQ-309 AC-8·AC-9·AC-10: 성공한 이력 상세에도 배포 성공 요약을 보인다', async () => {

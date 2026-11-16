@@ -12,16 +12,16 @@ const named: TransportResponse = { ...old, transportId: 't-named', sourceTenant:
   targetTenant: { id: 'renamed-target', name: '<b>대상 당시 이름</b>' } };
 afterEach(() => vi.unstubAllGlobals());
 
-it('REQ-308 AC-6·AC-7: 패키지 뒤 원본 대상 열과 이관 시점 이름을 보이고 기존 항목은 -다', async () => {
+it('REQ-308 AC-6·AC-7 / REQ-425: 템플릿 뒤 원본·대상 열(그 뒤 패키지)과 이관 시점 이름을 보이고 기존 항목은 -다', async () => {
   const fn = mockApi({ 'GET /transport/history': () => json([named, old]) });
   render(<HistoryTab />);
   await screen.findByRole('table');
-  expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['시작 시각', '패키지', '원본', '대상', '모드', '배포', '결과', '이관 ID']);
+  expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['시작 시각', '템플릿', '원본', '대상', '패키지', '모드', '배포', '결과', '이관 ID']);
   const rows = screen.getAllByRole('row').slice(1);
-  expect(within(rows[0]).getAllByRole('cell').slice(1, 4).map(c => c.textContent)).toEqual(['P', '원본 당시 이름', '<b>대상 당시 이름</b>']);
-  expect(within(rows[1]).getAllByRole('cell').slice(1, 4).map(c => c.textContent)).toEqual(['P', '-', '-']);
+  expect(within(rows[0]).getAllByRole('cell').slice(2, 5).map(c => c.textContent)).toEqual(['원본 당시 이름', '<b>대상 당시 이름</b>', 'P']);
+  expect(within(rows[1]).getAllByRole('cell').slice(2, 5).map(c => c.textContent)).toEqual(['-', '-', 'P']);
   expect(screen.getByText('<b>대상 당시 이름</b>').querySelector('b')).toBeNull();
-  expect(fn).toHaveBeenCalledTimes(1);
+  expect(fn.mock.calls.filter(([url]) => String(url) === '/transport/history')).toHaveLength(1);
 });
 
 it.each([['기록된 이름', named], ['필드 없는 기존 항목', old]] as const)('REQ-308 AC-6·AC-7: %s 상세 메타와 기존 네 행 순서를 보존한다', async (_, entry) => {
@@ -32,7 +32,7 @@ it.each([['기록된 이름', named], ['필드 없는 기존 항목', old]] as c
   expect(within(result).getAllByRole('term').map(t => t.textContent)).toEqual(['이관 ID', '패키지 ID', '시작', '종료', '원본 테넌트', '대상 테넌트']);
   expect(within(result).getByText('원본 테넌트').nextElementSibling?.textContent).toBe(entry.sourceTenant?.name ?? '-');
   expect(within(result).getByText('대상 테넌트').nextElementSibling?.textContent).toBe(entry.targetTenant?.name ?? '-');
-  expect(fn).toHaveBeenCalledTimes(1);
+  expect(fn.mock.calls.filter(([url]) => String(url) === '/transport/history')).toHaveLength(1);
 });
 
 it('REQ-308 AC-6·AC-7: 이관 결과도 응답의 테넌트 이름을 텍스트로 보인다', () => {
