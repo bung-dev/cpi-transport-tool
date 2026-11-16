@@ -226,7 +226,7 @@ export async function measureHistory(page: Page, rowIndex = 0): Promise<Record<s
       m2_ok: lr ? lr.right <= inner + 0.5 : false,
       m3_headerCount: ths.length,
       m3_headers: headerIn,
-      m3_allInside: ths.length === 8 && headerIn.every((h) => h.inside),
+      m3_allInside: ths.length === 9 && headerIn.every((h) => h.inside),
       cellsInside: cellIn,
       tableWidth: table.getBoundingClientRect().width,
       verticalScroll: document.documentElement.scrollHeight > document.documentElement.clientHeight,
