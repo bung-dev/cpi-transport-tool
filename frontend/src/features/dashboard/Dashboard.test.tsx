@@ -181,7 +181,9 @@ describe('REQ-430 대시보드', () => {
     expect(itemNames(templates).sort()).toEqual(['개발에서 품질', '품질에서 운영']);
     const waiting = within(drawer).getByRole('list', { name: '이 노드의 대기 항목' });
     expect(itemNames(waiting)).toHaveLength(1);
-    expect(itemNames(waiting)[0]).toContain('PkgFaultDemo');
+    // 이 노드(품질)에 있는 항목(atTenantId=QAS): PkgTransportDemo. 품질로 가져올 PkgFaultDemo(at DEV)는 여기 없다
+    expect(itemNames(waiting)[0]).toContain('PkgTransportDemo');
+    expect(waiting.textContent).not.toContain('PkgFaultDemo');
     const recent = within(drawer).getByRole('list', { name: '최근 이관' });
     await waitFor(() => expect(within(recent).getAllByRole('listitem')).toHaveLength(5));
     // 최근 것부터 5건(startedAt 내림차순): 6,5,4,3,2. 품질이 쓰이지 않은 7번(개발 → 실험)은 없다
