@@ -52,6 +52,30 @@ async function previewOne() {
   return screen.findByRole('region', { name: '이관 결과' });
 }
 const confirmDialog = () => screen.getByRole('dialog', { name: '실제 이관 확인' });
+
+describe('REQ-430 / REQ-423 대상 연결 확인 실패(사람 결정 2026-11-16)', () => {
+  it.each(['TOKEN_FAILED', 'API_FORBIDDEN', 'UNREACHABLE', 'ERROR'] as const)('대상 연결 확인이 %s면 미리보기는 되고, 실제 이관 버튼 두 곳은 이유와 함께 비활성이다', async (check) => {
+    const st: TenantStatusResponse = { readOnly: false, tenants: TENANTS.tenants.map((t) => ({ ...t, check: t.id === 'PRD' ? check : ('OK' as const) })) };
+    const fn = setup({ status: () => json(st) });
+    const region = await previewOne();
+    expect(postBodies(fn)).toHaveLength(1);
+    const real = within(region).getByRole('button', { name: '이 구성으로 실제 이관' });
+    expect(real).toBeDisabled();
+    expect(real).toHaveAccessibleDescription(expect.stringContaining('운영'));
+    expect(real).toHaveAccessibleDescription(expect.stringContaining('연결 확인'));
+    await userEvent.click(stepButton('실제 이관'));
+    const btn = screen.getByRole('button', { name: '운영로 이관' });
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAccessibleDescription(expect.stringContaining('연결 확인'));
+  });
+
+  it('원본만 연결 확인이 실패하면 실제 이관은 막지 않는다(대상 기준)', async () => {
+    const st: TenantStatusResponse = { readOnly: false, tenants: TENANTS.tenants.map((t) => ({ ...t, check: t.id === 'DEV' ? 'TOKEN_FAILED' as const : 'OK' as const })) };
+    setup({ status: () => json(st) });
+    const region = await previewOne();
+    expect(within(region).getByRole('button', { name: '이 구성으로 실제 이관' })).toBeEnabled();
+  });
+});
 const deferred = () => {
   let release: (r: Response) => void = () => {};
   const promise = new Promise<Response>((r) => { release = r; });

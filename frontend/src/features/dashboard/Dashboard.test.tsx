@@ -282,17 +282,29 @@ describe('REQ-430 실패와 빈 상태', () => {
     expect(screen.getByRole('button', { name: '운영로 이관' })).toBeDisabled();
   });
 
-  it('REQ-430 실패(노드별): 상태 조회는 됐지만 한 노드의 연결 확인이 실패하면 그 노드에 실패 종류 글자와 아이콘이 보이고, 그 노드로 가는 전달은 할 수 있다', async () => {
+  it('REQ-430 실패(노드별, 사람 결정 2026-11-16): 한 노드의 연결 확인이 OK가 아니면 그 노드에 "확인 실패" 글자와 아이콘. 그 노드로 가는 전달은 되지만 실제 이관은 막힌다', async () => {
     const status: TenantStatusResponse = { readOnly: false, tenants: STATUS.tenants.map((t) => (t.id === 'PRD' ? { ...t, check: 'TOKEN_FAILED' as const } : t)) };
-    mockApi(routes({ 'GET /tenants/status': () => json(status) }));
+    mockApi(routes({
+      'GET /tenants/status': () => json(status),
+      'GET /packages/PkgTransportDemo/artifacts?tenantId=QAS': () => json(ARTIFACTS),
+      'GET /packages?tenantId=QAS': () => json(PACKAGES),
+      'POST /transport': (init) => json(preview(JSON.parse(String(init?.body)))),
+    }));
     renderAt('#/dashboard');
     await flowList();
-    // 실패 종류 글자는 상단 상태 칩과 같은 기존 표(인증 실패·권한 없음·연결 안 됨·오류)를 쓴다
-    await waitFor(() => expect(nodeButton('운영')).toHaveTextContent('인증 실패'));
+    await waitFor(() => expect(nodeButton('운영')).toHaveTextContent('확인 실패'));
     expect(nodeButton('운영').querySelector('svg, [data-badge-dot]')).not.toBeNull();
     expect(nodeButton('품질')).toHaveTextContent('연결됨');
     const queue = within(await queueRegion());
     const item = queue.getAllByRole('listitem').find((li) => li.textContent?.includes('PkgTransportDemo'))!;
-    expect(within(item).getByRole('button', { name: '전달' })).toBeEnabled();
+    const forward = within(item).getByRole('button', { name: '전달' });
+    expect(forward).toBeEnabled();
+    await userEvent.click(forward);
+    await findArtifactGrid();
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
+    const region = await screen.findByRole('region', { name: '이관 결과' });
+    expect(within(region).getByRole('button', { name: '이 구성으로 실제 이관' })).toBeDisabled();
+    await userEvent.click(stepButton('실제 이관'));
+    expect(screen.getByRole('button', { name: '운영로 이관' })).toBeDisabled();
   });
 });
