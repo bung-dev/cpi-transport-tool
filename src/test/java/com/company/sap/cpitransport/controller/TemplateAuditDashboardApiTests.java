@@ -306,6 +306,33 @@ class TemplateAuditDashboardApiTests {
         assertThat(findTemplate(envTemplate).get("usable").asBoolean()).isTrue();
     }
 
+    @Test @DisplayName("REQ-402 (리뷰 결함): deleteTemplates=true에서 템플릿 저장이 실패하면 500이고 테넌트는 지우지 않는다(일부만 적용하지 않음)")
+    void req402_templateWriteFailure() throws Exception {
+        Path dir = Files.createDirectories(directory.resolve("unwritable-templates"));
+        Path file = dir.resolve("templates.json");
+        try (var context = start(file, directory.resolve("unwritable-audit.jsonl"))) {
+            int p = port(context);
+            String id = ok(request(p, "POST", "/tenants", JSON.writeValueAsString(tenantBody("Write failure tenant"))), 201).get("id").asString();
+            ok(request(p, "POST", "/templates", JSON.writeValueAsString(templateBody("Write failure template", id, "PRD", null))), 201);
+            // 읽기는 되고 쓰기만 실패하게 한다(Windows는 읽기 전용 파일 교체 실패, POSIX는 폴더 쓰기 금지로 임시 파일 생성 실패).
+            assertThat(file.toFile().setWritable(false)).isTrue();
+            dir.toFile().setWritable(false);
+            try {
+                error(request(p, "DELETE", "/tenants/" + id + "?deleteTemplates=true", null), 500, "TEMPLATE_STORE_UNREADABLE");
+                var ids = new ArrayList<String>();
+                ok(request(p, "GET", "/tenants", null), 200).get("tenants").forEach(t -> ids.add(t.get("id").asString()));
+                assertThat(ids).as("템플릿을 지우지 못했으면 테넌트도 남아 있다").contains(id);
+                var names = new ArrayList<String>();
+                ok(request(p, "GET", "/templates", null), 200).forEach(t -> names.add(t.get("name").asString()));
+                assertThat(names).contains("Write failure template");
+            } finally {
+                dir.toFile().setWritable(true);
+                file.toFile().setWritable(true);
+                request(p, "DELETE", "/tenants/" + id + "?deleteTemplates=true", null);
+            }
+        }
+    }
+
     // ---- REQ-403 이관 기록의 템플릿 연결 ----
 
     @Test @DisplayName("REQ-403: templateId가 맞으면 응답·이력에 실행 당시 template {id,name}, 없으면 필드 없음")
