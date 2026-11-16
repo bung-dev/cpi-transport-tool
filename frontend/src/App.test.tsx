@@ -80,7 +80,7 @@ describe('App', () => {
     expect(bar.className).toContain('top-0');
     expect(within(bar).getByRole('heading', { level: 1, name: 'CPI Transport Tool' })).toBeInTheDocument();
     expect(within(bar).getByRole('navigation', { name: '주 메뉴' })).toBeInTheDocument();
-    expect(within(screen.getByRole('main')).queryByRole('navigation')).toBeNull();
+    expect(within(screen.getByRole('main')).queryByRole('navigation', { name: '주 메뉴' })).toBeNull();
   });
 
   it('REQ-102 AC-3: body 배경은 surface 토큰이고 App 최상위·상단 바·카드는 그에 맞는 배경이다', () => {

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { TenantCheck, TransportResponse } from '../../api/types';
@@ -102,5 +102,5 @@ it('REQ-303 AC-4·AC-5 / REQ-307 AC-6: App 상단 banner 안에 연결됨 칩 �
   expect(within(banner).getAllByText('연결됨')).toHaveLength(2);
   expect(within(banner).getByRole('heading', { name: 'CPI Transport Tool' })).toBeInTheDocument();
   expect(banner).toHaveClass('sticky', 'top-0');
-  await waitFor(() => expect(screen.getByRole('radio', { name: '실제 이관' })).toBeEnabled());
+  expect(await screen.findByRole('navigation', { name: '이관 단계' })).toBeInTheDocument();
 });

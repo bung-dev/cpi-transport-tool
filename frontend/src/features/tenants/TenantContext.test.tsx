@@ -23,7 +23,7 @@ it('REQ-302 AC-7: App 두 API는 최초 1회, 화면 전환은 재요청하지 �
     'GET /packages?tenantId=DEV': () => json(PACKAGES), 'GET /transport/history': () => json([]), 'GET /templates': () => json([]) });
   setHash('#/transport');
   render(<StrictMode><App /></StrictMode>);
-  await screen.findByLabelText('패키지 검색');
+  await screen.findByRole('navigation', { name: '이관 단계' });
   await userEvent.click(navLink('테넌트'));
   await screen.findByRole('row', { name: /DEV/ });
   await userEvent.click(navLink('이관 이력'));

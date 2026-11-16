@@ -281,7 +281,7 @@ describe('REQ-421 패키지 단계', () => {
     await userEvent.type(search, 'pkgnotin');
     expect(screen.getByRole('radio', { name: /Not In PRD/ })).toBeInTheDocument();
     await userEvent.clear(search);
-    await userEvent.type(search, '([');
+    await userEvent.type(search, '([[');
     expect(screen.queryAllByRole('radio')).toHaveLength(0);
     expect(calls(fn, '/packages?tenantId=DEV')).toBe(1);
   });
