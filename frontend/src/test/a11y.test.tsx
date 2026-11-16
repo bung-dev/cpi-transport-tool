@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ArtifactResult, TransportResponse } from '../api/types';
 import { ARTIFACTS, PACKAGES, json, mockApi } from './mockFetch';
 import { navLink, renderAt } from './appRoutes';
+import { artifactGrid, artifactRow, stepButton, toArtifacts } from './wizard';
 
 // 접근성 조건(REQ-108 AC-2·AC-3)을 화면 전체(이관 탭 결과 표시 상태, 이력 탭, 확인 대화상자)에서 확인한다.
 // jsdom은 배치를 계산하지 않으므로 REQ-108 AC-1·AC-4(가로 스크롤, 상단 바 한 줄)는 브라우저에서 확인한다.
@@ -42,6 +43,7 @@ function setupApp(historyError = false) {
   mockApi({
       'GET /tenants': () => json(TENANTS_OK),
       'GET /tenants/status': () => json(TENANT_STATUS_OK),
+      'GET /templates': () => json([]),
     'GET /packages?tenantId=DEV': () => json(PACKAGES),
     'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json(ARTIFACTS),
     'GET /transport/history': () =>
@@ -69,35 +71,33 @@ async function tabOrder(user: User): Promise<HTMLElement[]> {
 
 async function openResultState(user: User = userEvent.setup()) {
   setupApp();
+  await user.click(await screen.findByRole('button', { name: '템플릿 없이 진행' }));
   await user.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
-  await user.click(await screen.findByRole('checkbox', { name: /IF_Order_Sync/ }));
+  await user.click(screen.getByRole('button', { name: '다음' }));
+  await screen.findByRole('grid', { name: '이관할 아티팩트' });
+  await user.click(artifactRow('IF_Order_Sync'));
   await user.click(screen.getByRole('button', { name: '미리보기 실행' }));
   await screen.findByRole('heading', { name: '이관 결과' });
 }
 
 describe('키보드 접근 (REQ-108 AC-2)', () => {
-  it('REQ-108 AC-2: 이관 탭(결과 표시 상태)의 모든 컨트롤이 Tab 순서에 있고 네이티브 활성 컨트롤이다', async () => {
+  it('REQ-108 AC-2: 새 이관(결과 단계)의 모든 컨트롤이 Tab 순서에 있고 네이티브 활성 컨트롤이다', async () => {
     const user = keyboardUser();
     await openResultState(user);
-    await user.click(screen.getByRole('radio', { name: '실제 이관' })); // 배포 스위치를 보이게 한다
     document.body.focus();
     (document.activeElement as HTMLElement | null)?.blur();
     const order = await tabOrder(user);
     const reached = (el: HTMLElement) => order.includes(el);
-    const anyOf = (els: HTMLElement[]) => els.some(reached);
 
     // 주 메뉴(REQ-410): 링크마다 Tab 정지이고 상단 검색 버튼도 Tab 순서에 있다
     for (const name of ['대시보드', '새 이관', '템플릿', '이관 이력', '테넌트', '감사 이력'] as const) expect(reached(navLink(name)), name).toBe(true);
     expect(reached(within(screen.getByRole('banner')).getByRole('button', { name: /검색/ }))).toBe(true);
-    expect(reached(screen.getByLabelText('패키지 검색'))).toBe(true);
-    // 라디오 그룹은 그룹당 Tab 정지 하나(선택된 라디오)이고 나머지는 화살표로 이동한다
-    expect(anyOf(within(screen.getByRole('list', { name: '패키지 목록' })).getAllByRole('radio'))).toBe(true);
-    for (const box of within(screen.getByRole('list', { name: '아티팩트 목록' })).getAllByRole('checkbox')) expect(reached(box)).toBe(true);
-    for (const name of ['전체 선택', '선택 해제', 'PRD로 이관', '모두 펼치기', '모두 접기', '이 구성으로 실제 이관']) {
+    // 단계 줄: 갈 수 있는 단계 버튼은 모두 Tab 순서에 있다
+    for (const label of ['템플릿', '패키지', '아티팩트', '미리보기', '실제 이관'] as const) expect(reached(stepButton(label)), label).toBe(true);
+    expect(reached(within(screen.getByRole('group', { name: '이관 경로' })).getByRole('button', { name: '경로 변경' }))).toBe(true);
+    for (const name of ['모두 펼치기', '모두 접기', '이 구성으로 실제 이관']) {
       expect(reached(screen.getByRole('button', { name })), name).toBe(true);
     }
-    expect(anyOf(within(screen.getByRole('radiogroup', { name: '실행 모드' })).getAllByRole('radio'))).toBe(true);
-    expect(reached(screen.getByRole('switch', { name: '배포' }))).toBe(true);
     expect(reached(screen.getByRole('switch', { name: '문제 항목만 보기' }))).toBe(true);
     for (const id of ['A_Mismatch', 'B_Failed', 'C_Clean']) expect(reached(screen.getByRole('button', { name: id })), id).toBe(true);
 
@@ -109,21 +109,23 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
     }
   });
 
+  it('REQ-108 AC-2 / ADR-012: 아티팩트 단계의 Tab 순서에는 표 행 하나와 표 버튼·이동 버튼이 있다', async () => {
+    const user = keyboardUser();
+    setupApp();
+    await toArtifacts();
+    document.body.focus();
+    (document.activeElement as HTMLElement | null)?.blur();
+    const order = await tabOrder(user);
+    const inGrid = order.filter((el) => artifactGrid().contains(el));
+    expect(inGrid).toHaveLength(1);
+    expect(inGrid[0]).toHaveAttribute('aria-selected');
+    for (const name of ['전체 선택', '선택 해제', '이전', '미리보기 실행']) expect(order, name).toContain(screen.getByRole('button', { name }));
+  });
+
   it('REQ-108 AC-2: Enter/Space(라디오 그룹은 화살표 키)로 조작된다', async () => {
     const user = keyboardUser();
     await openResultState(user);
-    // 라디오 그룹: 화살표 키
-    screen.getByRole('radio', { name: '미리보기' }).focus();
-    await user.keyboard('{ArrowDown}');
-    expect(screen.getByRole('radio', { name: '실제 이관' })).toBeChecked();
-    // 스위치와 체크박스: Space
-    screen.getByRole('switch', { name: '배포' }).focus();
-    await user.keyboard(' ');
-    expect(screen.getByRole('switch', { name: '배포' })).toBeChecked();
-    const boxes = within(screen.getByRole('list', { name: '아티팩트 목록' })).getAllByRole('checkbox');
-    boxes[1].focus();
-    await user.keyboard(' ');
-    expect(boxes[1]).toBeChecked();
+    // 스위치: Space
     screen.getByRole('switch', { name: '문제 항목만 보기' }).focus();
     await user.keyboard(' ');
     expect(screen.getByRole('switch', { name: '문제 항목만 보기' })).toBeChecked();
@@ -136,9 +138,16 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     await user.keyboard(' ');
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    screen.getByRole('button', { name: '선택 해제' }).focus();
+    // 경로 선택 창의 라디오 그룹: 화살표 키
+    within(screen.getByRole('group', { name: '이관 경로' })).getByRole('button', { name: '경로 변경' }).focus();
     await user.keyboard('{Enter}');
-    expect(boxes.every((b) => !(b as HTMLInputElement).checked)).toBe(true);
+    const routeDialog = screen.getByRole('dialog', { name: '원본과 대상 선택' });
+    const targets = within(within(routeDialog).getByRole('radiogroup', { name: '대상' })).getAllByRole('radio');
+    targets[1].focus();
+    await user.keyboard('{ArrowUp}');
+    expect(targets[0]).toBeChecked();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: '원본과 대상 선택' })).toBeNull();
     // 주 메뉴 링크: Enter
     navLink('이관 이력').focus();
     await user.keyboard('{Enter}');
@@ -175,10 +184,13 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
   it('REQ-108 AC-2: 확인 대화상자의 버튼이 Tab 순서에 있고 Enter/Space로 조작된다', async () => {
     const user = keyboardUser();
     await openResultState(user);
-    await user.click(screen.getByRole('radio', { name: '실제 이관' }));
-    screen.getByRole('button', { name: 'PRD로 이관' }).focus();
+    screen.getByRole('button', { name: '이 구성으로 실제 이관' }).focus();
     await user.keyboard('{Enter}');
-    const dialog = screen.getByRole('dialog');
+    const dialog = screen.getByRole('dialog', { name: '실제 이관 확인' });
+    // 배포 스위치: Space
+    within(dialog).getByRole('switch', { name: '배포' }).focus();
+    await user.keyboard(' ');
+    expect(within(dialog).getByRole('switch', { name: '배포' })).toBeChecked();
     const order = await tabOrder(user);
     expect(order).toContain(within(dialog).getByRole('button', { name: '취소' }));
     expect(order).toContain(within(dialog).getByRole('button', { name: '실행' }));
@@ -191,10 +203,9 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
 describe('접근 가능한 이름과 색 외 구분 (REQ-108 AC-3)', () => {
   it('REQ-108 AC-3: 모든 입력·라디오·체크박스·스위치에 접근 가능한 이름이 있고 모든 버튼에 보이는 글자가 있다(아이콘만 있는 버튼 0개)', async () => {
     await openResultState();
-    await userEvent.click(screen.getByRole('radio', { name: '실제 이관' }));
-    await userEvent.click(screen.getByRole('button', { name: 'PRD로 이관' })); // 대화상자까지 연다
+    await userEvent.click(screen.getByRole('button', { name: '이 구성으로 실제 이관' })); // 대화상자까지 연다
     const controls = Array.from(document.querySelectorAll<HTMLElement>('input, [role="switch"], [role="radio"], [role="checkbox"]'));
-    expect(controls.length).toBeGreaterThan(8);
+    expect(controls.length).toBeGreaterThanOrEqual(2);
     for (const c of controls) expect(c, c.outerHTML.slice(0, 80)).toHaveAccessibleName();
     const buttons = Array.from(document.querySelectorAll<HTMLElement>('button'));
     expect(buttons.length).toBeGreaterThan(8);
@@ -213,10 +224,6 @@ describe('접근 가능한 이름과 색 외 구분 (REQ-108 AC-3)', () => {
 
   it('REQ-108 AC-3: 색만으로 구분하지 않는다 — 선택된 행은 선택된 라디오·체크박스가, 상태 배지는 글자가, 실패 카드는 배지 글자가 함께 있다', async () => {
     await openResultState();
-    // 선택된 행(primary-soft 배경)에는 선택된 컨트롤이 있다
-    const rows = Array.from(document.querySelectorAll<HTMLElement>('label[class*="bg-primary-soft"]'));
-    expect(rows.length).toBeGreaterThanOrEqual(3); // 패키지 행, 아티팩트 행, 실행 모드 상자
-    for (const row of rows) expect((row.querySelector('input') as HTMLInputElement).checked).toBe(true);
     // 배경색이 있는 상태 배지(둥근 pill)는 모두 글자가 있다
     const badges = Array.from(document.querySelectorAll<HTMLElement>('span[class*="rounded-full"][class*="-bg"]'));
     expect(badges.length).toBeGreaterThan(5);
@@ -226,5 +233,19 @@ describe('접근 가능한 이름과 색 외 구분 (REQ-108 AC-3)', () => {
     expect(failedCard.querySelector('[data-failed-band]')).not.toBeNull();
     expect(within(failedCard).getByText('FAILED')).toBeInTheDocument();
     expect(within(failedCard).getByText('상태')).toBeInTheDocument();
+  });
+
+  it('REQ-108 AC-3 / REQ-422: 선택된 아티팩트 행은 aria-selected와 보이는 선택 표시([data-check-mark])가 있고, 선택된 패키지 행에는 선택된 라디오가 있다', async () => {
+    setupApp();
+    await toArtifacts();
+    await userEvent.click(artifactRow('IF_Order_Sync'));
+    expect(artifactRow('IF_Order_Sync')).toHaveAttribute('aria-selected', 'true');
+    expect(artifactRow('IF_Order_Sync').querySelector('[data-check-mark]')).not.toBeNull();
+    expect(artifactRow('IF_Customer_Push')).toHaveAttribute('aria-selected', 'false');
+    expect(artifactRow('IF_Customer_Push').querySelector('[data-check-mark]')).toBeNull();
+    await userEvent.click(stepButton('패키지'));
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('label[class*="bg-primary-soft"]'));
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    for (const row of rows) expect((row.querySelector('input') as HTMLInputElement).checked).toBe(true);
   });
 });

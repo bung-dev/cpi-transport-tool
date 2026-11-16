@@ -59,7 +59,7 @@ describe('REQ-410 앱 셸', () => {
   it('REQ-410: 해시 #/transport는 새 이관 화면이다', async () => {
     mockApi(screenRoutes());
     renderAt('#/transport');
-    expect(await screen.findByLabelText('패키지 검색')).toBeInTheDocument();
+    expect(await screen.findByRole('navigation', { name: '이관 단계' })).toBeInTheDocument();
     expect(navLink('새 이관')).toHaveAttribute('aria-current', 'page');
   });
 
@@ -110,11 +110,19 @@ describe('REQ-410 앱 셸', () => {
   });
 
   it('REQ-410 실패: 테넌트 상태 조회에 실패하면 경로 표시가 "상태 모름"이고 실제 이관은 막힌다', async () => {
-    mockApi({ ...screenRoutes(), 'GET /tenants/status': () => json({}, 500) });
+    mockApi({
+      ...screenRoutes(),
+      'GET /tenants/status': () => json({}, 500),
+      'POST /transport': () => json({ transportId: 't-1', packageId: 'PkgTransportDemo', dryRun: true, deploy: false,
+        startedAt: '', finishedAt: '', summary: { total: 0, succeeded: 0, failed: 0 }, results: [] }),
+    });
     renderAt('#/transport');
     await waitFor(() => expect(routeGroup()).toHaveTextContent('상태 모름'));
+    await userEvent.click(await screen.findByRole('button', { name: '템플릿 없이 진행' }));
     await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
-    expect(screen.getByRole('radio', { name: '실제 이관' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: '전체 아티팩트로 미리보기' }));
+    const region = await screen.findByRole('region', { name: '이관 결과' });
+    expect(within(region).getByRole('button', { name: '이 구성으로 실제 이관' })).toBeDisabled();
   });
 
   it('REQ-410: 화면을 바꿔도 테넌트 두 API는 다시 요청하지 않는다', async () => {
