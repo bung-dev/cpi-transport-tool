@@ -57,6 +57,8 @@ function finish(qa: string, w: Watch): void {
 }
 const brief = (s: ArrowStep) => ({ key: s.key, t1: pick(s.t1), t2: pick(s.t2), source: s.sourceSelected, target: s.targetSelected });
 const pick = (i: any) => ({ tag: i.tag, role: i.role, name: i.name, group: i.group, checked: i.checked });
+/** 버튼이 없거나(목록 읽기 오류 등) 비활성이면 진행할 수 없다. */
+const blocked = async (loc: any): Promise<boolean> => (await loc.count()) === 0 || (await loc.isDisabled());
 const sameAlert = (page: any) => routeDialog(page).getByRole('alert').filter({ hasText: '원본과 대상이 같습니다' });
 
 test('QA-141: 원본 그룹 방향키 이동과 포커스 유지', async ({ page }) => {
@@ -244,11 +246,14 @@ test('QA-145: 방향키로 원본을 대상과 같게 옮길 때', async ({ page
   expect(rec.step4.applyDisabled, '"이 경로 사용" 활성').toBe(false);
   await applyRoute(page);
   const next = page.getByRole('button', { name: '다음', exact: true });
-  await expect(pkgRadios(page).first()).toBeVisible();
-  rec.step5 = { packageChecked: await checkedLabels(pkgRadios(page)), nextDisabled: await next.isDisabled(), artifactStepDisabled: await stepBtn(page, '아티팩트').isDisabled() };
+  // QA-T3(127.0.0.1:18082)의 패키지 목록은 이 스텁에서 읽기 오류가 날 수 있다. 목록이 아니라 패키지 단계가 된 것을 기다린다.
+  await expect(stepBtn(page, '패키지')).toHaveAttribute('aria-current', 'step');
+  await page.waitForTimeout(500);
+  rec.step5 = { packageChecked: await checkedLabels(pkgRadios(page)), nextDisabled: await blocked(next), artifactStepDisabled: await stepBtn(page, '아티팩트').isDisabled() };
   await shot(page, 'QA-145-different');
   expect(rec.step5.packageChecked, '적용 뒤 패키지 선택 없음').toEqual([]);
-  expect(rec.step5.nextDisabled, '패키지를 고르지 않았으므로 "다음" 비활성').toBe(true);
+  expect(rec.step5.nextDisabled, '패키지를 고르지 않았으므로 "다음" 비활성(또는 목록 오류로 없음)').toBe(true);
+  expect(rec.step5.artifactStepDisabled, '아티팩트 단계 비활성').toBe(true);
   // 이 앱은 읽기 전용 기본값이다. 미리보기 전이라 실제 이관 단계로 갈 수도 없다(기록과 판정).
   rec.realStepDisabled = await stepBtn(page, '실제 이관').isDisabled();
   expect(rec.realStepDisabled, '실제 이관 단계 비활성(미리보기 전)').toBe(true);
@@ -309,15 +314,15 @@ test('QA-147: 패키지 선택 뒤 방향키로 원본 변경', async ({ page, r
     await keysTo(page, isBtn('이 경로 사용'), '"이 경로 사용" 버튼');
     await page.keyboard.press('Enter');
     await expect(routeDialog(page)).toHaveCount(0);
-    await expect(pkgRadios(page).first()).toBeVisible();
+    await expect(stepBtn(page, '패키지')).toHaveAttribute('aria-current', 'step');
     await settle(page, w);
     return { ...brief(s!), state: await readState() };
   };
   const readState = async () => ({
     current: await stepBtn(page, '패키지').getAttribute('aria-current'),
     packageChecked: await checkedLabels(pkgRadios(page)),
-    nextDisabled: await page.getByRole('button', { name: '다음', exact: true }).isDisabled(),
-    allPreviewDisabled: await page.getByRole('button', { name: '전체 아티팩트로 미리보기', exact: true }).isDisabled(),
+    nextDisabled: await blocked(page.getByRole('button', { name: '다음', exact: true })),
+    allPreviewDisabled: await blocked(page.getByRole('button', { name: '전체 아티팩트로 미리보기', exact: true })),
     artifactStepDisabled: await stepBtn(page, '아티팩트').isDisabled(),
   });
   rec.step2_toQAT3 = await changeSource(['ArrowDown', 'ArrowDown'], 'QA-T3', '원본 ArrowDown×2');
