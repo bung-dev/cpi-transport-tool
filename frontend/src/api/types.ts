@@ -76,6 +76,8 @@ export interface TransportRequest {
   artifactIds?: string[];
   dryRun?: boolean;
   deploy?: boolean;
+  /** 템플릿으로 시작했고 경로를 바꾸지 않았을 때만 보낸다(REQ-423). */
+  templateId?: string;
 }
 
 export type TenantSource = 'env' | 'registered';

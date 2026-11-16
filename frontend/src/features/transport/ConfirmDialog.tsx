@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode, type RefO
 import { createPortal } from 'react-dom';
 import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Callout';
+import { Switch } from '../../components/ui/Switch';
 
 interface Props {
   targetName?: string;
@@ -9,6 +10,10 @@ interface Props {
   /** 선택한 아티팩트 수. 0이면 패키지 전체 */
   artifactCount: number;
   deploy: boolean;
+  /** 주면 확인창 안에 배포 스위치를 둔다(마법사). 없으면 배포 값을 요약으로만 보인다. */
+  onDeployChange?: (deploy: boolean) => void;
+  /** "<원본 이름> → <대상 이름>" */
+  routeText?: string;
   busy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -17,7 +22,7 @@ interface Props {
 }
 
 // REQ-005 AC-3, REQ-009 AC-1: 실제 이관 확인 대화상자(role=dialog, aria-modal).
-export function ConfirmDialog({ packageId, artifactCount, deploy, busy, onConfirm, onCancel, fallbackFocusRef, targetName = 'PRD' }: Props) {
+export function ConfirmDialog({ packageId, artifactCount, deploy, onDeployChange, routeText, busy, onConfirm, onCancel, fallbackFocusRef, targetName = 'PRD' }: Props) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -44,7 +49,7 @@ export function ConfirmDialog({ packageId, artifactCount, deploy, busy, onConfir
     }
     if (e.key !== 'Tab') return;
     // Tab 순환은 대화상자 안에서만 한다.
-    const focusables = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled)') ?? []);
+    const focusables = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)') ?? []);
     if (focusables.length === 0) {
       e.preventDefault();
       return;
@@ -74,14 +79,19 @@ export function ConfirmDialog({ packageId, artifactCount, deploy, busy, onConfir
         <h2 id={titleId} className="mb-3 text-lg font-semibold">
           실제 이관 확인
         </h2>
-        <Callout tone="warning">{`${targetName}에 업로드합니다`}</Callout>
+        <Callout tone="warning">{`${targetName}에 업로드합니다. 되돌릴 수 없습니다`}</Callout>
         <dl className="mt-3.5 grid gap-2">
+          {routeText !== undefined && <SummaryRow label="경로">{routeText}</SummaryRow>}
           <SummaryRow label="대상 패키지" valueClass="font-mono text-[13px]">
             {packageId}
           </SummaryRow>
           <SummaryRow label="아티팩트 수">{artifactCount === 0 ? '전체' : artifactCount}</SummaryRow>
-          <SummaryRow label="배포">{deploy ? '예' : '아니오'}</SummaryRow>
+          {!onDeployChange && <SummaryRow label="배포">{deploy ? '예' : '아니오'}</SummaryRow>}
         </dl>
+        {onDeployChange && (
+          <Switch className="mt-3.5" label="배포" description={`이관 후 ${targetName}에 배포합니다`} checked={deploy} disabled={busy}
+            onChange={(e) => onDeployChange(e.target.checked)} />
+        )}
         {/* 폭 640px 미만에서는 버튼이 세로로 쌓이고 DOM 순서(취소 → 실행)를 뒤집어 "실행"이 위에 온다 */}
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button ref={cancelRef} className="w-full sm:w-auto" onClick={onCancel} disabled={busy}>
