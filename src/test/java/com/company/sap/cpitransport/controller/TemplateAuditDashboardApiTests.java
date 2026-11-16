@@ -7,6 +7,7 @@ import java.nio.file.*;
 import java.security.SecureRandom;
 import java.time.*;
 import java.util.*;
+import java.util.concurrent.*;
 import com.company.sap.cpitransport.CpiTransportToolApplication;
 import com.company.sap.cpitransport.tenant.TenantStoreKeySource;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -329,6 +330,61 @@ class TemplateAuditDashboardApiTests {
                 dir.toFile().setWritable(true);
                 file.toFile().setWritable(true);
                 request(p, "DELETE", "/tenants/" + id + "?deleteTemplates=true", null);
+            }
+        }
+    }
+
+    @Test @DisplayName("REQ-402 (리뷰 2차): 함께 삭제에서 테넌트 저장소 쓰기가 실패하면 템플릿도 지우지 않는다(전부 적용 또는 전부 안 함)")
+    void req402_tenantWriteFailure() throws Exception {
+        Path dir = Files.createDirectories(directory.resolve("tenant-write-failure"));
+        // start()의 컨텍스트는 테넌트 저장소로 other-tenants.enc를 쓴다. Windows에서 읽기 전용 파일은 교체(쓰기)가 실패한다.
+        Path tenantsFile = directory.resolve("other-tenants.enc");
+        try (var context = start(dir.resolve("templates.json"), dir.resolve("audit.jsonl"))) {
+            int p = port(context);
+            String id = ok(request(p, "POST", "/tenants", JSON.writeValueAsString(tenantBody("Tenant write failure"))), 201).get("id").asString();
+            ok(request(p, "POST", "/templates", JSON.writeValueAsString(templateBody("Tenant write failure template", id, "PRD", null))), 201);
+            assertThat(tenantsFile.toFile().setWritable(false)).isTrue();
+            try {
+                // 테넌트 저장소 쓰기 실패는 기존 오류 계약 그대로(409 TENANT_STORE_UNREADABLE)
+                error(request(p, "DELETE", "/tenants/" + id + "?deleteTemplates=true", null), 409, "TENANT_STORE_UNREADABLE");
+                var ids = new ArrayList<String>();
+                ok(request(p, "GET", "/tenants", null), 200).get("tenants").forEach(t -> ids.add(t.get("id").asString()));
+                assertThat(ids).as("테넌트는 남아 있다").contains(id);
+                var names = new ArrayList<String>();
+                ok(request(p, "GET", "/templates", null), 200).forEach(t -> names.add(t.get("name").asString()));
+                assertThat(names).as("테넌트를 지우지 못했으면 템플릿도 남아 있다").contains("Tenant write failure template");
+            } finally {
+                tenantsFile.toFile().setWritable(true);
+                request(p, "DELETE", "/tenants/" + id + "?deleteTemplates=true", null);
+            }
+        }
+    }
+
+    @Test @DisplayName("REQ-402 (리뷰 2차): 함께 삭제와 같은 테넌트로의 템플릿 생성이 겹쳐도, 삭제 뒤 그 테넌트를 가리키는 템플릿이 남지 않는다")
+    void req402_concurrentCreate() throws Exception {
+        for (int round = 0; round < 5; round++) {
+            final int r = round;
+            String id = tenant("Race tenant " + r);
+            var pool = Executors.newFixedThreadPool(8);
+            var gate = new CountDownLatch(1);
+            var futures = new ArrayList<Future<HttpResponse<String>>>();
+            for (int i = 0; i < 6; i++) {
+                final int n = i;
+                futures.add(pool.submit(() -> {
+                    gate.await();
+                    return request(port, "POST", "/templates", JSON.writeValueAsString(templateBody("Race " + r + "-" + n, id, "PRD", null)));
+                }));
+            }
+            futures.add(pool.submit(() -> {
+                gate.await();
+                return request(port, "DELETE", "/tenants/" + id + "?deleteTemplates=true", null);
+            }));
+            gate.countDown();
+            for (var f : futures) f.get(60, TimeUnit.SECONDS);
+            pool.shutdown();
+            assertThat(futures.get(futures.size() - 1).get().statusCode()).isEqualTo(204);
+            for (JsonNode t : ok(request("GET", "/templates", null), 200)) {
+                assertThat(t.get("sourceTenantId").asString()).as("round %d: %s", r, t.get("name").asString()).isNotEqualTo(id);
             }
         }
     }
