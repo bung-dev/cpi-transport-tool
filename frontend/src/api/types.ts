@@ -100,3 +100,21 @@ export interface AuditEntry {
   action: 'created' | 'updated' | 'deleted' | 'preview' | 'transport';
   objectId: string; objectName: string; detail: string;
 }
+
+export interface DashboardNode { id: string; name: string; origin: TenantSource }
+export interface DashboardEdge { sourceTenantId: string; targetTenantId: string; templateIds: string[] }
+export interface DashboardQueueItem {
+  packageId: string;
+  atTenantId: string;
+  nextTemplateId: string;
+  nextTargetTenantId: string;
+  arrivedTransportId: string;
+  arrivedAt: string;
+  artifactCount: number;
+}
+export interface DashboardResponse {
+  nodes: DashboardNode[];
+  edges: DashboardEdge[];
+  queue: DashboardQueueItem[];
+  today: { previews: number; transports: number; succeeded: number; failed: number };
+}

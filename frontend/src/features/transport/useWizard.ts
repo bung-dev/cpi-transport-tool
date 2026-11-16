@@ -158,6 +158,18 @@ export function useWizard() {
         pkg: t.packageId ? { id: t.packageId, name: t.packageId, version: '' } : null, pendingPackage: t.packageId ?? null,
       }));
     },
+    /** 대기 항목 전달: 템플릿 경로·연결을 유지하고 대기 패키지의 아티팩트 단계만 연다. 실행은 사용자가 요청한다. */
+    forwardPackage(t: TransportTemplate, packageId: string) {
+      if (!t.usable) return;
+      generation.current += 1;
+      inFlight.current = false;
+      setSourceTenantId(t.sourceTenantId);
+      setTargetTenantId(t.targetTenantId);
+      update(() => ({
+        ...initial(t.sourceTenantId, t.targetTenantId), step: 'artifacts', templateDone: true, template: t,
+        pkg: { id: packageId, name: packageId, version: '' },
+      }));
+    },
     /** 팔레트의 패키지 항목: 템플릿 연결 없이 그 패키지가 선택된 아티팩트 단계 */
     openPackage(pkg: ArtifactSummary) {
       generation.current += 1;
