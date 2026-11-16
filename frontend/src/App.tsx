@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import { BrandIcon } from './components/ui/icons';
 import { Button } from './components/ui/Button';
 import { HistoryTab } from './features/history/HistoryTab';
+import { Dashboard } from './features/dashboard/Dashboard';
 import { TransportWizard } from './features/transport/TransportWizard';
 import { useWizard } from './features/transport/useWizard';
 import { TenantProvider, useTenants } from './features/tenants/TenantContext';
@@ -108,7 +109,10 @@ function AppShell() {
     </header>
     <main ref={main} tabIndex={-1} className="mx-auto w-full max-w-[1200px] min-w-0 px-4 py-8 md:px-6">
       <div key={`${route}-${revision}`} className="min-w-0">
-        {route === 'dashboard' && <section className="rounded-xl border border-hairline bg-canvas p-6"><h2 className="text-2xl font-semibold">대시보드</h2><p className="mt-3 text-ink-secondary">경로를 확인하고 새 이관을 준비하세요. 템플릿과 이관 이력은 주 메뉴에서 확인할 수 있습니다.</p></section>}
+        {route === 'dashboard' && <Dashboard onForward={(template, packageId) => {
+          wizard.forwardPackage(template, packageId);
+          go('transport');
+        }} />}
         {route === 'transport' && <TransportWizard wizard={wizard} />}
         {route === 'history' && <HistoryTab />}
         {route === 'tenants' && <TenantTab initiallyCreate={create === 'tenant'} />}
