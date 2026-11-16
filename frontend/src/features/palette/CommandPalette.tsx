@@ -15,11 +15,23 @@ type Item = { id: string; label: string; command: Command; reason?: string };
 
 function Highlight({ text, query }: { text: string; query: string }) {
   if (!query) return text;
+  const folded = text.toLowerCase();
+  // Map folded UTF-16 positions back to whole original characters, including expanded lowercase forms.
+  const positions: { start: number; end: number }[] = [];
+  let originalOffset = 0;
+  for (const character of text) {
+    const end = originalOffset + character.length;
+    for (let i = 0; i < character.toLowerCase().length; i++) positions.push({ start: originalOffset, end });
+    originalOffset = end;
+  }
   const parts = [];
   let offset = 0;
-  for (let index = text.toLowerCase().indexOf(query); index >= 0; index = text.toLowerCase().indexOf(query, offset)) {
-    parts.push(text.slice(offset, index), <mark key={index} className="rounded-sm bg-caution-bg text-caution-fg">{text.slice(index, index + query.length)}</mark>);
-    offset = index + query.length;
+  for (let index = folded.indexOf(query); index >= 0; index = folded.indexOf(query, index + query.length)) {
+    const start = Math.max(offset, positions[index].start);
+    const end = positions[index + query.length - 1].end;
+    if (end <= offset) continue;
+    parts.push(text.slice(offset, start), <mark key={index} className="rounded-sm bg-caution-bg text-caution-fg">{text.slice(start, end)}</mark>);
+    offset = end;
   }
   return <>{parts}{text.slice(offset)}</>;
 }

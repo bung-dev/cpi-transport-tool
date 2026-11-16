@@ -21,7 +21,7 @@ export function TenantDeleteDialog({ tenantId, name, busy, error, onCancel, onCo
       <label className="flex gap-2"><input type="checkbox" checked={cascade} disabled={busy} onChange={e => setCascade(e.target.checked)} />템플릿 {templates.length}개도 함께 삭제</label>
     </div>}
     {error && <ErrorAlert error={error} />}
-    <div className="mt-5 flex justify-end gap-2"><Button disabled={busy} onClick={onCancel}>취소</Button><Button variant="primary" disabled={busy || state.status !== 'ok'} onClick={() => onConfirm(cascade)}>삭제</Button></div>
+    <div className="mt-5 flex justify-end gap-2"><Button disabled={busy} onClick={onCancel}>취소</Button><Button variant="primary" disabled={busy || state.status === 'loading'} onClick={() => onConfirm(state.status === 'ok' && templates.length > 0 && cascade)}>삭제</Button></div>
     {busy && <p role="status">삭제 중</p>}
   </Modal>;
 }
