@@ -55,7 +55,6 @@ class SecretLeakTests {
             registry.add(prefix + "client-id", () -> "dummy-" + env + "-client");
             registry.add(prefix + "client-secret", () -> "dummy-" + env + "-secret");
         }
-        registry.add("cpi.transport.mapping-file", () -> temporary.resolve("mapping.yml").toString());
         registry.add("cpi.transport.history.file", () -> temporary.resolve("history.jsonl").toString());
     }
     private ch.qos.logback.core.FileAppender<ch.qos.logback.classic.spi.ILoggingEvent> fileLog;
@@ -93,7 +92,7 @@ class SecretLeakTests {
         org.slf4j.MDC.put("artifactId", "caller-artifact");
         try {
             var request = new TransportRequest("PkgTransportDemo", List.of("missing"), true, false);
-            var response = service.execute(request, List.of(), List.of());
+            var response = service.execute(request, List.of());
             assertThat(response.summary().failed()).isEqualTo(1);
             assertThat(org.slf4j.MDC.get("transportId")).isEqualTo("caller");
             assertThat(org.slf4j.MDC.get("artifactId")).isEqualTo("caller-artifact");
@@ -104,9 +103,14 @@ class SecretLeakTests {
         }
     }
 
+    // 자격증명·토큰과 번들 안 값은 어떤 출력에도 나오지 않는다.
     private static final String[] SECRETS = {
             "dummy-dev-secret", "dummy-prd-secret", "dummy-dev-token-0001", "dummy-prd-token-0001",
-            "dummy-dev-apikey-123", "dummy-prd-apikey-456", "dummy-dev-pass-XYZ", "dummy-prd-pass-UVW"
+            "dummy-dev-apikey-123", "dummy-prd-apikey-456", "dummy-prd-pass-UVW"
+    };
+    // REQ-505: 구성 값의 값(민감 키 포함)은 응답·이력에는 평문으로 남지만 로그에는 남지 않는다.
+    private static final String[] CONFIGURATION_VALUES = {
+            "dummy-dev-pass-XYZ", "http://dev-receiver.localhost/customers", "http://dev-backend.localhost/orders"
     };
 
     private String transport(boolean dryRun, String packageId, List<String> ids) throws Exception {
@@ -121,92 +125,53 @@ class SecretLeakTests {
     }
 
     private void noLeaks(CapturedOutput output, String response) throws Exception {
-        assertThat(output.getAll()).doesNotContain(SECRETS);
+        assertThat(output.getAll()).doesNotContain(SECRETS).doesNotContain(CONFIGURATION_VALUES);
+        assertThat(Files.readString(temporary.resolve("application.log"))).doesNotContain(SECRETS).doesNotContain(CONFIGURATION_VALUES);
         assertThat(response).doesNotContain(SECRETS);
         assertThat(Files.readString(temporary.resolve("history.jsonl"))).doesNotContain(SECRETS);
-        assertThat(Files.readString(temporary.resolve("application.log"))).doesNotContain(SECRETS);
-    }
-
-    private void mapping(boolean mapped) throws Exception {
-        var root = JSON.readTree(Files.readString(Path.of("examples/mapping-example.json")));
-        var entries = new ArrayList<Map<String, String>>();
-        for (var entry : root.path("mappings")) {
-            var values = new LinkedHashMap<String, String>();
-            for (String key : List.of("artifactId", "targetType", "key", "devValue", "prdValue"))
-                values.put(key, entry.path(key).asString());
-            boolean sensitive = Set.of("ApiKey", "ClientPassword").contains(values.get("key"));
-            if (sensitive && !mapped) continue;
-            // Distinct current and mapped DEV values exercise masking before value comparison.
-            if (sensitive) values.put("devValue", "dummy-dev-secret");
-            entries.add(values);
-        }
-        Files.writeString(temporary.resolve("mapping.yml"), JSON.writeValueAsString(Map.of("mappings", entries)));
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
-    @DisplayName("REQ-002 AC-6, REQ-012 AC-3, REQ-013 AC-3: real and dry transports hide secrets across all outputs and log every step")
-    void req002_ac6_allOutputChannels(boolean dryRun, CapturedOutput output) throws Exception {
-        mapping(true);
+    @DisplayName("REQ-002 AC-6, REQ-504, REQ-505, REQ-013 AC-3: credentials stay out of every output, configuration values stay out of logs but are plain in response and history, and every step is logged")
+    void req505_allOutputChannels(boolean dryRun, CapturedOutput output) throws Exception {
         String body = transport(dryRun, "PkgTransportDemo", List.of("IF_Order_Sync", "IF_Customer_Push"));
         var response = JSON.readValue(body, TransportResponse.class);
         assertThat(response.summary().succeeded()).isEqualTo(2);
+        var customer = response.results().stream().filter(r -> r.artifactId().equals("IF_Customer_Push")).findFirst().orElseThrow();
+        assertThat(customer.configurations()).filteredOn(c -> c.key().equals("ClientPassword"))
+                .extracting(ConfigurationItem::value).containsExactly("dummy-dev-pass-XYZ");
+        assertThat(body).contains("dummy-dev-pass-XYZ");
+        assertThat(Files.readString(temporary.resolve("history.jsonl"))).contains("dummy-dev-pass-XYZ");
         for (var artifact : response.results()) {
-            assertThat(artifact.replacements()).anySatisfy(replacement -> {
-                assertThat(replacement.status()).isEqualTo(ReplacementStatus.SENSITIVE_SKIPPED);
-                assertThat(replacement.before()).isEqualTo("***");
-                assertThat(replacement.after()).isEqualTo("***");
-            });
             String prefix = "transportId=" + response.transportId() + " artifactId=" + artifact.artifactId();
-            for (String step : List.of("DOWNLOAD", "REPLACE", "UPLOAD", "PARAMETER_REPLACE", "DEPLOY")) {
+            for (String step : List.of("DOWNLOAD", "UPLOAD", "PARAMETER_COPY", "DEPLOY")) {
                 assertThat(output.getOut()).contains(prefix + " step=" + step + " phase=START");
                 String result = dryRun && Set.of("UPLOAD", "DEPLOY").contains(step) ? "SKIPPED_DRY_RUN" : "OK";
                 assertThat(output.getOut()).contains(prefix + " step=" + step + " phase=END result=" + result);
             }
         }
-        noLeaks(output, body);
-    }
-
-    @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    @DisplayName("REQ-012 AC-4, AC-3: unmapped sensitive keys expose only their names in real and dry transports")
-    void req012_ac4_unmappedNamesOnly(boolean dryRun, CapturedOutput output) throws Exception {
-        mapping(false);
-        String body = transport(dryRun, "PkgTransportDemo", List.of("IF_Order_Sync", "IF_Customer_Push"));
-        var root = JSON.readTree(body);
-        var keys = new HashSet<String>();
-        for (var artifact : root.path("results")) {
-            for (var key : artifact.path("unmappedKeys")) {
-                assertThat(key.size()).isEqualTo(2);
-                keys.add(key.path("key").asString());
-            }
-        }
-        assertThat(keys).contains("ApiKey", "ClientPassword");
+        assertThat(output.getOut()).doesNotContain("step=REPLACE ", "step=PARAMETER_REPLACE");
         noLeaks(output, body);
     }
 
     @Test
-    @DisplayName("REQ-013 AC-3, REQ-002 AC-6, REQ-012 AC-3: failed stages log categorical results without echoed secrets and continue")
+    @DisplayName("REQ-013 AC-3, REQ-002 AC-6, REQ-505: failed stages log categorical results without echoed secrets or configuration values and continue")
     void req013_ac3_failedStages(CapturedOutput output) throws Exception {
-        mapping(true);
         String download = "/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Fault_Download500',Version='active')/$value";
         stubs.dev().stubFor(get(urlEqualTo(download)).atPriority(1)
                 .willReturn(aResponse().withStatus(500).withBody(String.join(" ", SECRETS))));
         var ids = List.of("IF_Fault_Download500", "IF_Fault_UploadFail", "IF_Fault_ParamPutFail", "IF_Fault_DeployError", "IF_Fault_A");
-        // ParamA must be mapped to exercise the existing PUT failure fixture.
-        Files.writeString(temporary.resolve("mapping.yml"), """
-                {"mappings":[{"artifactId":"IF_Fault_ParamPutFail","targetType":"externalParam",
-                "key":"ParamA","devValue":"a-dev","prdValue":"a-prd"}]}
-                """);
         String body = transport(false, "PkgFaultDemo", ids);
         var response = JSON.readValue(body, TransportResponse.class);
         assertThat(response.summary().failed()).isEqualTo(4);
         assertThat(response.summary().succeeded()).isEqualTo(1);
         for (int i = 0; i < 4; i++) {
-            String step = List.of("DOWNLOAD", "UPLOAD", "PARAMETER_REPLACE", "DEPLOY").get(i);
+            String step = List.of("DOWNLOAD", "UPLOAD", "PARAMETER_COPY", "DEPLOY").get(i);
             assertThat(output.getOut()).contains("transportId=" + response.transportId() + " artifactId=" + ids.get(i)
                     + " step=" + step + " phase=END result=FAILED");
         }
+        assertThat(output.getAll()).doesNotContain("a-dev", "b-dev");
         noLeaks(output, body);
     }
 }

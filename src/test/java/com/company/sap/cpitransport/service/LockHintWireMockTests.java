@@ -48,7 +48,7 @@ class LockHintWireMockTests {
         prd = new WireMockServer(wireMockConfig().dynamicPort().bindAddress("localhost"));
         dev.start();
         prd.start();
-        settings = new TransportProperties("", new TransportProperties.History(temporary.resolve("history.jsonl")),
+        settings = new TransportProperties(new TransportProperties.History(temporary.resolve("history.jsonl")),
                 new TransportProperties.Retry(3, Duration.ofSeconds(1)),
                 new TransportProperties.Deploy(Duration.ofSeconds(1), Duration.ofSeconds(3)), List.of("password", "token"));
         connections = new CpiProperties(connection(dev, "dev"), connection(prd, "prd"));
@@ -91,7 +91,7 @@ class LockHintWireMockTests {
         assertThat(result.error().detail()).isNull();
         assertThat(result.action()).isEqualTo(TransportAction.NONE);
         assertThat(result.deployStatus()).isEqualTo(DeployStatus.NOT_REQUESTED);
-        assertThat(result.replacements()).extracting(Replacement::status).containsOnly(ReplacementStatus.PLANNED);
+        assertThat(result.configurations()).isEmpty();
         prd.verify(1, putRequestedFor(urlEqualTo(path("A"))));
         prd.verify(0, postRequestedFor(urlEqualTo(COLLECTION)));
         prd.verify(0, getRequestedFor(urlEqualTo(path("A") + "/Configurations")));
@@ -180,7 +180,7 @@ class LockHintWireMockTests {
         assertThat(hintedPrd).isEqualTo(plainPrd);
         assertThat(hintedDev).isEqualTo(plainDev);
         assertThat(hintedPrd).containsExactly("POST /token", "GET " + PACKAGE, "GET " + path("A"), "GET /api/v1/", "PUT " + path("A"));
-        assertThat(hintedDev).containsExactly("POST /token", "GET " + path("A") + "/$value");
+        assertThat(hintedDev).containsExactly("POST /token", "GET " + path("A") + "/$value", "GET " + path("A") + "/Configurations");
         // 락 해제·다른 버전 업로드·추가 조회 요청이 없다: 쓰기는 갱신 PUT 1건, 버전은 'active'뿐, 메서드 덮어쓰기 헤더 없음.
         assertThat(hintedPrd).filteredOn(r -> !r.startsWith("GET ") && !r.equals("POST /token")).containsExactly("PUT " + path("A"));
         assertThat(hintedPrd).allMatch(r -> !r.contains("Version=") || r.contains("Version='active'"))
@@ -241,16 +241,12 @@ class LockHintWireMockTests {
         var tokens = new OAuthTokenProvider(connections, settings, clock, clock::advance);
         var api = new CpiApiClient(new CpiHttpExecutor(connections, tokens, new CsrfTokenStore(), settings, clock::advance), json);
         var sensitive = new SensitiveKeyMatcher(settings);
-        return new TransportService(api, new IflwReplacer(sensitive), new ExternalParameterReplacer(api, sensitive),
-                new DeployService(api, settings, clock, clock::advance), new MappingFileLoader(settings), clock);
+        return new TransportService(api, new ConfigurationCopier(api, sensitive),
+                new DeployService(api, settings, clock, clock::advance), clock);
     }
     private TransportResponse run(boolean deploy) {
         return service().execute(new TransportRequest("PKG", List.of("A"), false, deploy),
-                List.of(new CpiArtifact("A", "Name A", "1.0")), rules());
-    }
-    private List<MappingEntry> rules() {
-        return List.of(new MappingEntry("A", TargetType.HEADER, "Endpoint", "dev", "prd"),
-                new MappingEntry("A", TargetType.EXTERNAL_PARAM, "Endpoint", "dev", "prd"));
+                List.of(new CpiArtifact("A", "Name A", "1.0")));
     }
     private CpiProperties.Connection connection(WireMockServer server, String env) {
         String base = "http://localhost:" + server.port();
