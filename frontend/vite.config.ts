@@ -3,13 +3,19 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-// AI-NOTE: 개발 서버(5173)에서만 쓰는 프록시. /transport/history도 /transport 접두어로 함께 프록시된다 (근거: REQ-001 AC-3, run 20260929-frontend-ui)
+// AI-NOTE: 개발 서버(5173)에서만 쓰는 프록시. 화면이 부르는 API 경로를 모두 넣는다. 빠지면 GET은 index.html(200),
+// POST·DELETE는 빈 404가 돌아와 "알 수 없는 오류"가 뜬다. src/test/devProxy.test.ts가 client.ts와 맞는지 검사한다 (근거: fix/no-tenant-start)
+const BACKEND = 'http://localhost:8080';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/packages': 'http://localhost:8080',
-      '/transport': 'http://localhost:8080',
+      '/packages': BACKEND,
+      '/transport': BACKEND,
+      '/tenants': BACKEND,
+      '/templates': BACKEND,
+      '/dashboard': BACKEND,
+      '/audit': BACKEND,
     },
   },
   test: {
