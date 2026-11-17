@@ -68,7 +68,9 @@ const DEPLOY_FAILED_ONLY = result('t-deploy', [
 ]);
 
 const region = () => screen.getByRole('region', { name: '이관 결과' });
-const failedTile = () => within(region()).getByText('실패', { selector: 'span' }).nextElementSibling;
+// 구성 값 FAILED 배지도 "실패"라서(REQ-510), 다음 형제가 숫자(tabular-nums)인 통계 타일 라벨만 고른다.
+const failedTile = () =>
+  within(region()).getAllByText('실패', { selector: 'span' }).find((e) => e.nextElementSibling?.className.includes('tabular-nums'))?.nextElementSibling;
 const failedLabel = () => within(region()).queryByText(/^실패 아티팩트 \d+개$/);
 const onlySwitch = () => screen.getByRole('switch', { name: '문제 항목만 보기' });
 
