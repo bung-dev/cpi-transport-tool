@@ -8,7 +8,6 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 
 @ConfigurationProperties("cpi.transport")
 public record TransportProperties(
-        @DefaultValue("") String mappingFile,
         @DefaultValue History history,
         @DefaultValue Retry retry,
         @DefaultValue Deploy deploy,

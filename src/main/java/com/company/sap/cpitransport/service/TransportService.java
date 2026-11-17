@@ -14,30 +14,24 @@ public class TransportService {
     private static final Logger log = LoggerFactory.getLogger(TransportService.class);
     static final String LOCK_HINT = "대상 테넌트에서 이 아티팩트가 편집 중(잠김)일 수 있습니다. CPI 화면에서 편집을 저장하거나 취소한 뒤 다시 시도하세요.";
     private final CpiApiClient api;
-    private final IflwReplacer iflw;
-    private final ExternalParameterReplacer parameters;
+    private final ConfigurationCopier configurations;
     private final DeployService deployment;
-    private final MappingFileLoader mappings;
     private final Clock clock;
 
-    public TransportService(CpiApiClient api, IflwReplacer iflw, ExternalParameterReplacer parameters,
-                            DeployService deployment, MappingFileLoader mappings, Clock clock) {
+    public TransportService(CpiApiClient api, ConfigurationCopier configurations,
+                            DeployService deployment, Clock clock) {
         this.api = api;
-        this.iflw = iflw;
-        this.parameters = parameters;
+        this.configurations = configurations;
         this.deployment = deployment;
-        this.mappings = mappings;
         this.clock = clock;
     }
 
     public TransportResponse execute(TransportRequest request) {
-        var loaded = mappings.load();
-        return execute(request, api.listArtifacts(request.source().id(), request.packageId()), loaded);
+        return execute(request, api.listArtifacts(request.source().id(), request.packageId()));
     }
 
     // Request validation and environment checks are performed by the controller.
     public TransportResponse preflightAndExecute(TransportRequest request) {
-        var loaded = mappings.load();
         List<CpiArtifact> artifacts;
         try {
             if (api.getPackage(request.source().id(), request.packageId()).isEmpty()) {
@@ -53,11 +47,10 @@ public class TransportService {
             // AI-NOTE: discard upstream summaries and causes before Spring logs this failure (REQ-305 AC-3).
             throw new ErrorResponse.ApiException(ErrorResponse.Code.CPI_UNAVAILABLE);
         }
-        return execute(request, artifacts, loaded);
+        return execute(request, artifacts);
     }
 
-    public TransportResponse execute(TransportRequest request, List<CpiArtifact> artifacts,
-                                     List<MappingEntry> loadedMappings) {
+    public TransportResponse execute(TransportRequest request, List<CpiArtifact> artifacts) {
         String transportId = UUID.randomUUID().toString();
         var started = clock.instant();
         var ids = request.artifactIds() == null || request.artifactIds().isEmpty()
@@ -68,7 +61,7 @@ public class TransportService {
             try {
                 MDC.put("transportId", transportId);
                 MDC.put("artifactId", id);
-                results.add(process(transportId, request, id, artifacts, loadedMappings));
+                results.add(process(transportId, request, id, artifacts));
             } finally {
                 if (previousContext == null) MDC.clear();
                 else MDC.setContextMap(previousContext);
@@ -80,13 +73,12 @@ public class TransportService {
     }
 
     private ArtifactResult process(String transportId, TransportRequest request, String id,
-                                   List<CpiArtifact> artifacts, List<MappingEntry> loadedMappings) {
+                                   List<CpiArtifact> artifacts) {
         Stage stage = Stage.LOOKUP;
         TransportAction action = TransportAction.NONE;
         DeployStatus deployStatus = request.dryRun() && request.deploy()
                 ? DeployStatus.SKIPPED_DRY_RUN : DeployStatus.NOT_REQUESTED;
-        var replacements = new ArrayList<Replacement>();
-        var unmapped = new ArrayList<UnmappedKey>();
+        List<ConfigurationItem> items = List.of();
         ArtifactError error = null;
         var deployFailure = DeployOutcome.DeployFailure.NONE;
         boolean exists = false;
@@ -98,35 +90,32 @@ public class TransportService {
             } else {
                 stage = next(transportId, id, stage, Stage.DOWNLOAD);
                 byte[] zip = api.downloadArtifact(request.source().id(), id);
-                stage = next(transportId, id, stage, Stage.IFLW);
-                var applicable = loadedMappings.stream().filter(m -> id.equals(m.artifactId())).toList();
-                var replaced = iflw.process(zip, applicable, request.dryRun());
-                replacements.addAll(replaced.replacements());
-                unmapped.addAll(replaced.unmappedKeys());
-                if (request.dryRun()) skipped(transportId, id, Stage.UPLOAD, "SKIPPED_DRY_RUN");
-                if (!request.dryRun()) {
+                stage = next(transportId, id, stage, Stage.CONFIGURATION_READ);
+                var source = configurations.read(request.source().id(), id);
+                if (request.dryRun()) {
+                    items = source;
+                    // Read and write share one PARAMETER_COPY START/END pair, also in preview.
+                    stage = next(transportId, id, stage, Stage.CONFIGURATION_UPDATE);
+                    skipped(transportId, id, Stage.UPLOAD, "SKIPPED_DRY_RUN");
+                } else {
                     stage = next(transportId, id, stage, Stage.TARGET);
                     if (api.getPackage(request.target().id(), request.packageId()).isEmpty()) {
                         error = new ArtifactError("PACKAGE_NOT_FOUND_IN_TARGET", "TARGET: HTTP 404; CPI package not found");
                     } else {
                         exists = api.artifactExists(request.target().id(), id);
                         stage = next(transportId, id, stage, Stage.UPLOAD);
-                        String content = Base64.getEncoder().encodeToString(replaced.zipBytes());
+                        String content = Base64.getEncoder().encodeToString(zip);
                         if (exists) api.updateArtifact(request.target().id(), id, artifact.get().name(), content);
                         else api.createArtifact(request.target().id(), artifact.get().name(), id, request.packageId(), content);
                         action = exists ? TransportAction.UPDATED : TransportAction.CREATED;
+                        stage = next(transportId, id, stage, Stage.CONFIGURATION_UPDATE);
+                        var copied = configurations.copy(request.target().id(), id, source);
+                        items = copied.configurations();
+                        error = copied.error();
                     }
                 }
                 if (error == null) {
-                    stage = next(transportId, id, stage, Stage.CONFIGURATION_READ);
-                    // Existing replacer owns stages 6 and 7: PUT failures returned, GET failures thrown.
-                    var external = parameters.process(request.dryRun() ? request.source().id() : request.target().id(), id, applicable, request.dryRun());
-                    replacements.addAll(external.replacements());
-                    unmapped.addAll(external.unmappedKeys());
-                    stage = next(transportId, id, stage, Stage.CONFIGURATION_UPDATE);
-                    if (external.error() != null) {
-                        error = new ArtifactError(stage.code, "CONFIGURATION_UPDATE: " + external.error().message());
-                    } else if (request.deploy() && !request.dryRun()) {
+                    if (request.deploy() && !request.dryRun()) {
                         stage = next(transportId, id, stage, Stage.DEPLOY);
                         var outcome = deployment.deployAndWaitOutcome(request.target().id(), id);
                         deployStatus = outcome.status();
@@ -135,10 +124,10 @@ public class TransportService {
                             error = new ArtifactError(deployStatus == DeployStatus.TIMEOUT ? "DEPLOY_TIMEOUT" : stage.code,
                                     "DEPLOY: CPI deployment " + deployStatus);
                             if (deployFailure == DeployOutcome.DeployFailure.RUNTIME_ERROR) {
-                                error = deployment.errorDetail(request.target().id(), id, parameters.sensitiveValues(loadedMappings));
+                                error = deployment.errorDetail(request.target().id(), id, configurations.sensitiveValues(source));
                             }
                         }
-                    } else if (external.error() == null) {
+                    } else {
                         skipped(transportId, id, Stage.DEPLOY,
                                 request.dryRun() ? "SKIPPED_DRY_RUN" : "NOT_REQUESTED");
                     }
@@ -164,9 +153,9 @@ public class TransportService {
                     ? new ArtifactError(stage.code, "DEPLOY: CPI deployment ERROR")
                     : new ArtifactError(stage.code, stage + ": " + detail);
         }
-        if (action == TransportAction.NONE) {
-            replacements.replaceAll(r -> r.status() == ReplacementStatus.APPLIED
-                    ? new Replacement(r.targetType(), r.key(), ReplacementStatus.PLANNED, r.before(), r.after(), r.occurrences()) : r);
+        // TARGET/UPLOAD can fail between the copy read and write phases. Close the open copy span.
+        if (stage == Stage.TARGET || stage == Stage.UPLOAD) {
+            event(transportId, id, Stage.CONFIGURATION_UPDATE, "failed");
         }
         String logFields = "";
         if (stage == Stage.DEPLOY && deployStatus == DeployStatus.ERROR) {
@@ -177,7 +166,7 @@ public class TransportService {
             }
         }
         event(transportId, id, stage, error == null ? "succeeded" : "failed " + error.code(), logFields);
-        return new ArtifactResult(id, null, action, replacements, unmapped, deployStatus, error);
+        return new ArtifactResult(id, null, action, items, deployStatus, error);
     }
 
     private Stage next(String transportId, String id, Stage previous, Stage next) {
@@ -191,12 +180,11 @@ public class TransportService {
     }
 
     private void event(String transportId, String id, Stage stage, String outcome, String fields) {
-        // The existing parameter replacer performs GET and PUT in one call.
+        // One copy span covers source read and target writes, including intervening upload.
         if (stage == Stage.CONFIGURATION_READ && outcome.equals("succeeded")
                 || stage == Stage.CONFIGURATION_UPDATE && outcome.equals("started")) return;
         String step = switch (stage) {
-            case IFLW -> "REPLACE";
-            case CONFIGURATION_READ, CONFIGURATION_UPDATE -> "PARAMETER_REPLACE";
+            case CONFIGURATION_READ, CONFIGURATION_UPDATE -> "PARAMETER_COPY";
             default -> stage.name();
         };
         boolean start = outcome.equals("started");
@@ -212,7 +200,7 @@ public class TransportService {
     }
 
     private enum Stage {
-        LOOKUP("ARTIFACT_NOT_FOUND"), DOWNLOAD("DOWNLOAD_FAILED"), IFLW("IFLW_PARSE_ERROR"),
+        LOOKUP("ARTIFACT_NOT_FOUND"), DOWNLOAD("DOWNLOAD_FAILED"),
         TARGET("TARGET_CHECK_FAILED"), UPLOAD("UPLOAD_FAILED"), CONFIGURATION_READ("CONFIGURATION_READ_FAILED"),
         CONFIGURATION_UPDATE("CONFIGURATION_UPDATE_FAILED"), DEPLOY("DEPLOY_FAILED");
         private final String code;
