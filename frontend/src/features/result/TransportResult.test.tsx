@@ -4,7 +4,7 @@ import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HistoryTab } from '../history/HistoryTab';
 import { json, mockApi } from '../../test/mockFetch';
-import type { ArtifactResult, ReplacementStatus, TransportResponse } from '../../api/types';
+import type { ArtifactResult, ConfigurationStatus, TransportResponse } from '../../api/types';
 import { formatTime } from '../../lib/formatTime';
 import { TransportResult } from './TransportResult';
 
@@ -23,11 +23,11 @@ const BASE: TransportResponse = {
       action: 'NONE',
       deployStatus: 'SKIPPED_DRY_RUN',
       error: null,
-      replacements: [
-        { targetType: 'header', key: 'TargetSystem', status: 'PLANNED', before: 'DEV_ERP', after: 'PRD_ERP', occurrences: 2 },
-        { targetType: 'property', key: 'NotExisting', status: 'KEY_NOT_FOUND', before: null, after: null, occurrences: 0 },
+      configurations: [
+        { key: 'TargetSystem', value: 'DEV_ERP', dataType: 'xsd:string', status: 'PLANNED' },
+        { key: 'ApiToken', value: null, dataType: 'xsd:string', status: 'SKIPPED_EMPTY' },
+        { key: 'ClientPassword', value: 'dummy-dev-pass-ui', dataType: 'xsd:string', status: 'PLANNED' },
       ],
-      unmappedKeys: [{ targetType: 'header', key: 'TraceId' }],
     },
     {
       artifactId: 'IF_Failed',
@@ -35,8 +35,7 @@ const BASE: TransportResponse = {
       action: 'UPDATED',
       deployStatus: 'ERROR',
       error: { code: 'CONFIGURATION_UPDATE_FAILED', message: 'update failed' },
-      replacements: [],
-      unmappedKeys: [],
+      configurations: [],
     },
   ],
 };
@@ -57,6 +56,9 @@ function expectOnlyComponentIcons(container: HTMLElement, expectedIcons: number)
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+/** BASE의 IF_Order_Sync는 문제 항목이 없어 접힌 채 시작한다. 표를 보는 테스트는 먼저 모두 펼친다. */
+const expandAll = () => userEvent.click(screen.getByRole('button', { name: '모두 펼치기' }));
 
 describe('이관 결과', () => {
   it('REQ-006 AC-1: 머리 정보(transportId, packageId, 미리보기/배포 예·아니오, 시각, 요약)', () => {
@@ -89,18 +91,21 @@ describe('이관 결과', () => {
     expect(screen.getByText(/update failed/)).toBeInTheDocument();
   });
 
-  it('REQ-006 AC-3: 치환 표(값·배지), null은 —, unmapped 목록, 빈 목록 안내', () => {
-    render(<TransportResult result={BASE} />);
+  it('REQ-510: 구성 값 표(키·값·상태 배지 이름), null 값은 —, 민감 키 값도 평문, 빈 목록은 "구성 값 없음", 치환·매핑 글자는 없다', async () => {
+    const { container } = render(<TransportResult result={BASE} />);
+    await expandAll();
     const table = screen.getByRole('table');
     const rows = within(table).getAllByRole('row');
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
+    expect(within(rows[1]).getByText('TargetSystem')).toBeInTheDocument();
     expect(within(rows[1]).getByText('DEV_ERP')).toBeInTheDocument();
-    expect(within(rows[1]).getByText('PLANNED').className).toContain('bg-accent-bg');
-    expect(within(rows[2]).getAllByText('—')).toHaveLength(2);
-    expect(within(rows[2]).getByText('KEY_NOT_FOUND').className).toContain('bg-neutral-bg');
-    expect(screen.getByText('header / TraceId')).toBeInTheDocument();
-    expect(screen.getByText('치환 항목 없음')).toBeInTheDocument();
-    expect(screen.getByText('매핑되지 않은 키 없음')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('복사 예정').className).toContain('bg-accent-bg');
+    expect(within(rows[2]).getAllByText('—')).toHaveLength(1);
+    expect(within(rows[2]).getByText('빈 값이라 건너뜀').className).toContain('bg-caution-bg');
+    expect(within(rows[3]).getByText('dummy-dev-pass-ui')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 5, name: '구성 값' })).toHaveLength(2);
+    expect(screen.getByText('구성 값 없음')).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/치환|매핑되지 않은 키/);
   });
 
   it('REQ-006 AC-4: <script>, <img onerror> 등 문자열은 글자 그대로 보이고 요소로 해석되지 않는다', () => {
@@ -114,10 +119,10 @@ describe('이관 결과', () => {
           action: 'NONE',
           deployStatus: 'NOT_REQUESTED',
           error: { code: 'X<i>1</i>', message: '<script>alert(5)</script>' },
-          replacements: [
-            { targetType: 'header', key: '"><svg onload=alert(3)>', status: 'APPLIED', before: '<b>bold</b>', after: 'javascript:alert(4)', occurrences: 1 },
+          configurations: [
+            { key: '"><svg onload=alert(3)>', value: '<b>bold</b>', dataType: 'xsd:string', status: 'COPIED' },
+            { key: '<iframe src=about:blank>', value: 'javascript:alert(4)', dataType: 'xsd:string', status: 'FAILED' },
           ],
-          unmappedKeys: [{ targetType: 'property', key: '<iframe src=about:blank>' }],
         },
       ],
     };
@@ -214,36 +219,19 @@ describe('이관 결과', () => {
     expect(callout.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
   });
 
-  it('REQ-105 AC-4: 치환 항목 표 머리, 키·변경 전·변경 후 고정폭, 횟수 오른쪽 정렬, null은 ink-tertiary "—"', () => {
+  it('REQ-510: 구성 값 표 머리는 키·값·상태이고 키·값은 고정폭에 긴 값은 줄바꿈되며 null은 ink-tertiary "—"다', async () => {
     render(<TransportResult result={BASE} />);
-    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
-      '대상 유형',
-      '키',
-      '상태',
-      '변경 전',
-      '변경 후',
-      '횟수',
-    ]);
+    await expandAll();
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['키', '값', '상태']);
     const rows = within(screen.getByRole('table')).getAllByRole('row');
     const first = within(rows[1]);
     expect(first.getByText('TargetSystem').className).toContain('font-mono');
-    expect(first.getByText('DEV_ERP').className).toContain('font-mono');
-    expect(first.getByText('PRD_ERP').className).toContain('font-mono');
-    expect(first.getByText('2').className).toContain('text-right');
-    const dashes = within(rows[2]).getAllByText('—');
-    expect(dashes).toHaveLength(2);
-    for (const d of dashes) expect(d.className).toContain('text-ink-tertiary');
-  });
-
-  it('REQ-105 AC-4: 매핑되지 않은 키는 "targetType / key" neutral 칩(반경 sm·고정폭), 항목이 없으면 안내 문구', () => {
-    render(<TransportResult result={BASE} />);
-    const chip = screen.getByText('header / TraceId');
-    expect(chip.tagName).toBe('LI');
-    expect(chip.className).toContain('rounded-sm');
-    expect(chip.className).toContain('font-mono');
-    expect(chip.className).toContain('bg-neutral-bg');
-    expect(screen.getByText('치환 항목 없음')).toBeInTheDocument();
-    expect(screen.getByText('매핑되지 않은 키 없음')).toBeInTheDocument();
+    const value = first.getByText('DEV_ERP');
+    expect(value.className).toContain('font-mono');
+    expect(value.className).toMatch(/break-all|break-words/);
+    const dash = within(rows[2]).getByText('—');
+    expect(dash.className).toContain('text-ink-tertiary');
+    expect(screen.queryByRole('heading', { level: 5, name: '매핑되지 않은 키' })).toBeNull();
   });
 
   it('REQ-105 AC-8: 모든 값은 텍스트 노드로 렌더링한다(<script> 문자열이 글자 그대로 보이고 요소가 생기지 않는다)', () => {
@@ -258,10 +246,10 @@ describe('이관 결과', () => {
           action: 'NONE',
           deployStatus: 'NOT_REQUESTED',
           error: { code: '<b>code</b>', message: '<iframe src=about:blank></iframe>' },
-          replacements: [
-            { targetType: 'header', key: '<i>k</i>', status: 'APPLIED', before: '<script>b</script>', after: null, occurrences: 1 },
+          configurations: [
+            { key: '<i>k</i>', value: '<script>b</script>', dataType: 'xsd:string', status: 'COPIED' },
+            { key: '"><svg onload=alert(4)>', value: null, dataType: null, status: 'SKIPPED_EMPTY' },
           ],
-          unmappedKeys: [{ targetType: 'property', key: '"><svg onload=alert(4)>' }],
         },
       ],
     };
@@ -273,55 +261,50 @@ describe('이관 결과', () => {
     expectOnlyComponentIcons(container, 2);
   });
 
-  it('REQ-101 AC-4: 결과 값(ID·키·변경 전·후·칩)은 고정폭이고 통계 숫자와 횟수 열은 tabular-nums다', () => {
+  it('REQ-101 AC-4: 결과 값(ID·키·값)은 고정폭이고 통계 숫자는 tabular-nums다', async () => {
     render(<TransportResult result={BASE} />);
-    for (const t of ['t-1', 'PkgTransportDemo', 'IF_Order_Sync', 'TargetSystem', 'DEV_ERP', 'header / TraceId']) {
+    await expandAll();
+    for (const t of ['t-1', 'PkgTransportDemo', 'IF_Order_Sync', 'TargetSystem', 'DEV_ERP']) {
       expect(screen.getByText(t).className, t).toContain('font-mono');
     }
     for (const l of ['전체', '성공', '실패']) {
       expect((screen.getByText(l).nextElementSibling as HTMLElement).className).toContain('tabular-nums');
     }
-    expect(screen.getByText('2', { selector: 'td' }).className).toContain('tabular-nums');
   });
 
-  it('REQ-101 AC-6: 치환 표의 행은 hover 배경에 150ms 전환이 있다', () => {
+  it('REQ-101 AC-6: 구성 값 표의 행은 hover 배경에 150ms 전환이 있다', async () => {
     render(<TransportResult result={BASE} />);
+    await expandAll();
     const row = within(screen.getByRole('table')).getAllByRole('row')[1];
     expect(row.className).toContain('hover:bg-surface-hover');
     expect(row.className).toContain('transition-colors');
     expect(row.className).toContain('duration-150');
   });
 
-  // REQ-105 AC-3·AC-5용 결과: A(문제 없음, 접힘) / B(VALUE_MISMATCH 1건, 펼침) / C(FAILED·치환 없음, 펼침) / D(PLANNED만, 접힘)
+  // REQ-105 AC-3·AC-5, REQ-511용 결과: A(문제 없음, 접힘) / B(FAILED 구성 값 1건, 펼침) / C(FAILED·구성 값 없음, 펼침) / D(PLANNED만, 접힘)
   const art = (artifactId: string, over: Partial<ArtifactResult>): ArtifactResult => ({
     artifactId,
     status: 'SUCCESS',
     action: 'NONE',
     deployStatus: 'NOT_REQUESTED',
     error: null,
-    replacements: [],
-    unmappedKeys: [],
+    configurations: [],
     ...over,
   });
-  const rep = (key: string, status: ReplacementStatus): ArtifactResult['replacements'][number] => ({
-    targetType: 'header',
+  const cfg = (key: string, status: ConfigurationStatus): ArtifactResult['configurations'][number] => ({
     key,
+    value: `v-${key}`,
+    dataType: 'xsd:string',
     status,
-    before: 'a',
-    after: 'b',
-    occurrences: 1,
   });
   const MIXED: TransportResponse = {
     ...BASE,
     summary: { total: 4, succeeded: 3, failed: 1 },
     results: [
-      art('A_Clean', { replacements: [rep('K1', 'APPLIED'), rep('K2', 'SENSITIVE_SKIPPED')] }),
-      art('B_Mismatch', {
-        replacements: [rep('K3', 'VALUE_MISMATCH'), rep('K4', 'APPLIED')],
-        unmappedKeys: [{ targetType: 'property', key: 'Mode' }],
-      }),
+      art('A_Clean', { configurations: [cfg('K1', 'COPIED'), cfg('K2', 'SKIPPED_EMPTY')] }),
+      art('B_Problem', { configurations: [cfg('K3', 'FAILED'), cfg('K4', 'COPIED')] }),
       art('C_Failed', { status: 'FAILED', error: { code: 'ERR_C', message: 'failed c' } }),
-      art('D_Planned', { replacements: [rep('K5', 'PLANNED')], unmappedKeys: [{ targetType: 'header', key: 'T1' }, { targetType: 'header', key: 'T2' }] }),
+      art('D_Planned', { configurations: [cfg('K5', 'PLANNED')] }),
     ],
   };
   const toggle = (id: string) => screen.getByRole('button', { name: id });
@@ -331,12 +314,12 @@ describe('이관 결과', () => {
   it('REQ-105 AC-3: 처음 상태 — 문제 아티팩트는 펼침, 그 밖은 접힘이고 artifactId 버튼이 aria-expanded로 알린다', () => {
     render(<TransportResult result={MIXED} />);
     expect(expandedOf('A_Clean')).toBe('false');
-    expect(expandedOf('B_Mismatch')).toBe('true');
+    expect(expandedOf('B_Problem')).toBe('true');
     expect(expandedOf('C_Failed')).toBe('true');
     expect(expandedOf('D_Planned')).toBe('false');
-    expect(screen.getByRole('heading', { level: 4, name: 'B_Mismatch' })).toContainElement(toggle('B_Mismatch'));
-    // 펼친 카드만 치환 표 소제목을 보인다
-    expect(screen.getAllByRole('heading', { level: 5, name: '치환 항목' })).toHaveLength(2);
+    expect(screen.getByRole('heading', { level: 4, name: 'B_Problem' })).toContainElement(toggle('B_Problem'));
+    // 펼친 카드만 구성 값 소제목을 보인다
+    expect(screen.getAllByRole('heading', { level: 5, name: '구성 값' })).toHaveLength(2);
   });
 
   it('REQ-105 AC-3: 아티팩트가 1개뿐이면 문제가 없어도 펼침이다', () => {
@@ -352,24 +335,24 @@ describe('이관 결과', () => {
     expect(expandedOf('A_Clean')).toBe('true');
     await userEvent.keyboard(' ');
     expect(expandedOf('A_Clean')).toBe('false');
-    await userEvent.click(toggle('B_Mismatch'));
-    expect(expandedOf('B_Mismatch')).toBe('false');
+    await userEvent.click(toggle('B_Problem'));
+    expect(expandedOf('B_Problem')).toBe('false');
     expect(expandedOf('C_Failed')).toBe('true');
   });
 
-  it('REQ-105 AC-3: 접힌 카드에는 머리와 요약 한 줄 "치환 n건 · 문제 m건 · 매핑되지 않은 키 k개"만 보이고 펼치면 요약 줄이 없다', async () => {
+  it('REQ-105 AC-3, REQ-510: 접힌 카드에는 머리와 요약 한 줄 "구성 값 n개 · 문제 m건"만 보이고 펼치면 요약 줄이 없다', async () => {
     render(<TransportResult result={MIXED} />);
-    expect(screen.getByText('치환 2건 · 문제 0건 · 매핑되지 않은 키 0개')).toBeInTheDocument();
-    expect(screen.getByText('치환 1건 · 문제 0건 · 매핑되지 않은 키 2개')).toBeInTheDocument();
-    expect(screen.queryByText(/치환 2건 · 문제 1건/)).toBeNull();
+    expect(screen.getByText('구성 값 2개 · 문제 0건')).toBeInTheDocument();
+    expect(screen.getByText('구성 값 1개 · 문제 0건')).toBeInTheDocument();
+    expect(screen.queryByText(/구성 값 2개 · 문제 1건/)).toBeNull();
     // 접힌 카드 A에는 표·소제목·칩이 없다. 머리(h4, 배지)만 있다
     const cardA = toggle('A_Clean').closest('div[class*="rounded-lg"]') as HTMLElement;
     expect(cardA.querySelector('table, h5, ul')).toBeNull();
     expect(within(cardA).getByText('SUCCESS')).toBeInTheDocument();
     await userEvent.click(toggle('A_Clean'));
-    expect(screen.queryByText('치환 2건 · 문제 0건 · 매핑되지 않은 키 0개')).toBeNull();
-    await userEvent.click(toggle('B_Mismatch'));
-    expect(screen.getByText('치환 2건 · 문제 1건 · 매핑되지 않은 키 1개')).toBeInTheDocument();
+    expect(screen.queryByText('구성 값 2개 · 문제 0건')).toBeNull();
+    await userEvent.click(toggle('B_Problem'));
+    expect(screen.getByText('구성 값 2개 · 문제 1건')).toBeInTheDocument();
   });
 
   it('REQ-105 AC-3: 결과 머리에 sm ghost 버튼 "모두 펼치기"·"모두 접기"가 있고 전체를 바꾼다', async () => {
@@ -381,9 +364,9 @@ describe('이관 결과', () => {
       expect(b.className).toContain('bg-transparent');
     }
     await userEvent.click(all);
-    for (const id of ['A_Clean', 'B_Mismatch', 'C_Failed', 'D_Planned']) expect(expandedOf(id)).toBe('true');
+    for (const id of ['A_Clean', 'B_Problem', 'C_Failed', 'D_Planned']) expect(expandedOf(id)).toBe('true');
     await userEvent.click(none);
-    for (const id of ['A_Clean', 'B_Mismatch', 'C_Failed', 'D_Planned']) expect(expandedOf(id)).toBe('false');
+    for (const id of ['A_Clean', 'B_Problem', 'C_Failed', 'D_Planned']) expect(expandedOf(id)).toBe('false');
   });
 
   it('REQ-101 AC-6: artifactId 접기 버튼은 글자색 전환 150ms가 있고 포커스 외곽선을 지우지 않는다', () => {
@@ -394,20 +377,20 @@ describe('이관 결과', () => {
     expect(b.className).not.toMatch(/outline-(none|0|hidden)/);
   });
 
-  it('REQ-105 AC-5: 결과 머리에 스위치 "문제 항목만 보기"와 결과 전체의 "치환 문제 m건"(REQ-424)이 있다', () => {
+  it('REQ-105 AC-5, REQ-511: 결과 머리에 스위치 "문제 항목만 보기"와 결과 전체의 "구성 값 문제 m건"이 있다', () => {
     render(<TransportResult result={MIXED} />);
     expect(onlySwitch()).not.toBeChecked();
     expect(onlySwitch()).toBeEnabled();
-    expect(screen.getByText('치환 문제 1건')).toBeInTheDocument();
+    expect(screen.getByText('구성 값 문제 1건')).toBeInTheDocument();
   });
 
-  it('REQ-105 AC-5: 켜면 문제 아티팩트의 카드만 남고 모두 펼쳐지며 치환 표에는 문제 항목 행만 보이고 문제 항목이 없는 FAILED 카드는 "문제 항목 없음"이다', async () => {
+  it('REQ-105 AC-5, REQ-511: 켜면 문제 아티팩트의 카드만 남고 모두 펼쳐지며 구성 값 표에는 FAILED 행만 보이고 문제 항목이 없는 FAILED 카드는 "문제 항목 없음"이다', async () => {
     render(<TransportResult result={MIXED} />);
     await userEvent.click(onlySwitch());
     expect(onlySwitch()).toBeChecked();
     expect(screen.queryByRole('button', { name: 'A_Clean' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'D_Planned' })).toBeNull();
-    expect(expandedOf('B_Mismatch')).toBe('true');
+    expect(expandedOf('B_Problem')).toBe('true');
     expect(expandedOf('C_Failed')).toBe('true');
     const rows = within(screen.getByRole('table')).getAllByRole('row');
     expect(rows).toHaveLength(2);
@@ -416,42 +399,40 @@ describe('이관 결과', () => {
     expect(screen.getByText('문제 항목 없음')).toBeInTheDocument();
   });
 
-  it('REQ-105 AC-5: 켜진 동안에도 남은 카드의 오류 Callout과 매핑되지 않은 키 목록은 그대로 보인다', async () => {
+  it('REQ-105 AC-5: 켜진 동안에도 남은 카드의 오류 Callout은 그대로 보인다', async () => {
     render(<TransportResult result={MIXED} />);
     await userEvent.click(onlySwitch());
     expect(screen.getByText('ERR_C')).toBeInTheDocument();
     expect(screen.getByText('failed c')).toBeInTheDocument();
-    expect(screen.getByText('property / Mode')).toBeInTheDocument();
-    expect(screen.getByText('매핑되지 않은 키 없음')).toBeInTheDocument();
   });
 
   it('REQ-105 AC-5: 켜진 동안 개별 접기 버튼과 모두 펼치기·모두 접기는 비활성이고 끄면 켜기 직전의 접기·펼치기 상태로 돌아간다', async () => {
     render(<TransportResult result={MIXED} />);
-    await userEvent.click(toggle('B_Mismatch')); // B 접기
+    await userEvent.click(toggle('B_Problem')); // B 접기
     await userEvent.click(toggle('A_Clean')); // A 펼치기
     await userEvent.click(onlySwitch());
-    expect(toggle('B_Mismatch')).toBeDisabled();
+    expect(toggle('B_Problem')).toBeDisabled();
     expect(toggle('C_Failed')).toBeDisabled();
     expect(screen.getByRole('button', { name: '모두 펼치기' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '모두 접기' })).toBeDisabled();
-    expect(expandedOf('B_Mismatch')).toBe('true');
+    expect(expandedOf('B_Problem')).toBe('true');
     await userEvent.click(onlySwitch());
     expect(onlySwitch()).not.toBeChecked();
     expect(expandedOf('A_Clean')).toBe('true');
-    expect(expandedOf('B_Mismatch')).toBe('false');
+    expect(expandedOf('B_Problem')).toBe('false');
     expect(expandedOf('C_Failed')).toBe('true');
     expect(expandedOf('D_Planned')).toBe('false');
-    expect(toggle('B_Mismatch')).toBeEnabled();
+    expect(toggle('B_Problem')).toBeEnabled();
     expect(screen.getByRole('button', { name: '모두 펼치기' })).toBeEnabled();
     // 필터 중 걸러졌던 행도 다시 보인다: A는 펼쳐져 K1·K2 전체 행, B는 접혀 있어 표가 없다
     expect(within(screen.getByRole('table')).getByText('K2')).toBeInTheDocument();
     expect(screen.queryByText('K4')).toBeNull();
   });
 
-  it('REQ-105 AC-5: 문제 아티팩트가 하나도 없으면 스위치는 비활성이고 건수는 0건이다', () => {
+  it('REQ-105 AC-5, REQ-511: 문제 아티팩트가 하나도 없으면 스위치는 비활성이고 "구성 값 문제 0건"이다', () => {
     render(<TransportResult result={{ ...MIXED, results: [MIXED.results[0], MIXED.results[3]] }} />);
     expect(onlySwitch()).toBeDisabled();
-    expect(screen.getByText('치환 문제 0건')).toBeInTheDocument();
+    expect(screen.getByText('구성 값 문제 0건')).toBeInTheDocument();
   });
 
   it('REQ-105 AC-5: 새 결과가 나타나면 스위치는 꺼지고 접기·펼치기는 그 결과의 처음 상태다', async () => {
@@ -462,7 +443,7 @@ describe('이관 결과', () => {
     rerender(<TransportResult result={{ ...MIXED, transportId: 't-next' }} />);
     expect(onlySwitch()).not.toBeChecked();
     expect(expandedOf('A_Clean')).toBe('false');
-    expect(expandedOf('B_Mismatch')).toBe('true');
+    expect(expandedOf('B_Problem')).toBe('true');
     expect(screen.getByRole('button', { name: 'D_Planned' })).toBeInTheDocument();
   });
 
@@ -496,5 +477,33 @@ describe('이관 결과', () => {
     expect(onOpenReal).toHaveBeenCalledTimes(1);
     rerender(<TransportResult result={{ ...BASE, dryRun: false }} onOpenReal={onOpenReal} />);
     expect(screen.queryByRole('button', { name: '이 구성으로 실제 이관' })).toBeNull();
+  });
+
+  it('REQ-512: 이력에서 예전 형식 기록(configurations 없음, replacements·unmappedKeys 있음)을 열면 오류 없이 "구성 값 없음"이다', async () => {
+    const legacy = {
+      ...BASE,
+      transportId: 't-legacy',
+      results: [
+        {
+          artifactId: 'IF_Legacy', status: 'SUCCESS', action: 'UPDATED', deployStatus: 'NOT_REQUESTED', error: null,
+          replacements: [{ targetType: 'header', key: 'K', status: 'APPLIED', before: 'dev', after: 'prd', occurrences: 1 }],
+          unmappedKeys: [{ targetType: 'property', key: 'U' }],
+        },
+      ],
+    };
+    mockApi({ 'GET /transport/history': () => json([legacy]) });
+    render(<HistoryTab />);
+    await userEvent.click(await screen.findByRole('button', { name: 't-legacy' }));
+    expect(screen.getByRole('heading', { name: '이관 결과' })).toBeInTheDocument();
+    expect(screen.getByText('구성 값 없음')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/치환|매핑되지 않은 키/);
+  });
+
+  it('REQ-512: 이력에서 서버가 정리한 예전 기록(configurations: [])도 "구성 값 없음"이다', async () => {
+    mockApi({ 'GET /transport/history': () => json([{ ...BASE, transportId: 't-old', results: [{ ...BASE.results[1], configurations: [] }] }]) });
+    render(<HistoryTab />);
+    await userEvent.click(await screen.findByRole('button', { name: 't-old' }));
+    expect(screen.getByText('구성 값 없음')).toBeInTheDocument();
   });
 });

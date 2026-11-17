@@ -45,7 +45,7 @@ test('QA-188: 부분 실패(성공 1·실패 1) - 실패 개수 표시', async (
   expect(rec.head.tileValue, '"실패" 타일 값 1').toBe('1');
   expect(rec.head.failArtifactsTexts, '"실패 아티팩트 1개" 한 번').toEqual(['실패 아티팩트 1개']);
   expect(rec.head.failArtifactsM, 'M = 타일 값').toBe(Number(rec.head.tileValue));
-  expect(rec.head.sameParentAsProblem || rec.head.ancestorContainsSwitchLabel, '"치환 문제 N건" 옆(같은 필터 영역)').toBeTruthy();
+  expect(rec.head.sameParentAsProblem || rec.head.ancestorContainsSwitchLabel, '"구성 값 문제 N건" 옆(같은 필터 영역)').toBeTruthy();
   expect(rec.head.ancestorContainsStatTiles, '통계 타일 영역과 다른 곳').toBe(false);
   await page.setViewportSize({ width: 390, height: 844 });
   rec.info390 = { pageOverflow: await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), head: await headStats(page) };
@@ -80,14 +80,14 @@ test('QA-190: 실패 없음(M=0) - 보이지 않음, 실패 뒤 성공 재실행
   const noFail = async (label: string) => {
     const t = flat(await resultRegion(page).first().innerText());
     const dom = await page.evaluate(() => document.documentElement.outerHTML.includes('실패 아티팩트'));
-    return { label, regionHasText: t.includes('실패 아티팩트'), domHasText: dom, problemText: (t.match(/치환 문제 \d+건/) ?? [null])[0] };
+    return { label, regionHasText: t.includes('실패 아티팩트'), domHasText: dom, problemText: (t.match(/구성 값 문제 \d+건/) ?? [null])[0] };
   };
   // 1. 정상
   const o1 = await runRealUi(page, request);
   rec.step1 = { ...(await noFail('정상')), failed: failedCount(o1.body), tile: (await headStats(page)).tileValue, transportId: o1.body?.transportId };
   await shot(page, 'QA-190-1-normal');
   expect(rec.step1.failed).toBe(0);
-  expect(rec.step1.problemText, '치환 문제 N건은 보임').toBeTruthy();
+  expect(rec.step1.problemText, '구성 값 문제 N건은 보임').toBeTruthy();
   expect(rec.step1.domHasText, 'M=0: "실패 아티팩트" DOM 어디에도 없음').toBe(false);
   // 2. 실패
   const id = await failPut(request);
@@ -189,7 +189,7 @@ test('QA-192: "문제 항목 N건"의 N과 스위치 동작 유지', async ({ pa
     await sw.uncheck().catch(async () => sw.click());
     await page.waitForTimeout(200);
     const off2 = await visibleCards();
-    const perArtifact = (out.body?.results ?? []).map((r: any) => ({ id: r.artifactId, status: r.status, action: r.action, replacements: (r.replacements ?? []).length, unmappedKeys: (r.unmappedKeys ?? []).length, errorCode: r.error?.code ?? null }));
+    const perArtifact = (out.body?.results ?? []).map((r: any) => ({ id: r.artifactId, status: r.status, action: r.action, configurations: (r.configurations ?? []).length, errorCode: r.error?.code ?? null }));
     const row = { name, statuses: statuses(out.body), perArtifact, N: head0.problemN, M: head0.failArtifactsM, switchControls: swKind, cardsOff: off1, switchOn: onState, cardsOffAgain: off2 };
     rec.runs.push(row);
     await shot(page, `QA-192-${name.slice(0, 1)}`);

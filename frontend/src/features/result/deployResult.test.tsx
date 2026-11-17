@@ -8,7 +8,7 @@ function result(statuses: DeployStatus[], overrides: Partial<TransportResponse> 
   const results: ArtifactResult[] = statuses.map((deployStatus, i) => ({
     artifactId: `IF_Deploy_${i}`,
     status: deployStatus === 'ERROR' || deployStatus === 'TIMEOUT' ? 'FAILED' : 'SUCCESS',
-    action: 'UPDATED', replacements: [], unmappedKeys: [], deployStatus,
+    action: 'UPDATED', configurations: [], deployStatus,
     error: deployStatus === 'ERROR' ? { code: 'DEPLOY_FAILED', message: 'DEPLOY: CPI deployment ERROR' } : null,
   }));
   return {
