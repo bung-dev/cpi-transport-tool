@@ -92,15 +92,15 @@ export function TransportResult({ result, onOpenReal }: Props) {
         <Meta label="대상 테넌트">{result.targetTenant?.name ?? '-'}</Meta>
       </dl>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <Switch
             label="문제 항목만 보기"
             checked={onlyNow}
             disabled={!hasProblemArtifact}
             onChange={(e) => setOnlyProblems(e.target.checked)}
           />
-          <span className="text-xs text-ink-tertiary">치환 문제 {problemTotal}건</span>
-          {/* AI-NOTE: "치환 문제 N건"은 치환 항목만 센다(ADR-014). 스위치를 켜면 FAILED 카드도 남으므로 그 수를 별도 요소로 옆에 보인다. N에 더하거나 같은 요소에 합치지 않는다(근거: REQ-316 AC-1·AC-2, 직전 qa_result 8절) */}
+          <span className="text-xs text-ink-tertiary">구성 값 문제 {problemTotal}건</span>
+          {/* REQ-511: 구성 값 문제 수와 실패 아티팩트 수는 별도로 보인다. 필터를 켜면 FAILED 카드도 남는다. */}
           {failedArtifacts >= 1 && <span className="text-xs font-medium text-danger-fg">실패 아티팩트 {failedArtifacts}개</span>}
         </div>
         <div className="ml-auto flex items-center gap-1.5">
@@ -161,15 +161,13 @@ export function TransportResult({ result, onOpenReal }: Props) {
   );
 }
 
-/**
- * 탐색 목록 항목의 짧은 상태 글자. 접힌 카드의 요약 줄("치환 n건 · 문제 m건 · …")과 같은 글자 조각을 쓰지 않는다
- * (펼친 카드에는 요약 줄이 없다는 단언이 목록 글자에 걸리지 않게).
- */
+/** 탐색 목록은 실패, 문제 항목 수, 구성 값 수 순으로 짧은 상태를 보인다(REQ-510). */
 function jumpLabel(r: ArtifactResult): string {
   if (r.status === 'FAILED') return '실패';
   const problems = problemCount(r);
   if (problems > 0) return `문제 ${problems}건`;
-  return r.replacements.length > 0 ? `치환 ${r.replacements.length}건` : '치환 없음';
+  const count = (r.configurations ?? []).length;
+  return count > 0 ? `구성 값 ${count}개` : '구성 값 없음';
 }
 
 function Stat({ label, value, valueClass = 'text-ink' }: { label: string; value: number; valueClass?: string }) {

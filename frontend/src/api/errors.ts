@@ -19,7 +19,6 @@ const TITLES: Record<string, string> = {
   TENANT_STORE_UNREADABLE: '테넌트 저장 파일을 읽지 못했습니다',
   INVALID_REQUEST: '요청 값이 올바르지 않습니다',
   ENVIRONMENT_NOT_CONFIGURED: '서버 연결 설정이 없습니다',
-  MAPPING_INVALID: '매핑 파일이 올바르지 않습니다',
   PACKAGE_NOT_FOUND: '패키지를 찾을 수 없습니다',
   CPI_UNAVAILABLE: 'CPI에 연결할 수 없습니다',
 };
