@@ -2,7 +2,7 @@
 // 앱: app-rw(DEV·PRD env, 쓰기 허용). 로컬 스텁만 쓴다(구성 값은 원본에서만 읽고 대상에 PUT한다).
 import { expect, test } from '@playwright/test';
 import { after, R, shot, stubReset } from '../../lib/qa';
-import { choosePackage, confirmDialogRun, foreignHosts, openTransport, realFromResult, resultRegion, runPreview, selectArtifacts, watch } from '../../lib/ui';
+import { choosePackage, confirmDialogRun, foreignHosts, openTab, openTransport,realFromResult, resultRegion, runPreview, selectArtifacts, watch } from '../../lib/ui';
 
 test.use({ actionTimeout: 20000 });
 
@@ -60,7 +60,43 @@ test('QA-REQ512-1: 미리보기는 복사 예정·빈 값이라 건너뜀, 실�
   expect(foreignHosts(w)).toEqual([]);
 });
 
-test('QA-REQ512-2: 구성 값 PUT 실패는 실패 행과 구성 값 문제 1건 이상으로 보인다', async ({ page, request }) => {
+test('QA-REQ512-3: 이력에서 다시 연 결과와 새로고침 뒤에도 구성 값이 보이고, 구성 값 읽기 실패 카드는 구성 값 없음을 보인다', async ({ page, request }) => {
+  test.setTimeout(240000);
+  const rec = R('QA-REQ512-3');
+  const w = watch(page);
+  await stubReset(request);
+  await openTransport(page);
+  await choosePackage(page, 'PkgFaultDemo');
+  await selectArtifacts(page, ['IF_Fault_ConfigRead500', 'IF_Fault_ParamPutFail']);
+  await runPreview(page);
+  await realFromResult(page).click();
+  const real = await confirmDialogRun(page);
+  expect(real.status).toBe(200);
+  const id = real.body.transportId as string;
+  const check = async (label: string) => {
+    await expect(resultRegion(page).first()).toBeVisible();
+    await expandAll(page);
+    const region = resultRegion(page).first();
+    const text = flat(await region.innerText());
+    rec[label] = text.slice(0, 1500);
+    expect(text, `${label}: 구성 값 읽기 실패 카드`).toMatch(/IF_Fault_ConfigRead500.*CONFIGURATION_READ_FAILED.*구성 값 없음/);
+    await expect(region.getByRole('row').filter({ hasText: 'ParamA' }).first()).toContainText('a-dev');
+    await expect(region.getByRole('row').filter({ hasText: 'ParamA' }).first()).toContainText('실패');
+    await expect(region.getByRole('row').filter({ hasText: 'ParamB' }).first()).toContainText('복사됨');
+  };
+  await check('result');
+  await openTab(page, '이력');
+  await page.getByRole('button', { name: id, exact: true }).click();
+  await check('history');
+  await page.reload();
+  await openTab(page, '이력');
+  await page.getByRole('button', { name: id, exact: true }).click();
+  await check('historyAfterReload');
+  await shot(page, 'QA-REQ512-3');
+  expect(w.errors).toEqual([]);
+});
+
+test('QA-REQ512-2:구성 값 PUT 실패는 실패 행과 구성 값 문제 1건 이상으로 보인다', async ({ page, request }) => {
   test.setTimeout(240000);
   const rec = R('QA-REQ512-2');
   const w = watch(page);
