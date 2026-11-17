@@ -29,7 +29,7 @@ public class TransportHistoryStore {
     }
 
     public void append(TransportResponse response) {
-        // Reuse the already masked response, preserving the API content.
+        // Preserve the API response, including source configuration values.
         byte[] line = (json.writer().without(SerializationFeature.INDENT_OUTPUT)
                 .writeValueAsString(response) + "\n").getBytes(StandardCharsets.UTF_8);
         LOCK.lock();

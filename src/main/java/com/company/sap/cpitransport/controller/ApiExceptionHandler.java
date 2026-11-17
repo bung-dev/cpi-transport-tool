@@ -35,7 +35,6 @@ public class ApiExceptionHandler {
         int status = switch (code) {
             case INVALID_REQUEST, INVALID_SERVICE_KEY, TEMPLATE_MISMATCH -> 400;
             case ENVIRONMENT_NOT_CONFIGURED -> 503;
-            case MAPPING_INVALID -> 422;
             case PACKAGE_NOT_FOUND, TENANT_NOT_FOUND, TEMPLATE_NOT_FOUND -> 404;
             case TEMPLATE_STORE_UNREADABLE, AUDIT_STORE_UNREADABLE -> 500;
             case CPI_UNAVAILABLE -> 502;
@@ -50,7 +49,6 @@ public class ApiExceptionHandler {
             case READ_ONLY_MODE -> "Read-only mode: real transport is disabled";
             case INVALID_REQUEST -> "Invalid request";
             case ENVIRONMENT_NOT_CONFIGURED -> "Environment not configured";
-            case MAPPING_INVALID -> "Invalid mapping";
             case PACKAGE_NOT_FOUND -> "Package not found";
             case CPI_UNAVAILABLE -> "CPI request failed";
             case INVALID_SERVICE_KEY -> "Invalid service key";

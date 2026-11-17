@@ -107,8 +107,4 @@ public class TransportController {
         return ResponseEntity.badRequest().body(new ErrorResponse("INVALID_REQUEST", "Invalid request"));
     }
 
-    @ExceptionHandler(MappingInvalidException.class)
-    public ResponseEntity<ErrorResponse> mapping(MappingInvalidException failure) {
-        return ResponseEntity.status(422).body(new ErrorResponse("MAPPING_INVALID", failure.getMessage()));
-    }
 }

@@ -68,7 +68,7 @@ public class CpiApiClient {
 
     public List<CpiConfiguration> getConfigurations(String environment, String id) {
         return list(environment, artifactPath(id) + "/Configurations",
-                node -> new CpiConfiguration(field(node, "ParameterKey"), field(node, "ParameterValue"),
+                node -> new CpiConfiguration(field(node, "ParameterKey"), configurationValue(node),
                         field(node, "DataType")));
     }
 
@@ -77,7 +77,7 @@ public class CpiApiClient {
         // OData string literals escape quotes by doubling; URI encoding protects delimiters in keys.
         String encodedKey = UriUtils.encode(key.replace("'", "''"), StandardCharsets.UTF_8);
         write(environment, HttpMethod.PUT, artifactPath(id) + "/$links/Configurations('" + encodedKey + "')",
-                Map.of("ParameterValue", value, "DataType", dataType));
+                configurationBody(value, dataType));
     }
 
     public void deploy(String environment, String id) {
@@ -239,6 +239,19 @@ public class CpiApiClient {
 
     private CpiPackage packageValue(JsonNode node) {
         return new CpiPackage(field(node, "Id"), field(node, "Name"), field(node, "Version"));
+    }
+
+    private Map<String, String> configurationBody(String value, String dataType) {
+        var body = new java.util.LinkedHashMap<String, String>();
+        body.put("ParameterValue", value);
+        body.put("DataType", dataType);
+        return body;
+    }
+
+    private String configurationValue(JsonNode node) {
+        var value = node.path("ParameterValue");
+        if (value.isMissingNode() || value.isNull()) return null;
+        return field(node, "ParameterValue");
     }
 
     private String field(JsonNode node, String key) {
