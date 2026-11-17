@@ -1,6 +1,8 @@
 package com.company.sap.cpitransport.controller;
 
 import java.io.IOException;
+import com.company.sap.cpitransport.template.TemplateService;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.company.sap.cpitransport.model.ErrorResponse.ApiException;
 import com.company.sap.cpitransport.model.ErrorResponse.Code;
 import com.company.sap.cpitransport.model.TenantListResponse;
@@ -17,7 +19,13 @@ import tools.jackson.databind.ObjectMapper;
 public class TenantController {
     private final TenantRegistry registry;
     private final ObjectMapper json;
+    private final TemplateService templates;
     public TenantController(TenantRegistry registry, ObjectMapper json) {
+        this(registry, json, null);
+    }
+    @Autowired
+    public TenantController(TenantRegistry registry, ObjectMapper json, TemplateService templates) {
+        this.templates = templates;
         this.registry = registry;
         this.json = json;
     }
@@ -32,8 +40,10 @@ public class TenantController {
         return registry.update(id, () -> body(request));
     }
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable String id) {
-        registry.delete(id);
+    public ResponseEntity<Void> delete(@PathVariable String id,
+            @RequestParam(defaultValue = "false") boolean deleteTemplates) {
+        if (deleteTemplates) templates.deleteTenant(id);
+        else registry.delete(id);
         return ResponseEntity.noContent().build();
     }
     private JsonNode body(HttpServletRequest request) {

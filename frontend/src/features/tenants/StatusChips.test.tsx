@@ -1,12 +1,11 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, expect, it, vi } from 'vitest';
-import App from '../../App';
 import type { TenantCheck, TransportResponse } from '../../api/types';
 import { json, mockApi } from '../../test/mockFetch';
+import { renderAt } from '../../test/appRoutes';
 import { TENANTS_OK, TENANT_STATUS_OK } from '../../test/tenantFixtures';
 import { TestTenantProvider } from '../../test/tenantProvider';
-import { RunPanel } from '../transport/RunPanel';
 import { TransportResult } from '../result/TransportResult';
 import { StatusChips } from './StatusChips';
 import { TenantProvider } from './TenantContext';
@@ -58,15 +57,15 @@ it.each(['network', '500', 'non-json'])('REQ-303 AC-4·AC-5 / REQ-302 AC-5: 상�
     if (failure === 'network') return Promise.reject(new Error('test-dummy-offline'));
     return failure === '500' ? json({}, 500) : new Response('test-dummy-invalid-json', { status: 200 });
   } });
-  render(<TenantProvider openTenantsTab={() => {}}><StatusChips /><RunPanel packageId="P" artifactIds={[]} onResult={() => {}} />
+  // S3b: 실행 모드 라디오는 없어졌다. 새 이관의 실제 이관 컨트롤은 미리보기 결과의 "이 구성으로 실제 이관"이다
+  // (실제 이관 단계의 "<대상>로 이관" 비활성은 wizardRun.test가 본다).
+  render(<TenantProvider openTenantsTab={() => {}}><StatusChips />
     <TransportResult result={RESULT} onOpenReal={() => {}} /></TenantProvider>);
   await screen.findByRole('button', { name: '원본 DEV 확인 실패' });
   for (const badge of screen.getAllByText('확인 실패')) expect(badge).toHaveClass('bg-danger-bg', 'text-danger-fg');
-  expect(screen.getByRole('radio', { name: '실제 이관' })).toBeDisabled();
   expect(screen.getByRole('button', { name: '이 구성으로 실제 이관' })).toBeDisabled();
   const message = '읽기 전용 여부를 확인하지 못했습니다. 상태 칩을 눌러 다시 확인하세요';
-  expect(screen.getAllByText(message)).toHaveLength(2);
-  expect(screen.getByRole('radio', { name: '실제 이관' })).toHaveAccessibleDescription(expect.stringContaining(message));
+  expect(screen.getAllByText(message)).toHaveLength(1);
   expect(screen.getByRole('button', { name: '이 구성으로 실제 이관' })).toHaveAccessibleDescription(message);
 });
 it.each(['click', 'Enter'])('REQ-303 AC-4·AC-5: %s 재확인은 refresh=true 한 번, 진행 중 다른 칩 입력도 중복되지 않는다', async input => {
@@ -96,11 +95,11 @@ it('REQ-303 AC-4·AC-5: 최초 상태 요청 중 칩 클릭과 Enter는 새 요�
 it('REQ-303 AC-4·AC-5 / REQ-307 AC-6: App 상단 banner 안에 연결됨 칩 둘과 접근 가능한 제품명이 있다', async () => {
   mockApi({ 'GET /tenants': () => json(TENANTS_OK), 'GET /tenants/status': () => json(TENANT_STATUS_OK),
     'GET /packages?tenantId=DEV': () => json([]) });
-  render(<App />);
+  renderAt('#/transport');
   const banner = screen.getByRole('banner');
   await within(banner).findByRole('button', { name: '대상 PRD 연결됨' });
   expect(within(banner).getAllByText('연결됨')).toHaveLength(2);
   expect(within(banner).getByRole('heading', { name: 'CPI Transport Tool' })).toBeInTheDocument();
-  expect(banner).toHaveClass('h-14');
-  await waitFor(() => expect(screen.getByRole('radio', { name: '실제 이관' })).toBeEnabled());
+  expect(banner).toHaveClass('sticky', 'top-0');
+  expect(await screen.findByRole('navigation', { name: '이관 단계' })).toBeInTheDocument();
 });

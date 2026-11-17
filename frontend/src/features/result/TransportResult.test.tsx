@@ -394,11 +394,11 @@ describe('이관 결과', () => {
     expect(b.className).not.toMatch(/outline-(none|0|hidden)/);
   });
 
-  it('REQ-105 AC-5: 결과 머리에 스위치 "문제 항목만 보기"와 결과 전체의 "문제 항목 m건"이 있다', () => {
+  it('REQ-105 AC-5: 결과 머리에 스위치 "문제 항목만 보기"와 결과 전체의 "치환 문제 m건"(REQ-424)이 있다', () => {
     render(<TransportResult result={MIXED} />);
     expect(onlySwitch()).not.toBeChecked();
     expect(onlySwitch()).toBeEnabled();
-    expect(screen.getByText('문제 항목 1건')).toBeInTheDocument();
+    expect(screen.getByText('치환 문제 1건')).toBeInTheDocument();
   });
 
   it('REQ-105 AC-5: 켜면 문제 아티팩트의 카드만 남고 모두 펼쳐지며 치환 표에는 문제 항목 행만 보이고 문제 항목이 없는 FAILED 카드는 "문제 항목 없음"이다', async () => {
@@ -451,7 +451,7 @@ describe('이관 결과', () => {
   it('REQ-105 AC-5: 문제 아티팩트가 하나도 없으면 스위치는 비활성이고 건수는 0건이다', () => {
     render(<TransportResult result={{ ...MIXED, results: [MIXED.results[0], MIXED.results[3]] }} />);
     expect(onlySwitch()).toBeDisabled();
-    expect(screen.getByText('문제 항목 0건')).toBeInTheDocument();
+    expect(screen.getByText('치환 문제 0건')).toBeInTheDocument();
   });
 
   it('REQ-105 AC-5: 새 결과가 나타나면 스위치는 꺼지고 접기·펼치기는 그 결과의 처음 상태다', async () => {

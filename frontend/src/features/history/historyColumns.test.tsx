@@ -63,7 +63,7 @@ describe('이력 목록 열 표시 (REQ-317)', () => {
     await showHistory([widest()]);
     const row = screen.getAllByRole('row')[1];
     const cells = cellsOf(row);
-    expect(Object.keys(cells)).toEqual(['시작 시각', '패키지', '원본', '대상', '모드', '배포', '결과', '이관 ID']);
+    expect(Object.keys(cells)).toEqual(['시작 시각', '템플릿', '원본', '대상', '패키지', '모드', '배포', '결과', '이관 ID']);
 
     for (const column of LONG_COLUMNS) {
       const cell = cells[column];

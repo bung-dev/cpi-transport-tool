@@ -5,6 +5,10 @@ export interface ApiError {
 }
 
 const TITLES: Record<string, string> = {
+  TEMPLATE_NAME_DUPLICATE: '같은 이름의 템플릿이 이미 있습니다',
+  TEMPLATE_NOT_FOUND: '템플릿을 찾을 수 없습니다',
+  TEMPLATE_MISMATCH: '템플릿이 바뀌었거나 삭제되었습니다',
+  TEMPLATE_STORE_UNREADABLE: '템플릿 저장 파일을 읽지 못했습니다',
   READ_ONLY_MODE: '읽기 전용 모드에서는 실제 이관을 할 수 없습니다',
   INVALID_SERVICE_KEY: '서비스 키가 올바르지 않습니다',
   TENANT_NAME_DUPLICATE: '같은 이름의 테넌트가 이미 있습니다',
@@ -18,6 +22,11 @@ const TITLES: Record<string, string> = {
   PACKAGE_NOT_FOUND: '패키지를 찾을 수 없습니다',
   CPI_UNAVAILABLE: 'CPI에 연결할 수 없습니다',
 };
+
+/** 템플릿이 없거나(TEMPLATE_NOT_FOUND) 경로가 달라진(TEMPLATE_MISMATCH) 이관 요청 오류인지. 제목은 코드와 1:1이다. */
+export function isTemplateError(error: ApiError): boolean {
+  return error.title === TITLES.TEMPLATE_MISMATCH || error.title === TITLES.TEMPLATE_NOT_FOUND;
+}
 
 export const NETWORK_ERROR_TITLE = '서버에 연결할 수 없습니다';
 

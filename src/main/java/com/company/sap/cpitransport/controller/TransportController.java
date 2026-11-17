@@ -1,6 +1,7 @@
 package com.company.sap.cpitransport.controller;
 
 import java.util.ArrayList;
+import com.company.sap.cpitransport.template.TemplateService;
 import com.company.sap.cpitransport.config.ReadOnlyProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.company.sap.cpitransport.model.*;
@@ -19,14 +20,21 @@ public class TransportController {
     private final TransportHistoryStore history;
 
     private final ReadOnlyProperties readOnly;
+    private final TemplateService templates;
 
     public TransportController(TransportService service, EnvironmentGuard guard, TransportHistoryStore history) {
         this(service, guard, history, new ReadOnlyProperties(true));
     }
 
-    @Autowired
     public TransportController(TransportService service, EnvironmentGuard guard, TransportHistoryStore history,
                                ReadOnlyProperties readOnly) {
+        this(service, guard, history, readOnly, null);
+    }
+
+    @Autowired
+    public TransportController(TransportService service, EnvironmentGuard guard, TransportHistoryStore history,
+                               ReadOnlyProperties readOnly, TemplateService templates) {
+        this.templates = templates;
         this.service = service;
         this.guard = guard;
         this.history = history;
@@ -49,6 +57,12 @@ public class TransportController {
         boolean deploy = flag(body, "deploy");
         String sourceId = tenantId(body, "sourceTenantId", "DEV");
         String targetId = tenantId(body, "targetTenantId", "PRD");
+        TemplateRef template = null;
+        if (body.has("templateId")) {
+            String templateId = tenantId(body, "templateId", null);
+            if (templates == null) throw new ErrorResponse.ApiException(ErrorResponse.Code.TEMPLATE_NOT_FOUND);
+            template = templates.resolve(templateId, sourceId, targetId);
+        }
         if (sourceId.equals(targetId)) invalid();
         if (!dryRun && readOnly.readOnly()) throw new ErrorResponse.ApiException(ErrorResponse.Code.READ_ONLY_MODE);
         var source = guard.resolve(sourceId);
@@ -57,6 +71,7 @@ public class TransportController {
         if (!dryRun) missing.addAll(guard.missingKeys(targetId));
         if (!missing.isEmpty()) throw new EnvironmentNotConfiguredException(missing);
         var response = service.preflightAndExecute(new TransportRequest(body.get("packageId").asString(), ids, dryRun, deploy, source, target));
+        if (template != null) response = response.withTemplate(template);
         history.append(response);
         return response;
     }

@@ -9,6 +9,8 @@ import type { StatusKind } from '../../design/statusBadges';
 import { isProblemReplacement, problemCount } from './problems';
 
 const orDash = (v: string | null): ReactNode => (v === null ? <span className="text-ink-tertiary">—</span> : v);
+// REQ-424: 민감 값(SENSITIVE_SKIPPED)은 서버가 값을 보내도 변경 전·후 칸에 쓰지 않는다. 키는 보인다.
+const hidden: ReactNode = <span className="text-ink-tertiary">숨김</span>;
 
 /** 분류 이름(12px, ink-tertiary)이 앞에 붙은 상태 배지. 배지 글자는 API 값 원문이다. */
 function LabeledBadge({ label, kind, value }: { label: string; kind: StatusKind; value: string }) {
@@ -105,8 +107,8 @@ export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
                         <Td>
                           <StatusBadge kind="replacementStatus" value={x.status} />
                         </Td>
-                        <Td className="font-mono text-[13px]">{orDash(x.before)}</Td>
-                        <Td className="font-mono text-[13px]">{orDash(x.after)}</Td>
+                        <Td className="font-mono text-[13px]">{x.status === 'SENSITIVE_SKIPPED' ? hidden : orDash(x.before)}</Td>
+                        <Td className="font-mono text-[13px]">{x.status === 'SENSITIVE_SKIPPED' ? hidden : orDash(x.after)}</Td>
                         <Td numeric>{x.occurrences}</Td>
                       </Tr>
                     ))}
