@@ -1,16 +1,13 @@
-import type { ArtifactResult, Replacement, ReplacementStatus } from '../../api/types';
+import type { ArtifactResult, ConfigurationItem } from '../../api/types';
 
-// REQ-105 용어: "문제 항목"은 status가 VALUE_MISMATCH, KEY_NOT_FOUND, FAILED인 치환 항목이다.
-// SENSITIVE_SKIPPED, PLANNED, APPLIED는 문제 항목이 아니다. 요약 줄, 처음 펼침 상태, 필터, 건수가 모두 이 기준을 쓰므로 한 모듈에만 둔다.
-const PROBLEM_STATUSES: readonly ReplacementStatus[] = ['VALUE_MISMATCH', 'KEY_NOT_FOUND', 'FAILED'];
-
-export function isProblemReplacement(r: Replacement): boolean {
-  return PROBLEM_STATUSES.includes(r.status);
+// REQ-511: 요약 줄, 처음 펼침 상태, 필터, 건수는 FAILED 구성 값만 문제 항목으로 센다.
+export function isProblemConfiguration(c: ConfigurationItem): boolean {
+  return c.status === 'FAILED';
 }
 
 /** 아티팩트의 문제 항목 수 */
 export function problemCount(a: ArtifactResult): number {
-  return a.replacements.filter(isProblemReplacement).length;
+  return (a.configurations ?? []).filter(isProblemConfiguration).length;
 }
 
 /** "문제 아티팩트": status가 FAILED이거나 문제 항목이 1개 이상인 아티팩트 */
@@ -25,7 +22,7 @@ export function totalProblemCount(results: ArtifactResult[]): number {
 
 /**
  * 결과 전체의 실패 아티팩트 수: status가 FAILED인 아티팩트 수. "실패" 통계 타일(summary.failed)과 같은 값이다(REQ-316 AC-1).
- * 치환 항목만 세는 totalProblemCount와 합치지 않는다(REQ-316 AC-2, ADR-014).
+ * 구성 값 문제 항목만 세는 totalProblemCount와 합치지 않는다(REQ-511, ADR-014).
  */
 export function failedArtifactCount(results: ArtifactResult[]): number {
   return results.filter((a) => a.status === 'FAILED').length;
