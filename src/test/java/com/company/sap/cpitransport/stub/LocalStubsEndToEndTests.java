@@ -97,6 +97,9 @@ class LocalStubsEndToEndTests {
         stubs.prd().verify(0, putRequestedFor(urlPathEqualTo(ORDER + "/$links/Configurations('ApiToken')")));
         stubs.prd().verify(6, putRequestedFor(urlPathMatching(".*/\\$links/Configurations.*")));
         stubs.prd().verify(0, getRequestedFor(urlPathMatching(".*/Configurations")));
+        // REQ-502: 원본 구성 값 순서대로 PUT한다.
+        assertThat(stubs.prd().findAll(putRequestedFor(urlPathMatching(java.util.regex.Pattern.quote(CUSTOMER) + "/\\$links/Configurations.*"))))
+                .extracting(r -> putKey(r.getUrl())).containsExactly("ReceiverUrl", "Timeout", "ClientPassword", "LogLevel");
         // REQ-501: 업로드 내용은 원본 zip과 바이트 단위로 같다.
         var update = stubs.prd().findAll(putRequestedFor(urlPathEqualTo(ORDER)));
         assertThat(update).hasSize(1);
@@ -146,6 +149,9 @@ class LocalStubsEndToEndTests {
         var retry = byId.get("IF_Fault_AuthRetry");
         assertThat(retry.status()).isEqualTo(ArtifactStatus.SUCCESS);
         assertThat(retry.configurations()).extracting(ConfigurationItem::status).containsExactly(ConfigurationStatus.COPIED);
+        // REQ-506: 401 재시도는 대상 구성 값 PUT에서 난다(같은 키 PUT 2회: 401 뒤 재시도 202).
+        stubs.prd().verify(2, putRequestedFor(urlPathEqualTo(
+                "/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Fault_AuthRetry',Version='active')/$links/Configurations('RetryKey')")));
         var notZip = stubs.prd().findAll(postRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts"))
                 .withRequestBody(matchingJsonPath("$.Id", equalTo("IF_Fault_NotZip"))));
         assertThat(notZip).hasSize(1);
@@ -155,6 +161,11 @@ class LocalStubsEndToEndTests {
         var byId = new HashMap<String, ArtifactResult>();
         response.results().forEach(result -> byId.put(result.artifactId(), result));
         return byId;
+    }
+    private static String putKey(String url) {
+        String decoded = java.net.URLDecoder.decode(url, java.nio.charset.StandardCharsets.UTF_8);
+        int start = decoded.indexOf("Configurations('") + "Configurations('".length();
+        return decoded.substring(start, decoded.indexOf("')", start));
     }
     private static byte[] uploaded(String body) {
         return Base64.getDecoder().decode(JSON.readTree(body).path("ArtifactContent").asString());
