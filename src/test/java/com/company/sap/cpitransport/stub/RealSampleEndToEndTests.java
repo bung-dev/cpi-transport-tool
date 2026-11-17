@@ -57,7 +57,6 @@ class RealSampleEndToEndTests {
         for (String field : List.of("api-url", "token-url", "client-id", "client-secret"))
             properties.add("cpi.environments.prd." + field, () -> "");
         properties.add("cpi.transport.read-only", () -> "false");
-        properties.add("cpi.transport.mapping-file", () -> Path.of("examples/real-transport-mapping.yml").toAbsolutePath().toString());
         properties.add("cpi.transport.history.file", () -> directory.resolve("history.jsonl").toString());
         properties.add("cpi.tenants.store-file", () -> directory.resolve("tenants.enc").toString());
     }
@@ -112,21 +111,19 @@ class RealSampleEndToEndTests {
         assertThat(response.statusCode()).isEqualTo(200);
         return JSON.readValue(response.body(), TransportResponse.class);
     }
-    @Test @DisplayName("REQ-306 AC-3: sample dry run plans all three replacements without any registered target request")
+    @Test @DisplayName("REQ-306 AC-3, REQ-503: sample dry run plans the source configuration value without any registered target request")
     void req306_ac3_dryRun() throws Exception {
         var response = transport(true);
         assertThat(response.summary().failed()).isZero();
         assertThat(response.results()).singleElement().satisfies(result -> {
             assertThat(result.status()).isEqualTo(ArtifactStatus.SUCCESS);
-            assertThat(result.replacements()).containsExactlyInAnyOrder(
-                    new Replacement(TargetType.HEADER, "SampleHeader", ReplacementStatus.PLANNED, "DEV_HEADER", "TARGET_HEADER", 1),
-                    new Replacement(TargetType.PROPERTY, "SampleProperty", ReplacementStatus.PLANNED, "DEV_PROPERTY", "TARGET_PROPERTY", 1),
-                    new Replacement(TargetType.EXTERNAL_PARAM, "SampleMessage", ReplacementStatus.PLANNED, "DEV_MESSAGE", "TARGET_MESSAGE", 1));
+            assertThat(result.configurations()).containsExactly(
+                    new ConfigurationItem("SampleMessage", "DEV_MESSAGE", "xsd:string", ConfigurationStatus.PLANNED));
         });
         assertThat(target.getAllServeEvents()).isEmpty();
     }
 
-    @Test @DisplayName("REQ-306 AC-2·AC-3 / REQ-308 AC-3: registered target mock receives created bundle parameter update and deployment")
+    @Test @DisplayName("REQ-306 AC-2·AC-3 / REQ-308 AC-3 / REQ-501 / REQ-502: registered target mock receives the unchanged bundle, the copied parameter and deployment")
     void req306_ac2_createdAndDeployed() throws Exception {
         var response = transport(false);
         assertThat(response.summary().failed()).isZero();
@@ -137,32 +134,30 @@ class RealSampleEndToEndTests {
             assertThat(result.status()).isEqualTo(ArtifactStatus.SUCCESS);
             assertThat(result.action()).isEqualTo(TransportAction.CREATED);
             assertThat(result.deployStatus()).isEqualTo(DeployStatus.STARTED);
-            assertThat(result.replacements()).containsExactlyInAnyOrder(
-                    new Replacement(TargetType.HEADER, "SampleHeader", ReplacementStatus.APPLIED, "DEV_HEADER", "TARGET_HEADER", 1),
-                    new Replacement(TargetType.PROPERTY, "SampleProperty", ReplacementStatus.APPLIED, "DEV_PROPERTY", "TARGET_PROPERTY", 1),
-                    new Replacement(TargetType.EXTERNAL_PARAM, "SampleMessage", ReplacementStatus.APPLIED, "DEV_MESSAGE", "TARGET_MESSAGE", 1));
+            assertThat(result.configurations()).containsExactly(
+                    new ConfigurationItem("SampleMessage", "DEV_MESSAGE", "xsd:string", ConfigurationStatus.COPIED));
         });
         var uploads = target.findAll(postRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts")));
         assertThat(uploads).hasSize(1);
         var upload = JSON.readTree(uploads.get(0).getBody());
         assertThat(upload.path("Id").asString()).isEqualTo(RealSampleStub.ID);
         assertThat(upload.path("PackageId").asString()).isEqualTo(RealSampleStub.PACKAGE);
-        var entries = RealSampleStubTests.entries(Base64.getDecoder().decode(upload.path("ArtifactContent").asString()));
-        var document = RealSampleStubTests.parse(entries.get("src/main/resources/scenarioflows/integrationflow/CPITT_Sample_Push.iflw"));
-        assertThat(document.getDocumentElement().getTextContent()).contains("TARGET_HEADER", "TARGET_PROPERTY").doesNotContain("DEV_HEADER", "DEV_PROPERTY");
-        assertThat(document.getDocumentElement().getTextContent()).contains("{{SampleMessage}}");
+        byte[] uploaded = Base64.getDecoder().decode(upload.path("ArtifactContent").asString());
+        assertThat(uploaded).isEqualTo(source.bundle());
+        var entries = RealSampleStubTests.entries(uploaded);
         var original = RealSampleStubTests.entries(source.bundle());
         assertThat(entries.get("META-INF/MANIFEST.MF")).isEqualTo(original.get("META-INF/MANIFEST.MF"));
         var manifest = new Manifest(new ByteArrayInputStream(entries.get("META-INF/MANIFEST.MF")));
         assertThat(manifest.getMainAttributes().getValue("Bundle-SymbolicName")).isEqualTo(RealSampleStub.ID + "; singleton:=true");
         var updates = target.findAll(putRequestedFor(urlPathEqualTo(RealSampleStub.ARTIFACT + "/$links/Configurations('SampleMessage')")));
         assertThat(updates).hasSize(1);
-        assertThat(JSON.readTree(updates.get(0).getBody()).path("ParameterValue").asString()).isEqualTo("TARGET_MESSAGE");
+        assertThat(JSON.readTree(updates.get(0).getBody()).path("ParameterValue").asString()).isEqualTo("DEV_MESSAGE");
+        assertThat(JSON.readTree(updates.get(0).getBody()).path("DataType").asString()).isEqualTo("xsd:string");
         target.verify(1, postRequestedFor(urlPathEqualTo("/api/v1/DeployIntegrationDesigntimeArtifact")));
         target.verify(1, getRequestedFor(urlPathEqualTo("/api/v1/IntegrationRuntimeArtifacts('CPITT_Sample_Push')")));
         target.verify(1, postRequestedFor(urlPathEqualTo("/oauth/token")));
         target.verify(1, getRequestedFor(urlPathEqualTo(RealSampleStub.ARTIFACT)));
-        target.verify(1, getRequestedFor(urlPathEqualTo(RealSampleStub.ARTIFACT + "/Configurations")));
+        target.verify(0, getRequestedFor(urlPathEqualTo(RealSampleStub.ARTIFACT + "/Configurations")));
         source.dev().verify(1, getRequestedFor(urlPathEqualTo(RealSampleStub.ARTIFACT + "/$value")));
         assertThat(source.dev().getAllServeEvents()).noneMatch(event -> Set.of("POST", "PUT").contains(event.getRequest().getMethod().getName())
                 && event.getRequest().getUrl().startsWith("/api/v1/"));

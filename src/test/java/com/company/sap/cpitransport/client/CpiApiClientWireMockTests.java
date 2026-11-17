@@ -40,7 +40,7 @@ class CpiApiClientWireMockTests {
         var properties = new CpiProperties(
                 new CpiProperties.Connection(base, base + "/dev/token", "dummy-dev-client", "dummy-dev-secret"),
                 new CpiProperties.Connection(base, base + "/prd/token", "dummy-prd-client", "dummy-prd-secret"));
-        var transport = new TransportProperties("", new TransportProperties.History(temporary.resolve("history.jsonl")),
+        var transport = new TransportProperties(new TransportProperties.History(temporary.resolve("history.jsonl")),
                 new TransportProperties.Retry(1, Duration.ZERO),
                 new TransportProperties.Deploy(Duration.ofSeconds(5), Duration.ofSeconds(300)), List.of());
         Sleeper sleeper = duration -> { throw new AssertionError("Unexpected wait"); };

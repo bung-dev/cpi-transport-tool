@@ -37,7 +37,7 @@ class TransportControllerTests {
     @BeforeEach void setUp() {
         server = new WireMockServer(wireMockConfig().dynamicPort().bindAddress("localhost"));
         server.start();
-        configure(-1, -1, "");
+        configure(-1, -1);
         server.stubFor(post(urlEqualTo("/token")).willReturn(okJson(
                 "{\"access_token\":\"dummy-dev-token-0001\",\"expires_in\":3600}")));
         stub(PACKAGE, "{\"d\":{\"Id\":\"Pkg\",\"Name\":\"Package\",\"Version\":\"1\"}}");
@@ -45,7 +45,7 @@ class TransportControllerTests {
     }
     @AfterEach void tearDown() { if (server != null) server.stop(); }
 
-    private void configure(int devMissing, int prdMissing, String mapping) {
+    private void configure(int devMissing, int prdMissing) {
         String base = "http://localhost:" + server.port();
         String[] dev = {base, base + "/token", "dummy-dev-client", "dummy-dev-secret"};
         String[] prd = {base, base + "/token", "dummy-prd-client", "dummy-prd-secret"};
@@ -54,15 +54,15 @@ class TransportControllerTests {
         if (prdMissing == -2) Arrays.fill(prd, "");
         var props = new CpiProperties(new CpiProperties.Connection(dev[0], dev[1], dev[2], dev[3]),
                 new CpiProperties.Connection(prd[0], prd[1], prd[2], prd[3]));
-        var settings = new TransportProperties(mapping, new TransportProperties.History(temporary.resolve("history.jsonl")),
+        var settings = new TransportProperties(new TransportProperties.History(temporary.resolve("history.jsonl")),
                 new TransportProperties.Retry(3, Duration.ofSeconds(1)),
                 new TransportProperties.Deploy(Duration.ofSeconds(1), Duration.ofSeconds(3)), List.of());
         Sleeper sleeper = waits::add;
         var tokens = new OAuthTokenProvider(props, settings, clock, sleeper);
         var api = new CpiApiClient(new CpiHttpExecutor(props, tokens, new CsrfTokenStore(), settings, sleeper), json);
         var sensitive = new SensitiveKeyMatcher(settings);
-        var service = new TransportService(api, new IflwReplacer(sensitive), new ExternalParameterReplacer(api, sensitive),
-                new DeployService(api, settings, clock, sleeper), new MappingFileLoader(settings), clock);
+        var service = new TransportService(api, new ConfigurationCopier(api, sensitive),
+                new DeployService(api, settings, clock, sleeper), clock);
         transportService = service;
         history = new TransportHistoryStore(settings, json);
         guard = new EnvironmentGuard(props);
@@ -101,7 +101,7 @@ class TransportControllerTests {
         if (body.equals("longArtifact")) body = json.writeValueAsString(Map.of("packageId", "Pkg", "artifactIds", List.of("a".repeat(101))));
         if (body.equals("many")) body = json.writeValueAsString(Map.of("packageId", "Pkg", "artifactIds", Collections.nCopies(101, "A")));
         for (int missing : new int[]{-1, 0}) {
-            configure(missing, -1, "");
+            configure(missing, -1);
             error(body, 400, "INVALID_REQUEST");
         }
         assertThat(server.getAllServeEvents()).isEmpty();
@@ -138,9 +138,9 @@ class TransportControllerTests {
 
     @ParameterizedTest(name = "{displayName} [{index}]")
     @ValueSource(ints = {0, 1, 2, 3, 4, 5, 6, 7})
-    @DisplayName("REQ-002 AC-2: each required key precedes mapping errors and prevents CPI calls")
+    @DisplayName("REQ-002 AC-2: each required key prevents CPI calls")
     void req002_ac2_missing(int index) throws Exception {
-        configure(index < 4 ? index : -1, index >= 4 ? index - 4 : -1, temporary.resolve("missing.yaml").toString());
+        configure(index < 4 ? index : -1, index >= 4 ? index - 4 : -1);
         String key = "cpi.environments." + (index < 4 ? "dev." : "prd.")
                 + List.of("api-url", "token-url", "client-id", "client-secret").get(index % 4);
         request("{\"packageId\":\"Pkg\"}").andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.message").value(key));
@@ -148,31 +148,12 @@ class TransportControllerTests {
     }
 
     @Test
-    @DisplayName("REQ-002 AC-2: dry run requires only DEV while actual transport requires PRD")
+    @DisplayName("REQ-002 AC-2, REQ-503: dry run requires only DEV while actual transport requires PRD")
     void req002_ac2_dryRun() throws Exception {
-        configure(-1, -2, "");
+        configure(-1, -2);
         error("{\"packageId\":\"Pkg\"}", 503, "ENVIRONMENT_NOT_CONFIGURED");
         assertThat(server.getAllServeEvents()).isEmpty();
         request("{\"packageId\":\"Pkg\",\"dryRun\":true}").andExpect(status().isOk());
-    }
-
-    @Test
-    @DisplayName("REQ-006 AC-3: mapping error precedes package 404 and mapping is reloaded per request")
-    void req006_ac3_mapping() throws Exception {
-        Path mapping = temporary.resolve("mapping.yaml");
-        configure(-1, -1, mapping.toString());
-        error("{\"packageId\":\"Pkg\"}", 422, "MAPPING_INVALID");
-        assertThat(server.getAllServeEvents()).isEmpty();
-        Files.writeString(mapping, "mappings: []");
-        request("{\"packageId\":\"Pkg\"}").andExpect(status().isOk());
-        server.resetRequests();
-        Files.writeString(mapping, "mappings:\n  - artifactId: A\n");
-        request("{\"packageId\":\"Pkg\"}").andExpect(status().is(422))
-                .andExpect(jsonPath("$.message", org.hamcrest.Matchers.containsString("0")));
-        assertThat(server.getAllServeEvents()).isEmpty();
-        server.stubFor(get(urlEqualTo(PACKAGE)).willReturn(notFound()));
-        error("{\"packageId\":\"Pkg\"}", 422, "MAPPING_INVALID");
-        assertThat(server.getAllServeEvents()).isEmpty();
     }
 
     @ParameterizedTest(name = "{displayName} [{index}]")
@@ -202,13 +183,13 @@ class TransportControllerTests {
     }
 
     @Test
-    @DisplayName("REQ-005 AC-3: HTTP 200 serializes all response fields including partial failure")
+    @DisplayName("REQ-005 AC-3, REQ-504: HTTP 200 serializes all response fields including configurations with plain sensitive values and partial failure")
     void req005_ac3_responseSchema() throws Exception {
         var service = org.mockito.Mockito.mock(TransportService.class);
-        var replacement = new Replacement(TargetType.HEADER, "key", ReplacementStatus.PLANNED, "dev", "prd", 1);
-        var success = new ArtifactResult("A", null, TransportAction.NONE, List.of(replacement),
-                List.of(new UnmappedKey(TargetType.HEADER, "other")), DeployStatus.NOT_REQUESTED, null);
-        var failed = new ArtifactResult("B", null, TransportAction.NONE, List.of(), List.of(),
+        var configuration = new ConfigurationItem("ClientPassword", "dummy-dev-pass-schema", "xsd:string", ConfigurationStatus.PLANNED);
+        var success = new ArtifactResult("A", null, TransportAction.NONE, List.of(configuration),
+                DeployStatus.NOT_REQUESTED, null);
+        var failed = new ArtifactResult("B", null, TransportAction.NONE, List.of(),
                 DeployStatus.NOT_REQUESTED, new ArtifactError("ARTIFACT_NOT_FOUND", "Missing"));
         org.mockito.Mockito.when(service.preflightAndExecute(org.mockito.ArgumentMatchers.any(TransportRequest.class)))
                 .thenReturn(new TransportResponse("transport-id", "Pkg", false, false, clock.instant(), clock.instant(),
@@ -222,13 +203,16 @@ class TransportControllerTests {
         assertThat(root.at("/summary/succeeded").asInt()).isEqualTo(1);
         assertThat(root.at("/summary/failed").asInt()).isEqualTo(1);
         var result = root.at("/results/0");
-        assertThat(result.propertyNames()).containsExactlyInAnyOrder("artifactId", "status", "action", "replacements", "unmappedKeys", "deployStatus", "error");
+        assertThat(result.propertyNames()).containsExactlyInAnyOrder("artifactId", "status", "action", "configurations", "deployStatus", "error");
         assertThat(result.get("status").asString()).isEqualTo("SUCCESS");
         assertThat(result.get("error").isNull()).isTrue();
         assertThat(root.at("/results/1/status").asString()).isEqualTo("FAILED");
         assertThat(root.at("/results/1/error").propertyNames()).containsExactlyInAnyOrder("code", "message");
-        assertThat(result.at("/replacements/0").propertyNames()).containsExactlyInAnyOrder("targetType", "key", "before", "after", "status", "occurrences");
-        assertThat(result.at("/unmappedKeys/0").propertyNames()).containsExactlyInAnyOrder("targetType", "key");
+        assertThat(result.at("/configurations/0").propertyNames()).containsExactlyInAnyOrder("key", "value", "dataType", "status");
+        assertThat(result.at("/configurations/0/value").asString()).isEqualTo("dummy-dev-pass-schema");
+        assertThat(result.at("/configurations/0/status").asString()).isEqualTo("PLANNED");
+        assertThat(root.at("/results/1/configurations").isArray()).isTrue();
+        assertThat(root.at("/results/1/configurations").size()).isZero();
     }
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
@@ -250,18 +234,14 @@ class TransportControllerTests {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {400, 503, 422, 404, 502})
+    @ValueSource(ints = {400, 503, 404, 502})
     @DisplayName("REQ-011 AC-1: rejected requests append zero lines")
     void req011_ac1_errors(int statusCode) throws Exception {
         switch (statusCode) {
             case 400 -> error("{}", 400, "INVALID_REQUEST");
             case 503 -> {
-                configure(0, -1, "");
+                configure(0, -1);
                 error("{\"packageId\":\"Pkg\"}", 503, "ENVIRONMENT_NOT_CONFIGURED");
-            }
-            case 422 -> {
-                configure(-1, -1, temporary.resolve("missing.yaml").toString());
-                error("{\"packageId\":\"Pkg\"}", 422, "MAPPING_INVALID");
             }
             default -> {
                 server.stubFor(get(urlEqualTo(PACKAGE)).willReturn(aResponse().withStatus(statusCode == 404 ? 404 : 500)));
@@ -271,4 +251,26 @@ class TransportControllerTests {
         assertThat(Files.exists(temporary.resolve("history.jsonl"))).isFalse();
     }
 
+    @Test
+    @DisplayName("REQ-504: GET /transport/history keeps a legacy line with replacements and unmappedKeys and returns empty configurations")
+    void req504_legacyHistory() throws Exception {
+        String legacy = "{\"transportId\":\"legacy-1\",\"packageId\":\"Pkg\",\"dryRun\":true,\"deploy\":false,"
+                + "\"startedAt\":\"2026-09-28T00:00:00Z\",\"finishedAt\":\"2026-09-28T00:00:01Z\","
+                + "\"summary\":{\"total\":1,\"succeeded\":1,\"failed\":0},\"results\":[{\"artifactId\":\"A\",\"status\":\"SUCCESS\","
+                + "\"action\":\"NONE\",\"replacements\":[{\"targetType\":\"HEADER\",\"key\":\"K\",\"status\":\"PLANNED\","
+                + "\"before\":\"dev\",\"after\":\"prd\",\"occurrences\":1}],\"unmappedKeys\":[{\"targetType\":\"PROPERTY\",\"key\":\"U\"}],"
+                + "\"deployStatus\":\"NOT_REQUESTED\",\"error\":null}]}\n";
+        Files.writeString(temporary.resolve("history.jsonl"), legacy);
+        String body = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/transport/history"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        var root = json.readTree(body);
+        assertThat(root.size()).isEqualTo(1);
+        var result = root.at("/0/results/0");
+        assertThat(result.path("artifactId").asString()).isEqualTo("A");
+        assertThat(result.path("configurations").isArray()).isTrue();
+        assertThat(result.path("configurations").size()).isZero();
+        assertThat(result.has("replacements")).isFalse();
+        assertThat(result.has("unmappedKeys")).isFalse();
+        assertThat(Files.readString(temporary.resolve("history.jsonl"))).isEqualTo(legacy);
+    }
 }

@@ -41,7 +41,7 @@ class DeployServiceWireMockTests {
         var properties = new CpiProperties(
                 new CpiProperties.Connection(base, base + "/dev/token", "dummy-dev-client", "dummy-dev-secret"),
                 new CpiProperties.Connection(base, base + "/prd/token", "dummy-prd-client", "dummy-prd-secret"));
-        var transport = new TransportProperties("", new TransportProperties.History(temporary.resolve("history.jsonl")),
+        var transport = new TransportProperties(new TransportProperties.History(temporary.resolve("history.jsonl")),
                 new TransportProperties.Retry(3, Duration.ofSeconds(1)),
                 new TransportProperties.Deploy(Duration.ofSeconds(interval), Duration.ofSeconds(timeout)), List.of("secret"));
         Sleeper sleeper = duration -> { waits.add(duration); clock.advance(duration); };

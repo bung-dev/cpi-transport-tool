@@ -45,7 +45,7 @@ class TenantTransportWireMockTests {
     @BeforeEach void setUp() throws Exception {
         stubs = new LocalCpiStubs(directory.resolve("bundles")); stubs.start(0, 0);
         context = new AnnotationConfigApplicationContext();
-        var settings = new TransportProperties("examples/mapping-example.json", new TransportProperties.History(directory.resolve("history.jsonl")),
+        var settings = new TransportProperties(new TransportProperties.History(directory.resolve("history.jsonl")),
                 new TransportProperties.Retry(1, Duration.ZERO), new TransportProperties.Deploy(Duration.ofSeconds(1), Duration.ofSeconds(5)),
                 List.of("password", "secret", "apikey"));
         var empty = new CpiProperties.Connection("", "", "", "");
@@ -62,8 +62,8 @@ class TenantTransportWireMockTests {
         http = new CpiHttpExecutor(tenants, tokens, csrf, settings, clock::advance);
         var api = new CpiApiClient(http, json);
         var sensitive = new SensitiveKeyMatcher(settings);
-        service = new TransportService(api, new IflwReplacer(sensitive), new ExternalParameterReplacer(api, sensitive),
-                new DeployService(api, settings, clock, clock::advance), new MappingFileLoader(settings), clock);
+        service = new TransportService(api, new ConfigurationCopier(api, sensitive),
+                new DeployService(api, settings, clock, clock::advance), clock);
     }
     @AfterEach void stop() { if (context != null) context.close(); if (stubs != null) stubs.stop(); }
 
@@ -82,7 +82,7 @@ class TenantTransportWireMockTests {
         assertThat(response.summary().failed()).isZero();
         assertThat(response.results()).hasSize(2).allSatisfy(r -> assertThat(r.deployStatus()).isEqualTo(DeployStatus.STARTED));
         assertThat(response.results()).extracting(ArtifactResult::action).contains(TransportAction.CREATED, TransportAction.UPDATED);
-        assertThat(response.results().stream().flatMap(r -> r.replacements().stream())).anyMatch(r -> r.targetType() == TargetType.EXTERNAL_PARAM && r.status() == ReplacementStatus.APPLIED);
+        assertThat(response.results().stream().flatMap(r -> r.configurations().stream())).anyMatch(c -> c.status() == ConfigurationStatus.COPIED);
     }
 
     @Test @DisplayName("REQ-308 AC-3·AC-7: registered-only tenants route downloads, upload, parameters, deployment and runtime with separate caches")
@@ -96,17 +96,15 @@ class TenantTransportWireMockTests {
         stubs.dev().verify(1, getRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Customer_Push',Version='active')/$value")));
         stubs.prd().verify(1, postRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts")));
         stubs.prd().verify(1, putRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Order_Sync',Version='active')")));
-        stubs.prd().verify(getRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Customer_Push',Version='active')/Configurations")));
+        stubs.dev().verify(getRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Customer_Push',Version='active')/Configurations")));
+        stubs.prd().verify(0, getRequestedFor(urlPathMatching(".*/Configurations")));
         stubs.prd().verify(1, putRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Customer_Push',Version='active')/$links/Configurations('ReceiverUrl')"))
-                .withRequestBody(equalToJson("{\"ParameterValue\":\"http://prd-receiver.localhost/customers\",\"DataType\":\"xsd:string\"}")));
-        stubs.prd().verify(0, putRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Customer_Push',Version='active')/$links/Configurations('Timeout')")));
-        assertThat(response.results().stream().flatMap(r -> r.replacements().stream()))
-                .filteredOn(r -> r.targetType() == TargetType.EXTERNAL_PARAM && r.key().equals("Timeout"))
-                .singleElement().satisfies(r -> {
-                    assertThat(r.status()).isEqualTo(ReplacementStatus.VALUE_MISMATCH);
-                    assertThat(r.before()).isEqualTo("30000");
-                    assertThat(r.after()).isEqualTo("30000");
-                });
+                .withRequestBody(equalToJson("{\"ParameterValue\":\"http://dev-receiver.localhost/customers\",\"DataType\":\"xsd:string\"}")));
+        stubs.prd().verify(1, putRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Customer_Push',Version='active')/$links/Configurations('Timeout')"))
+                .withRequestBody(equalToJson("{\"ParameterValue\":\"30000\",\"DataType\":\"xsd:integer\"}")));
+        assertThat(response.results().stream().flatMap(r -> r.configurations().stream()))
+                .filteredOn(c -> c.key().equals("Timeout"))
+                .singleElement().isEqualTo(new ConfigurationItem("Timeout", "30000", "xsd:integer", ConfigurationStatus.COPIED));
         stubs.prd().verify(2, postRequestedFor(urlPathEqualTo("/api/v1/DeployIntegrationDesigntimeArtifact")));
         stubs.prd().verify(getRequestedFor(urlPathEqualTo("/api/v1/IntegrationRuntimeArtifacts('IF_Customer_Push')")));
         assertThat(stubs.dev().getAllServeEvents()).noneMatch(e -> e.getRequest().getMethod().getName().equals("PUT"));
@@ -126,8 +124,8 @@ class TenantTransportWireMockTests {
             assertThat(r.action()).isEqualTo(TransportAction.NONE);
             assertThat(r.deployStatus()).isEqualTo(DeployStatus.SKIPPED_DRY_RUN);
         });
-        assertThat(response.results().stream().flatMap(r -> r.replacements().stream()))
-                .anyMatch(r -> r.targetType() == TargetType.EXTERNAL_PARAM && r.status() == ReplacementStatus.PLANNED);
+        assertThat(response.results().stream().flatMap(r -> r.configurations().stream()))
+                .anyMatch(c -> c.status() == ConfigurationStatus.PLANNED);
         stubs.dev().verify(getRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Customer_Push',Version='active')/Configurations")));
         assertThat(stubs.prd().getAllServeEvents()).isEmpty();
     }

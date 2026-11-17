@@ -44,7 +44,7 @@ class PackageControllerTests {
         if (missingIndex == 4) throw new AssertionError("Invalid index");
         var properties = new CpiProperties(new CpiProperties.Connection(values[0], values[1], values[2], values[3]),
                 new CpiProperties.Connection("", "", "", ""));
-        var transport = new TransportProperties("", new TransportProperties.History(temporary.resolve("history.jsonl")),
+        var transport = new TransportProperties(new TransportProperties.History(temporary.resolve("history.jsonl")),
                 new TransportProperties.Retry(3, Duration.ofSeconds(1)),
                 new TransportProperties.Deploy(Duration.ofSeconds(5), Duration.ofSeconds(300)), List.of());
         Sleeper sleeper = waits::add;
@@ -163,10 +163,13 @@ class PackageControllerTests {
     }
 
     @Test
-    @DisplayName("REQ-004 AC-6: common handler supplies mapping-invalid error contract for subsequent APIs")
-    void req004_ac6_commonErrorContract() {
-        var response = new ApiExceptionHandler().api(new ErrorResponse.ApiException(ErrorResponse.Code.MAPPING_INVALID));
-        assertThat(response.getStatusCode().value()).isEqualTo(422);
-        assertThat(response.getBody()).isEqualTo(new ErrorResponse("MAPPING_INVALID", "Invalid mapping"));
+    @DisplayName("REQ-505: MAPPING_INVALID is removed from the error code list while the other codes remain")
+    void req505_mappingInvalidRemoved() {
+        assertThat(java.util.Arrays.stream(ErrorResponse.Code.values()).map(Enum::name))
+                .doesNotContain("MAPPING_INVALID")
+                .contains("INVALID_REQUEST", "ENVIRONMENT_NOT_CONFIGURED", "PACKAGE_NOT_FOUND", "CPI_UNAVAILABLE", "READ_ONLY_MODE");
+        var response = new ApiExceptionHandler().api(new ErrorResponse.ApiException(ErrorResponse.Code.PACKAGE_NOT_FOUND));
+        assertThat(response.getStatusCode().value()).isEqualTo(404);
+        assertThat(response.getBody()).isEqualTo(new ErrorResponse("PACKAGE_NOT_FOUND", "Package not found"));
     }
 }

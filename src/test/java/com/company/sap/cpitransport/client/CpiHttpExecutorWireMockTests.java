@@ -44,7 +44,7 @@ class CpiHttpExecutorWireMockTests {
 
     private void configure(int attempts) {
         var properties = new CpiProperties(connection("dev"), connection("prd"));
-        var transport = new TransportProperties("", new TransportProperties.History(null),
+        var transport = new TransportProperties(new TransportProperties.History(null),
                 new TransportProperties.Retry(attempts, Duration.ofSeconds(1)),
                 new TransportProperties.Deploy(Duration.ofSeconds(5), Duration.ofSeconds(300)), List.of());
         var provider = new OAuthTokenProvider(properties, transport,
@@ -233,7 +233,7 @@ class CpiHttpExecutorWireMockTests {
     @DisplayName("REQ-003 AC-3: interruption stops retries and preserves interrupt flag")
     void req003_ac3_interruption() {
         var properties = new CpiProperties(connection("dev"), connection("prd"));
-        var transport = new TransportProperties("", null,
+        var transport = new TransportProperties(null,
                 new TransportProperties.Retry(3, Duration.ofSeconds(1)), null, List.of());
         executor = new CpiHttpExecutor(properties,
                 new OAuthTokenProvider(properties, transport, Clock.systemUTC(), waits::add),
