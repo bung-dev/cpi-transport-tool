@@ -77,9 +77,9 @@ public class AuditStore {
                 return List.copyOf(entries);
             } catch (NoSuchFileException missing) {
                 return List.of();
-            } catch (IOException ignored) {
-                // 예외 내용(경로 등)은 응답·로그에 싣지 않는다.
-                log.error("Audit read failed");
+            } catch (IOException failure) {
+                // 예외 메시지(경로 등)는 응답·로그에 싣지 않고 종류만 남긴다.
+                log.error("Audit read failed: {}", failure.getClass().getSimpleName());
                 throw new ApiException(Code.AUDIT_STORE_UNREADABLE);
             }
         }

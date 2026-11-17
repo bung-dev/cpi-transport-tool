@@ -16,7 +16,8 @@ function apiPrefixes(source: string): string[] {
 }
 
 function proxiedPrefixes(source: string): string[] {
-  const block = source.match(/proxy:\s*\{([\s\S]*?)\n\s{4}\}/)?.[1] ?? '';
+  // 프록시 값은 문자열(또는 상수)이라 블록 안에 중괄호가 없다. 들여쓰기와 무관하게 첫 닫는 중괄호까지 읽는다.
+  const block = source.match(/proxy:\s*\{([^{}]*)\}/)?.[1] ?? '';
   return [...block.matchAll(/['"](\/[A-Za-z]+)['"]\s*:/g)].map((m) => m[1]).sort();
 }
 
