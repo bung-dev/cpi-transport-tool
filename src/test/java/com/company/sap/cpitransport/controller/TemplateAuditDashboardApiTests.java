@@ -530,6 +530,17 @@ class TemplateAuditDashboardApiTests {
         assertThat(output.getAll()).doesNotContain("test-dummy-api-secret", KEY);
     }
 
+    @Test @DisplayName("감사 파일을 읽지 못하면 GET /audit는 500 AUDIT_STORE_UNREADABLE이고, 이관 분류만 보면 200")
+    void auditReadFailure() throws Exception {
+        Path auditAsDirectory = Files.createDirectories(directory.resolve("audit-read-is-a-directory"));
+        try (var context = start(directory.resolve("read-failure-templates.json"), auditAsDirectory)) {
+            int p = port(context);
+            error(request(p, "GET", "/audit?category=all", null), 500, "AUDIT_STORE_UNREADABLE");
+            error(request(p, "GET", "/audit?category=tenant", null), 500, "AUDIT_STORE_UNREADABLE");
+            assertThat(request(p, "GET", "/audit?category=transport", null).statusCode()).isEqualTo(200);
+        }
+    }
+
     // ---- REQ-405 대시보드 API ----
 
     @Test @DisplayName("REQ-405: nodes, 사용 가능한 템플릿 경로 edges, 이력에서 계산한 대기 항목, templateId 필터")
