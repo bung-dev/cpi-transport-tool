@@ -1,6 +1,8 @@
 package com.company.sap.cpitransport.audit;
 
 import com.company.sap.cpitransport.config.AuditProperties;
+import com.company.sap.cpitransport.model.ErrorResponse.ApiException;
+import com.company.sap.cpitransport.model.ErrorResponse.Code;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -76,7 +78,9 @@ public class AuditStore {
             } catch (NoSuchFileException missing) {
                 return List.of();
             } catch (IOException ignored) {
-                throw new IllegalStateException("Audit read failed");
+                // 예외 내용(경로 등)은 응답·로그에 싣지 않는다.
+                log.error("Audit read failed");
+                throw new ApiException(Code.AUDIT_STORE_UNREADABLE);
             }
         }
     }
