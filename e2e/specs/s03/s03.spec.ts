@@ -96,6 +96,9 @@ test('QA-161: 테넌트 0개 - 실행 비활성, 등록 안내, 탭 이동', asy
   expect(rec.applyDisabled, '"이 경로 사용" 비활성').toBe(true);
   expect(rec.goVisible, '"테넌트 화면으로 이동" 버튼').toBe(true);
   await go.click();
+  // 해시 이동 뒤 다시 그려질 때까지 기다린 다음 읽는다(클릭 직후 바로 읽으면 이전 화면 상태를 읽는다). 기대값은 그대로다.
+  await expect(tabBtn(page, '테넌트')).toHaveAttribute('aria-current', 'page').catch(() => undefined);
+  await page.getByRole('button', { name: '테넌트 등록', exact: true }).waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
   rec.tenantTabSelected = await tabBtn(page, '테넌트').getAttribute('aria-current');
   // S2(REQ-412): 등록 폼은 서랍이다. 테넌트 화면에서 서랍을 여는 "테넌트 등록" 버튼이 보이면 등록할 수 있다.
   rec.registerFormVisible = await page.getByRole('button', { name: '테넌트 등록', exact: true }).isVisible().catch(() => false);
