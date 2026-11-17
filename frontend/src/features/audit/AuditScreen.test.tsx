@@ -69,6 +69,11 @@ describe('REQ-414 감사 이력', () => {
     expect(screen.queryByRole('table')).toBeNull();
   });
 
+  it('감사 파일을 읽지 못한 오류(AUDIT_STORE_UNREADABLE)는 알 수 없는 오류가 아니라 제목으로 보인다', async () => {
+    setup({ 'GET /audit?category=all': () => json({ error: 'AUDIT_STORE_UNREADABLE', message: 'Audit store unreadable' }, 500) });
+    expect(await screen.findByRole('alert')).toHaveTextContent('감사 기록 파일을 읽지 못했습니다');
+  });
+
   it('REQ-414 실패: 조회 실패는 오류와 "다시 시도"이고 다시 시도하면 다시 조회한다', async () => {
     let fail = true;
     const fn = setup({ 'GET /audit?category=all': () => (fail ? json({ error: 'INVALID_REQUEST', message: 'bad' }, 400) : json(ENTRIES)) });
