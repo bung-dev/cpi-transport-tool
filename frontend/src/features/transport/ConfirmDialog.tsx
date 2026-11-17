@@ -66,7 +66,7 @@ export function ConfirmDialog({ packageId, artifactCount, deploy, onDeployChange
     }
   }
 
-  // AI-NOTE: 대화상자는 document.body에 포털로 그린다. 폭 1024px 이상에서 실행 카드 열이 sticky라 자체 쌓임 맥락을 만들고, 그 안의 z-10은 뒤따르는 결과 카드(relative)보다 위로 올라가지 못한다 (근거: REQ-107 AC-4, 개발 중 브라우저 확인)
+  // AI-NOTE: 대화상자는 document.body에 포털로 그린다. 처음 이유는 옛 이관 탭의 sticky 실행 카드가 만든 쌓임 맥락 안에서 z-10이 결과 카드 위로 못 올라가던 것이었다. 지금 마법사에도 단계·결과 카드가 쌓임 맥락을 만들 수 있어 포털을 유지한다 (근거: REQ-107 AC-4, ADR-015)
   return createPortal(
     <div className="fixed inset-0 z-10 flex animate-dialog-fade items-center justify-center bg-scrim p-4" onKeyDown={onKeyDown}>
       <div

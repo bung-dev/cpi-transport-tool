@@ -43,7 +43,7 @@ export function TenantProvider({ children, openTenantsTab }: { children: ReactNo
   const [status, setStatus] = useState<LoadState<TenantStatusResponse>>({ state: 'loading' });
   const [sourceTenantId, setSourceTenantId] = useState<string | null>(null);
   const [targetTenantId, setTargetTenantId] = useState<string | null>(null);
-  // AI-NOTE: 원본이 바뀌면 TransportTab이 폼 전체를 다시 마운트(key)해 포커스가 있던 라디오가 사라진다. 포커스 요청은 재마운트에서 살아남는 Provider의 ref에 두고 새 TenantSelect가 한 번만 소비한다. 초기 로드·reload로 원본이 정해질 때는 요청하지 않아 포커스를 훔치지 않는다 (근거: REQ-310, REQ-308 AC-5)
+  // AI-NOTE: 원본 변경 뒤 재마운트된 원본 라디오로 포커스를 돌려주려고 만든 요청 통로다. 옛 이관 탭(TransportTab·TenantSelect, 20261110-ui-refresh에서 삭제) 전용이었고, 지금 마법사의 경로 선택 창은 창 안에서 선택을 바꿔 재마운트가 없어 부르는 곳이 없다. 컨텍스트 계약이라 남겨 둔다 (근거: REQ-310, REQ-308 AC-5)
   const sourceFocus = useRef<string | null>(null);
   const requestSourceFocus = useCallback((id: string) => { sourceFocus.current = id; }, []);
   const takeSourceFocusRequest = useCallback(() => { const id = sourceFocus.current; sourceFocus.current = null; return id; }, []);
