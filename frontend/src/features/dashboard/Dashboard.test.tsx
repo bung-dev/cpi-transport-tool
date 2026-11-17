@@ -254,6 +254,29 @@ describe('REQ-430 실패와 빈 상태', () => {
     expect(screen.queryByText('템플릿을 만들면 경로와 대기 항목이 보입니다')).toBeNull();
   });
 
+  it('테넌트가 0개이고 저장소 키가 없으면 시작 안내에 등록할 수 없는 이유를 보인다', async () => {
+    mockApi(routes({
+      'GET /tenants': () => json({ store: 'NOT_CONFIGURED', tenants: [] }),
+      'GET /tenants/status': () => json({ readOnly: true, tenants: [] }),
+    }));
+    renderAt('#/dashboard');
+    const start = await screen.findByRole('region', { name: '시작하기' });
+    expect(within(start).getByText('테넌트 저장소 키(CPI_TENANT_STORE_KEY)가 설정되지 않아 등록할 수 없습니다')).toBeInTheDocument();
+    expect(within(start).queryByText('먼저 테넌트를 등록하세요')).toBeNull();
+  });
+
+  it('테넌트 목록을 읽지 못하면 대시보드에 그 오류와 "다시 시도"를 보이고, 다시 시도하면 목록을 다시 읽는다', async () => {
+    let fail = true;
+    const fn = mockApi(routes({ 'GET /tenants': () => (fail ? json({ error: 'TENANT_STORE_UNREADABLE', message: 'x' }, 409) : json({ store: 'OK', tenants: [] })) }));
+    renderAt('#/dashboard');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('테넌트 저장 파일을 읽지 못했습니다');
+    fail = false;
+    await userEvent.click(within(alert).getByRole('button', { name: '다시 시도' }));
+    expect(await screen.findByRole('region', { name: '시작하기' })).toBeInTheDocument();
+    expect(fn.mock.calls.filter(([url]) => url === '/tenants').length).toBeGreaterThanOrEqual(2);
+  });
+
   it('테넌트가 있으면 시작 안내를 그리지 않는다', async () => {
     mockApi(routes());
     renderAt('#/dashboard');
