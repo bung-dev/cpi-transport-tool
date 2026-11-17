@@ -34,7 +34,7 @@ test('QA-REQ512-1: 미리보기는 복사 예정·빈 값이라 건너뜀, 실�
   expect(previewText).toContain('복사 예정');
   expect(previewText).toContain('빈 값이라 건너뜀');
   expect(previewText).not.toMatch(/치환|매핑되지 않은 키/);
-  expect(region.getByRole('row').filter({ hasText: 'ClientPassword' }).first()).toContainText('dummy-dev-pass-XYZ');
+  await expect(region.getByRole('row').filter({ hasText: 'ClientPassword' }).first()).toContainText('dummy-dev-pass-XYZ');
   await shot(page, 'QA-REQ512-1-preview');
 
   await realFromResult(page).click();
