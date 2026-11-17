@@ -122,12 +122,12 @@ class RealSampleStubTests {
         assertThat(properties.getProperty("SampleMessage")).isEqualTo("DEV_MESSAGE");
         var definitions = parse(entries.get("src/main/resources/parameters.propdef"));
         assertThat(definitions.getElementsByTagName("parameter").getLength()).isEqualTo(1);
-        assertThat(definitions.getElementsByTagName("key").item(0).getTextContent()).isEqualTo(external.key());
+        assertThat(definitions.getElementsByTagName("key").item(0).getTextContent()).isEqualTo("SampleMessage");
         assertThat(definitions.getElementsByTagName("type").item(0).getTextContent()).isEqualTo("xsd:string");
         var configs = json.readTree(get(RealSampleStub.ARTIFACT + "/Configurations").body()).path("d").path("results");
         assertThat(configs.size()).isEqualTo(1);
-        assertThat(configs.get(0).path("ParameterKey").asString()).isEqualTo(external.key());
-        assertThat(configs.get(0).path("ParameterValue").asString()).isEqualTo(external.devValue());
+        assertThat(configs.get(0).path("ParameterKey").asString()).isEqualTo("SampleMessage");
+        assertThat(configs.get(0).path("ParameterValue").asString()).isEqualTo("DEV_MESSAGE");
         assertThat(configs.get(0).path("DataType").asString()).isEqualTo("xsd:string");
     }
 
