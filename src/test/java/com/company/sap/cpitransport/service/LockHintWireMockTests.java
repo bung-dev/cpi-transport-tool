@@ -189,7 +189,7 @@ class LockHintWireMockTests {
         prd.verify(0, anyRequestedFor(anyUrl()).withHeader("X-HTTP-Method", matching(".*")));
         prd.verify(1, putRequestedFor(urlEqualTo(path("A"))));
         assertThat(prd.getAllServeEvents()).hasSize(5);
-        assertThat(dev.getAllServeEvents()).hasSize(2);
+        assertThat(dev.getAllServeEvents()).hasSize(3);
     }
 
     @Test
