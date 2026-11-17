@@ -28,11 +28,12 @@ class TestHostPolicyTests {
             Pattern.CASE_INSENSITIVE);
 
     @Test
-    @DisplayName("REQ-015 AC-4: test sources fixtures and examples use only localhost connection URLs")
+    @DisplayName("REQ-015 AC-4: test sources and fixtures use only localhost connection URLs")
     void req015_ac4_onlyLocalhostConnectionUrls() throws Exception {
         var violations = new ArrayList<String>();
         int checkedUrls = 0;
-        for (String root : List.of("src/test/java", "src/test/resources", "examples")) {
+        // examples/의 매핑 예시는 20261117-remove-value-mapping(REQ-520)에서 지워 폴더가 없다.
+        for (String root : List.of("src/test/java", "src/test/resources")) {
             assertThat(Files.isDirectory(Path.of(root))).as("scan root %s", root).isTrue();
             try (var paths = Files.walk(Path.of(root))) {
                 for (Path path : paths.filter(Files::isRegularFile).sorted().toList()) {
