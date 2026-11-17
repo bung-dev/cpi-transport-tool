@@ -183,17 +183,28 @@ test('QA-192: "문제 항목 N건"의 N과 스위치 동작 유지', async ({ pa
     const sw = filterSwitch(page);
     const off1 = await visibleCards();
     const swKind = await sw.count();
-    await sw.check().catch(async () => sw.click());
-    await page.waitForTimeout(200);
-    const onState = { visible: await visibleCards(), checked: await sw.isChecked().catch(() => null), failedCardsVisible: (await resultRegion(page).first().innerText()).includes('FAILED') };
-    await sw.uncheck().catch(async () => sw.click());
-    await page.waitForTimeout(200);
+    // 매핑을 걷어낸 뒤(20261117-remove-value-mapping) 정상 이관은 문제 항목이 0건이라 스위치가 비활성이다(REQ-105 AC-5). 비활성이면 누르지 않는다.
+    const swEnabled = await sw.isEnabled();
+    let onState: Record<string, any> = { enabled: false };
+    if (swEnabled) {
+      await sw.check().catch(async () => sw.click());
+      await page.waitForTimeout(200);
+      onState = { enabled: true, visible: await visibleCards(), checked: await sw.isChecked().catch(() => null), failedCardsVisible: (await resultRegion(page).first().innerText()).includes('FAILED') };
+      await sw.uncheck().catch(async () => sw.click());
+      await page.waitForTimeout(200);
+    }
     const off2 = await visibleCards();
     const perArtifact = (out.body?.results ?? []).map((r: any) => ({ id: r.artifactId, status: r.status, action: r.action, configurations: (r.configurations ?? []).length, errorCode: r.error?.code ?? null }));
     const row = { name, statuses: statuses(out.body), perArtifact, N: head0.problemN, M: head0.failArtifactsM, switchControls: swKind, cardsOff: off1, switchOn: onState, cardsOffAgain: off2 };
     rec.runs.push(row);
     await shot(page, `QA-192-${name.slice(0, 1)}`);
     expect.soft(off2, `${name}: 스위치 off 로 되돌리면 카드 수 복귀`).toBe(off1);
+    if (name === '가-정상') {
+      expect.soft(swEnabled, '가-정상: 문제 항목이 없어 스위치 비활성').toBe(false);
+      expect.soft(head0.problemN, '가-정상: 구성 값 문제 0건').toBe(0);
+    } else {
+      expect.soft(swEnabled, `${name}: FAILED 아티팩트가 있어 스위치 활성`).toBe(true);
+    }
     for (const m of maps) await delMap(request, 18082, m);
     ids.push(...maps);
   }
