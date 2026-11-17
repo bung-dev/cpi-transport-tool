@@ -20,7 +20,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PORTS = {"dev": 18081, "prd": 18082}
-MAPPING = ROOT / "examples" / "mapping-example.yml"
 STUB_DEPLOY_ARGS = ["--cpi.transport.deploy.poll-interval=1s", "--cpi.transport.deploy.timeout=6s"]
 
 
@@ -54,7 +53,6 @@ def main():
     java = os.environ.get("E2E_JAVA") or shutil.which("java") or "java"
     args = [java, "-jar", jars[0],
             f"--cpi.tenants.store-file={work / 'tenants.enc'}",
-            f"--cpi.transport.mapping-file={MAPPING}",
             f"--cpi.transport.history.file={work / f'history-{a.label}.jsonl'}",
             f"--cpi.templates.store-file={work / 'templates.json'}",
             f"--cpi.audit.file={work / 'audit.jsonl'}",
