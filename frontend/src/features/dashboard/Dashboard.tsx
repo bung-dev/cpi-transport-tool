@@ -18,10 +18,11 @@ export function Dashboard({ onForward }: { onForward: (template: TransportTempla
   const [selected, setSelected] = useState<DashboardNode | null>(null);
   const dashboard = useRemote(() => getDashboard(templateId), templateId);
   const templates = useRemote(getTemplates, 'templates');
-  const { tenants, status } = useTenants();
+  const { tenants, status, reload } = useTenants();
   const data = dashboard.state.status === 'ok' ? dashboard.state.data : null;
   const templateList = templates.state.status === 'ok' ? templates.state.data : [];
   const tenantList = tenants.state === 'success' ? tenants.data.tenants : [];
+  const store = tenants.state === 'success' ? tenants.data.store : undefined;
   const tenantName = (id: string) => tenantList.find(t => t.id === id)?.name ?? data?.nodes.find(n => n.id === id)?.name ?? id;
   const templateName = (id: string) => templateList.find(t => t.id === id)?.name ?? id;
   const landscape = data ? orderLandscape(data.nodes, data.edges) : null;
@@ -61,13 +62,17 @@ export function Dashboard({ onForward }: { onForward: (template: TransportTempla
           <span className="min-w-0"><strong className="block font-semibold">{title}</strong><span className="mt-1 block text-sm text-ink-secondary">{text}</span></span>
         </li>)}
       </ol>
-      <p className="mb-3">{REGISTER_TENANT_FIRST}</p>
+      {/* 저장소를 쓸 수 없으면 등록 버튼이 막혀 있으므로, 등록하라는 대신 이유를 보인다(문구는 테넌트 화면과 같다). */}
+      {store === 'NOT_CONFIGURED' ? <p className="mb-3">테넌트 저장소 키(CPI_TENANT_STORE_KEY)가 설정되지 않아 등록할 수 없습니다</p>
+        : store === 'UNREADABLE' ? <p className="mb-3">테넌트 저장 파일을 읽지 못했습니다. 저장소 키를 확인하세요</p>
+        : <p className="mb-3">{REGISTER_TENANT_FIRST}</p>}
       <Button onClick={() => navigate('tenants')}>테넌트 화면으로 이동</Button>
     </section>
   </div>;
 
   return <div className="grid min-w-0 gap-5">
     <PageHeader title="대시보드" description="환경 사이의 경로를 살펴보고, 다음 이관을 준비하세요." />
+    {tenants.state === 'error' && <ErrorAlert error={tenants.error} onRetry={() => { void reload(); }} />}
     {templates.state.status === 'error' && <ErrorAlert error={templates.state.error} onRetry={templates.retry} />}
     {templates.state.status === 'ok' && templateList.length === 0 && <div className="rounded-xl border border-hairline bg-canvas p-6">
       <p className="mb-3">템플릿을 만들면 경로와 대기 항목이 보입니다</p>
