@@ -19,7 +19,7 @@ const entry = (id: string, over: Partial<TransportResponse> = {}): TransportResp
   startedAt: '2026-11-16T01:00:00Z',
   finishedAt: '2026-11-16T01:00:02Z',
   summary: { total: 1, succeeded: 1, failed: 0 },
-  results: [{ artifactId: 'IF_H', status: 'SUCCESS', action: 'NONE', deployStatus: 'SKIPPED_DRY_RUN', error: null, replacements: [], unmappedKeys: [] }],
+  results: [{ artifactId: 'IF_H', status: 'SUCCESS', action: 'NONE', deployStatus: 'SKIPPED_DRY_RUN', error: null, configurations: [] }],
   ...over,
 });
 

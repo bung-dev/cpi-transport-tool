@@ -18,7 +18,7 @@ const TRANSPORT_ID = '3f2b9c1e-7a4d-4e8b-9c2f-1a6d5e7b8c90';
 
 function failed(artifactId: string): ArtifactResult {
   return {
-    artifactId, status: 'FAILED', action: 'UPDATED', deployStatus: 'ERROR', replacements: [], unmappedKeys: [],
+    artifactId, status: 'FAILED', action: 'UPDATED', deployStatus: 'ERROR', configurations: [],
     error: { code: 'DEPLOY_FAILED', message: 'DEPLOY: CPI deployment ERROR', detail: null, detailHttpStatus: 200 },
   };
 }
