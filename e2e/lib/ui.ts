@@ -7,8 +7,9 @@ import { APP, ART } from './qa';
 
 export const OLD_TERM = '드라이런';
 export const NEW_TERM = '미리보기';
-export const CLOSING_SENTENCE = '미리보기로 변경 내용을 먼저 확인할 수 있습니다.';
-export const descOf = (target: string) => `${target}에 요청을 보내지 않고 변경 내용만 확인합니다`;
+// S3b(REQ-420): 실행 모드 라디오와 그 설명 문장은 없어졌다. 새 이관 부제가 "<원본> → <대상> · <안내>"로 실제 경로와 미리보기 안내를 보인다.
+export const SUBTITLE_TAIL = '미리보기로 변경 내용을 먼저 확인한 뒤 실제 이관합니다.';
+export const subtitleOf = (route: string) => `${route} · ${SUBTITLE_TAIL}`;
 
 // ---------------------------------------------------------------- H-2: 요청·오류 기록
 export interface Watch {
@@ -112,7 +113,10 @@ export async function active(page: Page): Promise<ActiveInfo> {
     };
   });
 }
-export const grp = (page: Page, side: '원본' | '대상'): Locator => page.getByRole('radiogroup', { name: `${side} 테넌트`, exact: true });
+// S3b(REQ-420): 테넌트 라디오는 이관 화면이 아니라 "경로 변경"으로 여는 창 안의 라디오 그룹 '원본'·'대상'에 있다.
+export const ROUTE_DIALOG = '원본과 대상 선택';
+export const routeDialog = (page: Page): Locator => page.getByRole('dialog', { name: ROUTE_DIALOG, exact: true });
+export const grp = (page: Page, side: '원본' | '대상'): Locator => routeDialog(page).getByRole('radiogroup', { name: side, exact: true });
 
 /** 그룹 안 라디오들의 {이름, checked} */
 export async function radiosOf(page: Page, side: '원본' | '대상'): Promise<Array<{ name: string; checked: boolean }>> {
@@ -134,7 +138,7 @@ export const selectedOf = async (page: Page, side: '원본' | '대상'): Promise
   (await radiosOf(page, side)).filter((r) => r.checked).map((r) => r.name);
 
 export const isTenantRadio = (side: '원본' | '대상', name?: string, checked = true) => (i: ActiveInfo) =>
-  i.tag === 'INPUT' && i.type === 'radio' && i.group === `${side} 테넌트` && (name === undefined || i.name === name) && (!checked || i.checked === true);
+  i.tag === 'INPUT' && i.type === 'radio' && i.group === side && (name === undefined || i.name === name) && (!checked || i.checked === true);
 
 /** H-1: 방향키(기본 Tab)를 최대 max회 누르며 매번 포커스 요소가 목표인지 검사한다. 누른 횟수를 돌려준다. 닿지 못하면 예외. */
 export async function keysTo(
@@ -178,64 +182,124 @@ export function expectFocus(step: ArrowStep, side: '원본' | '대상', name: st
 }
 
 // ---------------------------------------------------------------- 화면 구역
-export const tabBtn = (page: Page, name: '이관' | '이력' | '테넌트') => page.getByRole('tab', { name, exact: true });
-export async function openTab(page: Page, name: '이관' | '이력' | '테넌트'): Promise<void> {
+// S2(REQ-410): 탭 대신 주 메뉴 링크. 옛 이름(이관·이력·테넌트)을 새 메뉴 이름으로 바꿔 부른다.
+export type OldTab = '이관' | '이력' | '테넌트';
+export const NAV_OF: Record<OldTab, string> = { 이관: '새 이관', 이력: '이관 이력', 테넌트: '테넌트' };
+export const navLink = (page: Page, name: string) => page.getByRole('navigation', { name: '주 메뉴' }).getByRole('link', { name, exact: true });
+export const tabBtn = (page: Page, name: OldTab) => navLink(page, NAV_OF[name]);
+export async function openTab(page: Page, name: OldTab): Promise<void> {
   await tabBtn(page, name).click();
-  await expect(tabBtn(page, name)).toHaveAttribute('aria-selected', 'true');
+  await expect(tabBtn(page, name)).toHaveAttribute('aria-current', 'page');
 }
+/** 해시만 다른 주소로 goto하면 브라우저가 새로 읽지 않는다(해시 이동). 예전 goto('/')처럼 항상 새로 읽게 빈 페이지를 거친다. */
+export async function gotoFresh(page: Page, url: string, opts?: Parameters<Page['goto']>[1]) {
+  await page.goto('about:blank');
+  return page.goto(url, opts);
+}
+export const STEP_LABELS = ['템플릿', '패키지', '아티팩트', '미리보기', '실제 이관'] as const;
+export type StepLabel = (typeof STEP_LABELS)[number];
+export const stepNav = (page: Page) => page.getByRole('navigation', { name: '이관 단계', exact: true });
+/** 단계 줄 버튼. 이름은 "<n>. <단계>" 뒤에 요약이 붙는다. */
+export const stepBtn = (page: Page, label: StepLabel) => stepNav(page).getByRole('button', { name: new RegExp(`^\\d\\. ${label}`) });
+/** 새 이관 화면을 새로 읽는다(템플릿 단계). */
+export async function openWizard(page: Page): Promise<void> {
+  await gotoFresh(page, '/#/transport');
+  await expect(page.getByRole('heading', { level: 2, name: '새 이관', exact: true })).toBeVisible();
+}
+/** 템플릿 단계에서 "템플릿 없이 진행"을 눌러 패키지 단계로 간다. */
+export async function startManual(page: Page): Promise<void> {
+  await page.getByRole('button', { name: '템플릿 없이 진행', exact: true }).click();
+  await expect(stepBtn(page, '패키지')).toHaveAttribute('aria-current', 'step');
+}
+/** 새 이관을 새로 열고 템플릿 없이 패키지 단계까지(패키지 목록이 보일 때까지) 간다. */
 export async function openTransport(page: Page): Promise<void> {
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
-  await expect(page.getByRole('list', { name: '패키지 목록' }).getByRole('radio').first()).toBeVisible();
+  await openWizard(page);
+  await startManual(page);
+  await expect(pkgRadios(page).first()).toBeVisible();
+}
+/** 버튼이 없거나(원본 없음·목록 읽기 오류로 패키지 목록을 그리지 않음) 비활성이면 진행할 수 없다. */
+export const blocked = async (loc: Locator): Promise<boolean> => (await loc.count()) === 0 || (await loc.isDisabled());
+export const routeBar = (page: Page) => page.getByRole('group', { name: '이관 경로', exact: true });
+export async function openRouteDialog(page: Page): Promise<void> {
+  await routeBar(page).getByRole('button', { name: '경로 변경', exact: true }).click();
+  await expect(routeDialog(page)).toBeVisible();
+}
+export const applyRouteBtn = (page: Page) => routeDialog(page).getByRole('button', { name: '이 경로 사용', exact: true });
+export async function applyRoute(page: Page): Promise<void> {
+  await applyRouteBtn(page).click();
+  await expect(routeDialog(page)).toHaveCount(0);
+}
+/** 경로 변경 창에서 원본·대상을 골라 적용한다. */
+export async function setRoute(page: Page, source: string, target: string): Promise<void> {
+  await openRouteDialog(page);
+  await grp(page, '원본').getByRole('radio', { name: source, exact: true }).check();
+  await grp(page, '대상').getByRole('radio', { name: target, exact: true }).check();
+  await applyRoute(page);
 }
 export const pkgRadios = (page: Page) => page.getByRole('list', { name: '패키지 목록' }).getByRole('radio');
 /** 체크된 입력(라디오·체크박스)의 label 텍스트 */
 export const checkedLabels = (loc: Locator): Promise<string[]> =>
   loc.evaluateAll((es) => es.filter((e: any) => e.checked).map((e: any) => (e.labels?.[0]?.textContent || '').trim()));
-export async function choosePackage(page: Page, id: string): Promise<void> {
+/** 패키지 단계에서 패키지만 고른다(단계는 그대로). */
+export async function pickPackage(page: Page, id: string): Promise<void> {
   await page.getByRole('list', { name: '패키지 목록' }).getByRole('radio', { name: new RegExp(id) }).first().check();
-  await expect(page.getByRole('list', { name: '아티팩트 목록' })).toBeVisible();
+}
+/** 패키지를 고르고 "다음"으로 아티팩트 단계(표)까지 간다. */
+export async function choosePackage(page: Page, id: string): Promise<void> {
+  await pickPackage(page, id);
+  await page.getByRole('button', { name: '다음', exact: true }).click();
+  await expect(artifactGrid(page)).toBeVisible();
 }
 export async function packageIds(page: Page): Promise<string[]> {
   const names = await pkgRadios(page).evaluateAll((es) => es.map((e: any) => (e.labels?.[0]?.textContent || '').trim()));
   return names.map((n) => (n.match(/(Pkg[A-Za-z]+)/) || [, n])[1] as string);
 }
-export const modeGroup = (page: Page) => page.getByRole('radiogroup', { name: '실행 모드', exact: true });
-export interface ModeInfo {
-  items: Array<{ title: string; desc: string; checked: boolean }>;
-  previewBtn: number;
+// S3b(REQ-422): 아티팩트는 체크박스 목록이 아니라 한 열 grid다. 행의 ID 글자로 찾는다.
+export const artifactGrid = (page: Page) => page.getByRole('grid', { name: '이관할 아티팩트', exact: true });
+export const artifactRow = (page: Page, id: string) => artifactGrid(page).getByRole('row').filter({ has: page.getByText(id, { exact: true }) });
+export async function selectArtifacts(page: Page, ids: string[]): Promise<void> {
+  for (const id of ids) {
+    await artifactRow(page, id).click();
+    await expect(artifactRow(page, id)).toHaveAttribute('aria-selected', 'true');
+  }
+}
+/** 선택된 행의 아티팩트 ID(표 순서) */
+export const selectedArtifacts = (page: Page): Promise<string[]> =>
+  artifactGrid(page).getByRole('row').evaluateAll((rs) => rs.filter((r) => r.getAttribute('aria-selected') === 'true').map((r) => (r.querySelector('.font-mono')?.textContent || '').trim()));
+export interface RunInfo {
+  steps: string[];
+  current: string | null;
   buttons: string[];
   deployControls: string[];
 }
-/** 실행 방식 영역: 항목 제목·설명 문장·기본 선택, 실행 버튼 이름, 배포 컨트롤 */
-export async function modeInfo(page: Page): Promise<ModeInfo> {
-  const items = await modeGroup(page).evaluate((g) => {
-    const t = (id: string | null) => (id ? document.getElementById(id)?.textContent || '' : '');
-    return [...g.querySelectorAll('input[type=radio]')].map((r: any) => ({
-      title: t(r.getAttribute('aria-labelledby')),
-      desc: t((r.getAttribute('aria-describedby') || '').split(/\s+/)[0] || null),
-      checked: !!r.checked,
-    }));
-  });
-  const buttons = (await page.locator('main').getByRole('button').allInnerTexts()).map((s) => s.trim()).filter((s) => /미리보기 실행|로 이관$/.test(s));
+/** 실행 영역: 단계 줄 이름, 현재 단계, 미리보기·실제 이관 버튼 이름, 화면 전체(확인창 포함)의 배포 컨트롤 */
+export async function runInfo(page: Page): Promise<RunInfo> {
+  const stepTexts = (await stepNav(page).getByRole('button').evaluateAll((bs) => bs.map((b) => `${(b.firstElementChild?.textContent || '').trim()}|${b.getAttribute('aria-current') || ''}`)));
+  const steps = stepTexts.map((t) => t.split('|')[0].replace(/^\d+\.\s*/, ''));
+  const cur = stepTexts.find((t) => t.endsWith('|step'));
+  const all = [...(await page.locator('main').getByRole('button').allInnerTexts()), ...(await page.getByRole('dialog').getByRole('button').allInnerTexts())];
+  // 단계 줄 버튼("<n>. <단계>")은 실행 버튼이 아니므로 뺀다.
+  const buttons = all.map((s) => s.trim()).filter((s) => !/^\d+\./.test(s) && /미리보기|로 이관$|실제 이관$/.test(s));
   const dep: string[] = [];
   for (const role of ['switch', 'checkbox'] as const) {
-    const els = page.locator('main').getByRole(role);
+    const els = page.getByRole(role);
     const n = await els.count();
     for (let i = 0; i < n; i++) {
-      const nm = await els.nth(i).evaluate((e: any) => e.getAttribute('aria-label') || (e.labels?.[0]?.textContent || '') || e.getAttribute('aria-labelledby') || '');
-      const accessible = await els.nth(i).evaluate((e: any) => {
+      const nm = await els.nth(i).evaluate((e: any) => {
         const ids = (e.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean);
         return ids.map((x: string) => document.getElementById(x)?.textContent || '').join(' ') || e.getAttribute('aria-label') || (e.labels?.[0]?.textContent || '');
       });
-      if (/배포/.test(nm + ' ' + accessible)) dep.push(`${role}:${(accessible || nm).trim()}`);
+      if (/배포/.test(nm)) dep.push(`${role}:${nm.trim()}`);
     }
   }
-  return { items, previewBtn: await page.getByRole('button', { name: '미리보기 실행', exact: true }).count(), buttons, deployControls: dep };
+  return { steps, current: cur ? cur.split('|')[0].replace(/^\d+\.\s*/, '') : null, buttons, deployControls: dep };
 }
 export const previewBtn = (page: Page) => page.getByRole('button', { name: '미리보기 실행', exact: true });
+/** 실제 이관 단계의 실행 버튼 "<대상>로 이관" */
 export const realBtn = (page: Page, target: string) => page.getByRole('button', { name: `${target}로 이관`, exact: true });
-export const modeRadio = (page: Page, title: '미리보기' | '실제 이관') => modeGroup(page).getByRole('radio', { name: title, exact: true });
+/** 미리보기 결과 머리의 "이 구성으로 실제 이관" */
+export const realFromResult = (page: Page) => page.getByRole('button', { name: '이 구성으로 실제 이관', exact: true });
+export const confirmDialog = (page: Page) => page.getByRole('dialog', { name: '실제 이관 확인', exact: true });
 export const resultRegion = (page: Page) => page.getByRole('region', { name: '이관 결과' });
 /** 결과 화면 머리의 모드 배지 (제목 바로 뒤의 칩) */
 export async function resultBadge(page: Page): Promise<string> {
@@ -268,12 +332,30 @@ export async function runPreview(page: Page) {
   await expect(resultRegion(page).first()).toBeVisible();
   return out;
 }
-export async function confirmDialogRun(page: Page) {
-  const d = page.getByRole('dialog');
+/** 열린 실제 이관 확인창에서 (deploy면 배포 스위치를 켜고) "실행"을 누른다. 배포 스위치는 꺼짐으로 시작한다(ADR-008). */
+export async function confirmDialogRun(page: Page, opts: { deploy?: boolean } = {}) {
+  const d = confirmDialog(page);
   await expect(d).toBeVisible();
+  const sw = d.getByRole('switch', { name: '배포', exact: true });
+  await expect(sw, '확인창의 배포 스위치는 꺼짐으로 시작').not.toBeChecked();
+  if (opts.deploy) await sw.check();
   return waitTransport(page, async () => {
     await d.getByRole('button', { name: '실행', exact: true }).click();
   });
+}
+/**
+ * 화면에서 실제 이관 1회. 패키지 단계에서 시작해 패키지 → 아티팩트(artifacts: 'all'이면 "전체 선택", 빈 배열이면 고르지 않음)
+ * → 미리보기 → 결과의 "이 구성으로 실제 이관" → 확인창 "실행". S3b부터 실제 이관은 미리보기를 먼저 해야 한다(REQ-423).
+ */
+export async function realFlow(page: Page, opts: { pkg?: string; artifacts?: string[] | 'all'; deploy?: boolean } = {}) {
+  await choosePackage(page, opts.pkg ?? 'PkgTransportDemo');
+  if (opts.artifacts === 'all') await page.getByRole('button', { name: '전체 선택', exact: true }).click();
+  else if (opts.artifacts) await selectArtifacts(page, opts.artifacts);
+  const preview = await runPreview(page);
+  await realFromResult(page).click();
+  const real = await confirmDialogRun(page, { deploy: opts.deploy });
+  await expect(resultRegion(page).first()).toBeVisible();
+  return { preview, real };
 }
 export async function bodyText(page: Page): Promise<string> {
   return page.locator('body').innerText();
@@ -282,7 +364,8 @@ export async function bodyText(page: Page): Promise<string> {
 // ---------------------------------------------------------------- 서비스 키 붙여넣기 등록(테넌트 탭)
 export async function registerViaUi(page: Page, name: string, keyJson: unknown): Promise<void> {
   await openTab(page, '테넌트');
-  const g = page.getByRole('group', { name: '테넌트 등록' });
+  await page.getByRole('button', { name: '테넌트 등록', exact: true }).click();
+  const g = page.getByRole('dialog', { name: '테넌트 등록' });
   await g.getByRole('textbox', { name: '이름' }).fill(name);
   await g.getByRole('textbox', { name: '서비스 키 붙여넣기' }).fill(JSON.stringify(keyJson));
   const resp = page.waitForResponse((r) => r.url() === `${APP}/tenants` && r.request().method() === 'POST');
@@ -447,10 +530,21 @@ export async function historyTable(page: Page): Promise<{ headers: string[]; row
 
 // ---------------------------------------------------------------- 키보드만의 이관 준비 (QA-146·213 공용)
 const pickInfo = (i: ActiveInfo) => ({ tag: i.tag, role: i.role, name: i.name, group: i.group, checked: i.checked });
-/** Tab·Shift+Tab·방향키만으로 원본 DEV·대상 targetName·패키지 PkgTransportDemo 를 고르고 "미리보기 실행" 버튼에 닿는다. click/focus/check 없음. */
+/**
+ * Tab·Shift+Tab·방향키·Enter만으로 "템플릿 없이 진행" → 경로 변경 창에서 원본 DEV·대상 targetName → 패키지 PkgTransportDemo → "다음"
+ * → 아티팩트 단계의 "미리보기 실행" 버튼에 닿는다. click/focus/check 없음.
+ */
 export async function kbdFlow(page: Page, w: Watch, targetName = 'PRD'): Promise<Record<string, any>> {
   const steps: Record<string, any> = {};
-  await openTransport(page);
+  const isBtn = (text: string) => (i: ActiveInfo) => i.tag === 'BUTTON' && i.text === text;
+  await openWizard(page);
+  steps.manualTab = (await keysTo(page, isBtn('템플릿 없이 진행'), '"템플릿 없이 진행" 버튼')).presses;
+  await page.keyboard.press('Enter');
+  await expect(stepBtn(page, '패키지')).toHaveAttribute('aria-current', 'step');
+  await expect(pkgRadios(page).first()).toBeVisible();
+  steps.routeTab = (await keysTo(page, isBtn('경로 변경'), '"경로 변경" 버튼')).presses;
+  await page.keyboard.press('Enter');
+  await expect(routeDialog(page)).toBeVisible();
   const n1 = await keysTo(page, isTenantRadio('원본', 'DEV'), '원본 그룹 DEV');
   steps.sourceTab = n1.presses;
   const a = await arrow(page, w, 'ArrowDown');
@@ -464,6 +558,8 @@ export async function kbdFlow(page: Page, w: Watch, targetName = 'PRD'): Promise
   if (targetName === 'PRD') {
     const c = await arrow(page, w, 'ArrowUp');
     expectFocus(c, '대상', 'DEV', '대상 ArrowUp');
+    steps.sameNoticeAfterTargetUp = await routeDialog(page).getByRole('alert').filter({ hasText: '원본과 대상이 같습니다' }).count();
+    steps.applyDisabledWhenSame = await applyRouteBtn(page).isDisabled();
     const d = await arrow(page, w, 'ArrowDown');
     expectFocus(d, '대상', 'PRD', '대상 ArrowDown');
     steps.target = [c, d].map((s) => ({ key: s.key, t1: pickInfo(s.t1), t2: pickInfo(s.t2), target: s.targetSelected }));
@@ -474,25 +570,38 @@ export async function kbdFlow(page: Page, w: Watch, targetName = 'PRD'): Promise
     expect(c.sourceSelected, '원본 DEV 유지').toEqual(['DEV']);
     steps.target = [{ key: c.key, t1: pickInfo(c.t1), t2: pickInfo(c.t2), target: c.targetSelected }];
   }
-  const n3 = await keysTo(page, (i) => i.tag === 'INPUT' && i.type === 'radio' && i.group === '패키지 목록', '패키지 목록 라디오', 'Shift+Tab');
-  steps.packageShiftTab = n3.presses;
+  steps.applyTab = (await keysTo(page, isBtn('이 경로 사용'), '"이 경로 사용" 버튼')).presses;
+  await page.keyboard.press('Enter');
+  await expect(routeDialog(page)).toHaveCount(0);
+  await expect(routeBar(page)).toContainText(`DEV → ${targetName}`);
+  await expect(pkgRadios(page).first()).toBeVisible();
+  const n3 = await keysTo(page, (i) => i.tag === 'INPUT' && i.type === 'radio' && i.group === '패키지 목록', '패키지 목록 라디오', 'Tab', 60);
+  steps.packageTab = n3.presses;
+  steps.packageEntry = pickInfo(n3.info);
+  const seen: any[] = [];
   for (let i = 0; i < 5; i++) {
     const cur = await active(page);
     if (/PkgTransportDemo/.test(cur.name) && cur.checked) break;
     await page.keyboard.press('ArrowUp');
     await page.waitForTimeout(250);
+    seen.push(pickInfo(await active(page)));
   }
   await page.keyboard.press('ArrowDown');
   await page.waitForTimeout(300);
+  const down = pickInfo(await active(page));
   await page.keyboard.press('ArrowUp');
-  await expect(page.getByRole('list', { name: '아티팩트 목록' })).toBeVisible();
   await page.waitForTimeout(300);
   const fin = await active(page);
+  steps.packageKeys = { upward: seen, afterArrowDown: down, afterArrowUp: pickInfo(fin) };
   expect(fin.name, '키보드로 선택한 패키지').toMatch(/PkgTransportDemo/);
   expect(fin.checked).toBe(true);
   steps.selectedPackage = await checkedLabels(pkgRadios(page));
-  steps.checkedArtifacts = await checkedLabels(page.getByRole('list', { name: '아티팩트 목록' }).getByRole('checkbox'));
-  const n4 = await keysTo(page, (i) => i.tag === 'BUTTON' && i.text === '미리보기 실행', '"미리보기 실행" 버튼', 'Tab');
+  steps.nextTab = (await keysTo(page, isBtn('다음'), '"다음" 버튼')).presses;
+  await page.keyboard.press('Enter');
+  await expect(artifactGrid(page)).toBeVisible();
+  // 아티팩트는 건드리지 않는다(0개 = 패키지 전체)
+  steps.checkedArtifacts = await selectedArtifacts(page);
+  const n4 = await keysTo(page, isBtn('미리보기 실행'), '"미리보기 실행" 버튼', 'Tab', 60);
   steps.buttonTab = n4.presses;
   steps.buttonDisabled = n4.info.disabled;
   return steps;

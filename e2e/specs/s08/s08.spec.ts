@@ -6,10 +6,10 @@ import {
   confirmDialogRun,
   foreignHosts,
   historyTable,
+  confirmDialog,
   kbdFlow,
-  modeRadio,
   openTab,
-  realBtn,
+  realFromResult,
   registerViaUi,
   resultBadge,
   resultRegion,
@@ -34,7 +34,9 @@ test('QA-213: 대표 사용자 흐름 1~7단계 (최종 코드)', async ({ page,
     // 1. 테넌트 탭에서 붙여넣기로 등록 (성공 시 입력 비움)
     await page.goto('/');
     await registerViaUi(page, NAME, key(18082, '127.0.0.1'));
-    const g = page.getByRole('group', { name: '테넌트 등록' });
+    // S2(REQ-412): 성공하면 서랍이 닫힌다. 다시 열어 입력이 비었는지 보고 닫는다.
+    await page.getByRole('button', { name: '테넌트 등록', exact: true }).click();
+    const g = page.getByRole('dialog', { name: '테넌트 등록' });
     rec.step1 = {
       nameAfter: await g.getByRole('textbox', { name: '이름' }).inputValue(),
       keyAfterLen: (await g.getByRole('textbox', { name: '서비스 키 붙여넣기' }).inputValue()).length,
@@ -44,8 +46,10 @@ test('QA-213: 대표 사용자 흐름 1~7단계 (최종 코드)', async ({ page,
     expect(rec.step1.nameAfter, '성공하면 이름 입력 비움').toBe('');
     expect(rec.step1.keyAfterLen, '성공하면 서비스 키 입력 비움').toBe(0);
     expect(rec.step1.tenantsAfter).toContain(NAME);
+    await page.keyboard.press('Escape');
+    await expect(g).toBeHidden();
 
-    // 2~3. 이관 탭으로 가서 키보드만으로 원본 DEV·대상 QA-FLOW-TGT·패키지 선택 (포커스 판정은 kbdFlow 안에서)
+    // 2~3. 새 이관에서 키보드만으로 "템플릿 없이 진행" → 경로 변경 창의 원본 DEV·대상 QA-FLOW-TGT → 패키지 → "다음" (포커스 판정은 kbdFlow 안에서)
     const steps = await kbdFlow(page, w, NAME);
     rec.step3_keyboard = steps;
     await shot(page, 'QA-213-3-keyboard-selected');
@@ -75,10 +79,9 @@ test('QA-213: 대표 사용자 흐름 1~7단계 (최종 코드)', async ({ page,
     expect(rec.step4.badge).toBe('미리보기');
     expect(w1 - w0, '미리보기는 대상 스텁에 쓰기 요청 0건').toBe(0);
 
-    // 5. 실제 이관 (마우스 사용 가능): 모드 선택 → 실행 → 확인 대화상자(대상 이름 표시) → 승인
-    await modeRadio(page, '실제 이관').check();
-    await realBtn(page, NAME).click();
-    const dlg = page.getByRole('dialog');
+    // 5. 실제 이관 (마우스 사용 가능): 결과의 "이 구성으로 실제 이관" → 확인 대화상자(대상 이름 표시) → 승인
+    await realFromResult(page).click();
+    const dlg = confirmDialog(page);
     await expect(dlg).toBeVisible();
     rec.step5_dialog = { name: await dlg.getAttribute('aria-labelledby'), text: (await dlg.innerText()).replace(/\s+/g, ' ') };
     await shot(page, 'QA-213-5-confirm-dialog');

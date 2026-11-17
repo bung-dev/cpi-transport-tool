@@ -2,7 +2,7 @@
 // 앱: --profile stub --read-only false. 이력 응답은 page.route 로 대체한다(QA-199 만 실제 백엔드 이력).
 import { expect, test, type Page } from '@playwright/test';
 import { after, app, historyOf, key, R, registerTenant, shot } from '../../lib/qa';
-import { confirmDialogRun, foreignHosts, grp, historyTable, modeRadio, openTab, realBtn, resultRegion, watch } from '../../lib/ui';
+import { foreignHosts, historyTable, openTab, realFlow, resultRegion, setRoute, startManual, watch, registerViaUi } from '../../lib/ui';
 import { fakeUuid, measureHistory, openHistory, plainRow, rMax, replaceHistory, SET_A, SET_B, SET_C, UUID_MAX, type StrSet } from '../../lib/r2';
 
 test.use({ actionTimeout: 20000 });
@@ -22,7 +22,7 @@ const finish = (rec: any, w: ReturnType<typeof watch>) => {
 const judge1280 = (m: any, label: string) => {
   expect.soft(m.m1_scrollMinusClient, `${label}: ① scrollWidth - clientWidth = 0 (wrapper ${m.wrapper.tag}.${m.wrapper.cls} ${m.wrapper.scrollWidth}/${m.wrapper.clientWidth})`).toBe(0);
   expect.soft(m.m2_ok, `${label}: ② 마지막 열 셀 오른쪽 ${m.m2_lastCellRight} <= 카드 안쪽 오른쪽 ${m.card.innerRight}`).toBe(true);
-  expect.soft(m.m3_allInside, `${label}: ③ 8개 열 머리가 래퍼 안 (${m.m3_headerCount}개, ${JSON.stringify(m.m3_headers.filter((h: any) => !h.inside))})`).toBe(true);
+  expect.soft(m.m3_allInside, `${label}: ③ 모든 열 머리가 래퍼 안 (${m.m3_headerCount}개, ${JSON.stringify(m.m3_headers.filter((h: any) => !h.inside))})`).toBe(true);
 };
 const asHeaderMap = (ht: { headers: string[]; rows: string[][] }, ri: number) => Object.fromEntries(ht.headers.map((h, i) => [h, ht.rows[ri]?.[i]]));
 
@@ -39,7 +39,7 @@ test('QA-195: spec 판정 데이터(세트 A) 1280px - 모든 열이 표 래퍼 
   rec.row = asHeaderMap(ht, 0);
   await shot(page, 'QA-195-1280');
   judge1280(m, 'QA-195');
-  expect(ht.headers, '8개 열').toEqual(['시작 시각', '패키지', '원본', '대상', '모드', '배포', '결과', '이관 ID']);
+  expect(ht.headers, '9개 열(S3 REQ-425 템플릿 열)').toEqual(['시작 시각', '템플릿', '원본', '대상', '패키지', '모드', '배포', '결과', '이관 ID']);
   const r = rec.row as Record<string, string>;
   expect(r['모드']).toBe('실제 이관');
   expect(r['배포'], '배포 열 "배포" 배지').toContain('배포');
@@ -81,7 +81,7 @@ test('QA-197: 줄여 보인 값의 전체 확인과 이관 ID 확인', async ({ 
         const wrap = els.some((e) => getComputedStyle(e).whiteSpace.startsWith('normal')) && !truncated.length;
         return { text: (td.textContent || '').trim(), textHasFull: textFull, truncatedElements: truncated, titlesAndLabels: labels, someLabelEqualsFull: labels.includes(full), ellipsis: els.some((e) => getComputedStyle(e).textOverflow === 'ellipsis'), wraps: wrap };
       };
-      return { pkg: info(tds[1], pkg), src: info(tds[2], src), tgt: info(tds[3], tgt), id: info(tds[7], id) };
+      return { pkg: info(tds[4], pkg), src: info(tds[2], src), tgt: info(tds[3], tgt), id: info(tds[8], id) };
     },
     { pkg: SET_A.pkg, src: SET_A.src, tgt: SET_A.tgt, id: UUID_MAX },
   );
@@ -166,27 +166,17 @@ test('QA-199: 실제 백엔드 이력의 40자 테넌트 이름', async ({ page,
   await page.goto('/');
   // 화면 테넌트 탭에서 등록
   for (const [name, k] of [[SRC, key(18081, '127.0.0.1')], [TGT, key(18082, 'localhost')]] as Array<[string, any]>) {
-    await openTab(page, '테넌트');
-    const g = page.getByRole('group', { name: '테넌트 등록' });
-    await g.getByRole('textbox', { name: '이름' }).fill(name);
-    await g.getByRole('textbox', { name: '서비스 키 붙여넣기' }).fill(JSON.stringify(k));
-    const resp = page.waitForResponse((r) => r.url() === 'http://localhost:8080/tenants' && r.request().method() === 'POST');
-    await g.getByRole('button', { name: '등록', exact: true }).click();
-    expect((await resp).status(), `${name.slice(0, 10)} 등록`).toBe(201);
+    await registerViaUi(page, name, k);
   }
   const tl = (await app(request, 'GET', '/tenants')).json.tenants.map((t: any) => t.name);
   rec.tenantNames = tl;
   try {
     await openTab(page, '이관');
+    await startManual(page);
+    await setRoute(page, SRC, TGT);
     await expect(page.getByRole('list', { name: '패키지 목록' }).getByRole('radio').first()).toBeVisible();
-    await grp(page, '원본').getByRole('radio', { name: SRC, exact: true }).check();
-    await grp(page, '대상').getByRole('radio', { name: TGT, exact: true }).check();
-    await page.waitForTimeout(800);
-    await page.getByRole('list', { name: '패키지 목록' }).getByRole('radio', { name: /PkgTransportDemo/ }).first().check();
-    await expect(page.getByRole('list', { name: '아티팩트 목록' })).toBeVisible();
-    await modeRadio(page, '실제 이관').check();
-    await realBtn(page, TGT).click();
-    const out = await confirmDialogRun(page);
+    // S3b(REQ-423): 미리보기 → "이 구성으로 실제 이관" → 확인창
+    const { real: out } = await realFlow(page);
     rec.run = { http: out.status, summary: out.body?.summary, transportId: out.body?.transportId, request: out.postData };
     expect(out.status).toBe(200);
     await openTab(page, '이력');
@@ -208,7 +198,8 @@ test('QA-199: 실제 백엔드 이력의 40자 테넌트 이름', async ({ page,
     const hist = await historyOf(request);
     const apiRow = hist.find((h: any) => h.transportId === out.body.transportId);
     rec.api = { count: hist.length, srcLen: apiRow?.sourceTenant?.name?.length, tgtLen: apiRow?.targetTenant?.name?.length };
-    expect(hist.length, '이력 n0+1').toBe(n0 + 1);
+    // S3b(REQ-423): 화면의 실제 이관은 미리보기를 먼저 하므로 미리보기 1건 + 실제 이관 1건
+    expect(hist.length, '이력 n0+2(미리보기·실제 이관)').toBe(n0 + 2);
     expect(rec.api.srcLen).toBe(40);
     expect(rec.api.tgtLen).toBe(40);
   } finally {
@@ -307,7 +298,7 @@ test('QA-201: 크기 전환과 새로고침 반복', async ({ page }) => {
   rec.reloads = [];
   for (let i = 1; i <= 3; i++) {
     await page.reload();
-    await page.getByRole('tab', { name: '이력', exact: true }).click();
+    await openTab(page, '이력');
     await expect(page.locator('table tbody tr').first()).toBeVisible();
     const early = await measureHistory(page, 0);
     await page.waitForTimeout(600);

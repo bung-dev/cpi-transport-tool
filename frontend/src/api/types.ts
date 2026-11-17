@@ -57,6 +57,8 @@ export interface TransportSummary {
 export interface TransportResponse {
   sourceTenant?: TenantRef;
   targetTenant?: TenantRef;
+  /** 템플릿으로 실행한 경우 실행 당시의 템플릿 id·이름. 템플릿 없이 실행했으면 필드가 없다(REQ-424·425). */
+  template?: { id: string; name: string };
   transportId: string;
   packageId: string;
   dryRun: boolean;
@@ -74,6 +76,8 @@ export interface TransportRequest {
   artifactIds?: string[];
   dryRun?: boolean;
   deploy?: boolean;
+  /** 템플릿으로 시작했고 경로를 바꾸지 않았을 때만 보낸다(REQ-423). */
+  templateId?: string;
 }
 
 export type TenantSource = 'env' | 'registered';
@@ -84,3 +88,33 @@ export type TenantCheck = 'OK' | 'TOKEN_FAILED' | 'API_FORBIDDEN' | 'UNREACHABLE
 export interface TenantStatusItem { id: string; name: string; source: TenantSource; apiHost: string; check: TenantCheck }
 export interface TenantStatusResponse { readOnly: boolean; tenants: TenantStatusItem[] }
 export interface TenantRef { id: string; name: string }
+
+export interface TemplateInput { name: string; sourceTenantId: string; targetTenantId: string; packageId?: string | null }
+export interface TransportTemplate extends TemplateInput {
+  id: string; createdAt: string; updatedAt: string; usable: boolean;
+  unusableReason?: 'SOURCE_TENANT_MISSING' | 'TARGET_TENANT_MISSING';
+}
+export type AuditCategory = 'tenant' | 'template' | 'transport';
+export interface AuditEntry {
+  id: string; time: string; category: AuditCategory;
+  action: 'created' | 'updated' | 'deleted' | 'preview' | 'transport';
+  objectId: string; objectName: string; detail: string;
+}
+
+export interface DashboardNode { id: string; name: string; origin: TenantSource }
+export interface DashboardEdge { sourceTenantId: string; targetTenantId: string; templateIds: string[] }
+export interface DashboardQueueItem {
+  packageId: string;
+  atTenantId: string;
+  nextTemplateId: string;
+  nextTargetTenantId: string;
+  arrivedTransportId: string;
+  arrivedAt: string;
+  artifactCount: number;
+}
+export interface DashboardResponse {
+  nodes: DashboardNode[];
+  edges: DashboardEdge[];
+  queue: DashboardQueueItem[];
+  today: { previews: number; transports: number; succeeded: number; failed: number };
+}

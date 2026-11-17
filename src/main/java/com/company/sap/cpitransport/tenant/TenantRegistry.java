@@ -1,6 +1,9 @@
 package com.company.sap.cpitransport.tenant;
 
 import java.net.URI;
+import com.company.sap.cpitransport.audit.AuditChange;
+import com.company.sap.cpitransport.audit.AuditStore;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -38,6 +41,7 @@ public class TenantRegistry {
     private final CpiProperties properties;
     private final EncryptedTenantStore store;
     private final Clock clock;
+    private final AuditStore audit;
     private final ApplicationEventPublisher events;
     private final List<Tenant> initial;
     private final ServiceKeyParser parser = new ServiceKeyParser();
@@ -46,6 +50,13 @@ public class TenantRegistry {
 
     public TenantRegistry(CpiProperties properties, EncryptedTenantStore store, Clock clock,
                           ApplicationEventPublisher events) {
+        this(properties, store, clock, events, null);
+    }
+
+    @Autowired
+    public TenantRegistry(CpiProperties properties, EncryptedTenantStore store, Clock clock,
+                          ApplicationEventPublisher events, AuditStore audit) {
+        this.audit = audit;
         this.properties = properties;
         this.store = store;
         this.clock = clock;
@@ -100,6 +111,7 @@ public class TenantRegistry {
         List<StoredTenant> next = new ArrayList<>(registered);
         next.add(tenant);
         persist(next);
+        recordAudit(new AuditChange("tenant", "created", id, name, "Tenant created"));
         return find(id).orElseThrow().view();
     }
 
@@ -127,6 +139,8 @@ public class TenantRegistry {
         List<StoredTenant> next = new ArrayList<>(registered);
         next.set(next.indexOf(previous), replacement);
         persist(next);
+        recordAudit(new AuditChange("tenant", "updated", id, name,
+                body.has("serviceKey") ? "\uC11C\uBE44\uC2A4 \uD0A4 \uAD50\uCCB4" : "Tenant updated"));
         return find(id).orElseThrow().view();
     }
 
@@ -140,7 +154,12 @@ public class TenantRegistry {
         List<StoredTenant> next = new ArrayList<>(registered);
         next.remove(previous);
         persist(next);
+        recordAudit(new AuditChange("tenant", "deleted", id, previous.name(), "Tenant deleted"));
     }
+
+    private void recordAudit(AuditChange change) { if (audit != null) audit.append(change); }
+
+    public synchronized void requireDeletable(String id) { mutable(id); }
 
     private StoredTenant mutable(String id) {
         if (initial.stream().anyMatch(t -> t.id().equals(id))) throw new ApiException(Code.TENANT_READ_ONLY);

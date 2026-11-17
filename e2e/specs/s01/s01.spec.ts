@@ -1,24 +1,30 @@
 // 묶음 s01 — REQ-310 원본·대상 라디오의 방향키 포커스 유지 (QA-141~148). qa_cases.md "REQ-310" 절 그대로.
 // 앱: --profile stub (초기 등록 DEV·PRD). QA-143이 3번째 테넌트 QA-T3를 등록하고 QA-148 끝에서 지운다.
-import { expect, test, type Page } from '@playwright/test';
+// S3b(REQ-420): 원본·대상 라디오는 새 이관의 "경로 변경" 창(원본과 대상 선택) 안에 있다. 창 안의 선택은 "이 경로 사용"을 눌러야
+// 적용되므로, 방향키 판정은 창 안에서 하고 패키지 목록 다시 읽기 판정은 적용 뒤에 한다.
+import { expect, test } from '@playwright/test';
 import { addMap, after, call, dropTenant, key, R, registerTenant, shot, sleep, STUB, tenantList } from '../../lib/qa';
 import {
   arrow,
   active,
+  applyRoute,
+  applyRouteBtn,
+  checkedLabels,
   expectFocus,
   foreignHosts,
-  grp,
   isTenantRadio,
+  kbdFlow,
   keysTo,
-  modeRadio,
+  openRouteDialog,
   openTransport,
   packageIds,
   pkgRadios,
-  checkedLabels,
-  previewBtn,
   radiosOf,
+  routeDialog,
   selectedOf,
+  setRoute,
   settle,
+  stepBtn,
   waitTransport,
   watch,
   type ArrowStep,
@@ -51,11 +57,15 @@ function finish(qa: string, w: Watch): void {
 }
 const brief = (s: ArrowStep) => ({ key: s.key, t1: pick(s.t1), t2: pick(s.t2), source: s.sourceSelected, target: s.targetSelected });
 const pick = (i: any) => ({ tag: i.tag, role: i.role, name: i.name, group: i.group, checked: i.checked });
+/** 버튼이 없거나(목록 읽기 오류 등) 비활성이면 진행할 수 없다. */
+const blocked = async (loc: any): Promise<boolean> => (await loc.count()) === 0 || (await loc.isDisabled());
+const sameAlert = (page: any) => routeDialog(page).getByRole('alert').filter({ hasText: '원본과 대상이 같습니다' });
 
 test('QA-141: 원본 그룹 방향키 이동과 포커스 유지', async ({ page }) => {
   const rec = R('QA-141');
   const w = watch(page);
   await openTransport(page);
+  await openRouteDialog(page);
   const nav = await keysTo(page, isTenantRadio('원본', 'DEV'), '원본 그룹의 DEV 라디오');
   rec.tabPresses = nav.presses;
   rec.entry = pick(nav.info);
@@ -74,6 +84,8 @@ test('QA-141: 원본 그룹 방향키 이동과 포커스 유지', async ({ page
   expect(up.sourceSelected, '원본 그룹 선택 1개 = DEV').toEqual(['DEV']);
   expect(up.targetSelected, '대상 그룹 선택 변하지 않음').toEqual(['PRD']);
   await shot(page, 'QA-141-after-ArrowUp');
+  await page.keyboard.press('Escape');
+  await expect(routeDialog(page)).toHaveCount(0);
   finish('QA-141', w);
 });
 
@@ -81,13 +93,14 @@ test('QA-142: 대상 그룹 방향키 이동과 포커스 유지', async ({ page
   const rec = R('QA-142');
   const w = watch(page);
   await openTransport(page);
+  await openRouteDialog(page);
   const nav = await keysTo(page, isTenantRadio('대상', 'PRD'), '대상 그룹의 PRD 라디오');
   rec.tabPresses = nav.presses;
   expect(await selectedOf(page, '원본')).toEqual(['DEV']);
 
   const up = await arrow(page, w, 'ArrowUp');
   rec.step2_ArrowUp = brief(up);
-  rec.sameNoticeVisibleAfterUp = await page.getByText('원본과 대상이 같습니다', { exact: true }).count();
+  rec.sameNoticeVisibleAfterUp = await sameAlert(page).count();
   expectFocus(up, '대상', 'DEV', 'ArrowUp');
   expect(up.targetSelected).toEqual(['DEV']);
   await shot(page, 'QA-142-after-ArrowUp');
@@ -98,6 +111,7 @@ test('QA-142: 대상 그룹 방향키 이동과 포커스 유지', async ({ page
   expect(down.targetSelected).toEqual(['PRD']);
   expect(down.sourceSelected, '원본 선택 DEV 그대로').toEqual(['DEV']);
   await shot(page, 'QA-142-after-ArrowDown');
+  await page.keyboard.press('Escape');
   finish('QA-142', w);
 });
 
@@ -109,6 +123,7 @@ test('QA-143: 테넌트 3개 이상, 끝 위치의 방향키 이동', async ({ p
   expect(list.map((t) => t.name)).toEqual(['DEV', 'PRD', 'QA-T3']);
   const w = watch(page);
   await openTransport(page);
+  await openRouteDialog(page);
   expect((await radiosOf(page, '원본')).map((r) => r.name)).toEqual(['DEV', 'PRD', 'QA-T3']);
 
   const nav = await keysTo(page, isTenantRadio('원본', 'DEV'), '원본 그룹 DEV');
@@ -144,6 +159,7 @@ test('QA-143: 테넌트 3개 이상, 끝 위치의 방향키 이동', async ({ p
   await visit('ArrowRight');
   await visit('ArrowLeft');
   await shot(page, 'QA-143-end');
+  await page.keyboard.press('Escape');
   expect(id).toBeTruthy();
   finish('QA-143', w);
 });
@@ -151,7 +167,7 @@ test('QA-143: 테넌트 3개 이상, 끝 위치의 방향키 이동', async ({ p
 test('QA-144: 빠른 연속 방향키와 마지막 선택 일치', async ({ page, request }) => {
   const rec = R('QA-144');
   const t3 = await ensureT3(request);
-  // 구분을 위해 PRD 스텁에 패키지 목록 임시 매핑 한 개(H-4). DEV 는 기본 목록 3개.
+  // 구분을 위해 PRD 스텁에 패키지 목록 임시 매핑 한 개(H-4). DEV 는 기본 목록 3개. QA-T3 도 18082 라 같은 목록이다.
   const mapId = await addMap(request, 18082, {
     priority: 1,
     request: { method: 'GET', urlPath: '/api/v1/IntegrationPackages' },
@@ -170,8 +186,10 @@ test('QA-144: 빠른 연속 방향키와 마지막 선택 일치', async ({ page
   );
   rec.replacedUrls = 'GET http://localhost:8080/packages?tenantId=DEV 응답 600ms 지연 (page.route, route.continue)';
   await openTransport(page);
+  await openRouteDialog(page);
   const nav = await keysTo(page, isTenantRadio('원본', 'DEV'), '원본 그룹 DEV');
   rec.tabPresses = nav.presses;
+  const reqsBeforeKeys = w.packageReqs.length;
   const keys = ['ArrowDown', 'ArrowDown', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowUp'];
   const seq: any[] = [];
   const t0 = Date.now();
@@ -181,19 +199,24 @@ test('QA-144: 빠른 연속 방향키와 마지막 선택 일치', async ({ page
     seq.push({ k, at: Date.now() - t0 });
   }
   rec.keySequence = seq;
-  await page.waitForLoadState('networkidle').catch(() => undefined);
-  await settle(page, w, 800);
+  await settle(page, w, 500);
   const info = await active(page);
   const sel = await selectedOf(page, '원본');
+  rec.inDialog = { focus: pick(info), sourceSelected: sel, packageRequestsDuringKeys: w.packageReqs.length - reqsBeforeKeys };
+  expect(sel.length, '선택된 원본 라디오 정확히 1개').toBe(1);
+  expect(info.tag, '포커스가 BODY 아님').not.toBe('BODY');
+  expect(isTenantRadio('원본', sel[0])(info), `포커스 = 선택된 원본 라디오 ${sel[0]} 실제 ${JSON.stringify(pick(info))}`).toBe(true);
+  expect(rec.inDialog.packageRequestsDuringKeys, '창 안의 선택만으로는 패키지 목록을 다시 읽지 않음(적용 전)').toBe(0);
+  expect(sel[0], '대상(PRD)과 다른 원본이어야 적용 가능 — 키 순서상 마지막 선택').not.toBe('PRD');
+  await applyRoute(page);
+  await page.waitForLoadState('networkidle').catch(() => undefined);
+  await settle(page, w, 800);
   const shown = await packageIds(page);
   const last = w.packageReqs[w.packageReqs.length - 1];
   const lastTenant = new URL(last).searchParams.get('tenantId');
   const idOf: Record<string, string> = { DEV: 'DEV', PRD: 'PRD', 'QA-T3': t3 };
-  rec.final = { focus: pick(info), sourceSelected: sel, packagesShown: shown, packageRequestsInOrder: w.packageReqs.map((u) => new URL(u).searchParams.get('tenantId')), lastPackageRequestTenantId: lastTenant, delayedDevRequests: delayed.length };
+  rec.final = { sourceSelected: sel, packagesShown: shown, packageRequestsInOrder: w.packageReqs.map((u) => new URL(u).searchParams.get('tenantId')), lastPackageRequestTenantId: lastTenant, delayedDevRequests: delayed.length };
   await shot(page, 'QA-144-final');
-  expect(sel.length, '선택된 원본 라디오 정확히 1개').toBe(1);
-  expect(info.tag, '포커스가 BODY 아님').not.toBe('BODY');
-  expect(isTenantRadio('원본', sel[0])(info), `포커스 = 선택된 원본 라디오 ${sel[0]} 실제 ${JSON.stringify(pick(info))}`).toBe(true);
   expect(lastTenant, '마지막 GET /packages 의 tenantId = 선택된 원본 id').toBe(idOf[sel[0]]);
   expect(shown, '화면 패키지 목록 = 마지막 선택 원본 기준').toEqual(sel[0] === 'DEV' ? PKGS_DEV : ['PkgPrdOnly']);
   finish('QA-144', w);
@@ -204,90 +227,49 @@ test('QA-145: 방향키로 원본을 대상과 같게 옮길 때', async ({ page
   await ensureT3(request);
   const w = watch(page);
   await openTransport(page);
+  await openRouteDialog(page);
   const nav = await keysTo(page, isTenantRadio('원본', 'DEV'), '원본 그룹 DEV');
   rec.tabPresses = nav.presses;
-  const same = page.getByText('원본과 대상이 같습니다', { exact: true });
   const s1 = await arrow(page, w, 'ArrowDown');
   rec.step1_toPRD = brief(s1);
   expectFocus(s1, '원본', 'PRD', '원본 ArrowDown(PRD=대상)');
-  rec.step2 = { sameNotice: await same.count(), previewDisabled: await previewBtn(page).isDisabled(), definitions: await page.locator('dd').allInnerTexts() };
+  rec.step2 = { sameNotice: await sameAlert(page).count(), applyDisabled: await applyRouteBtn(page).isDisabled() };
   await shot(page, 'QA-145-same');
-  expect(await same.count(), '"원본과 대상이 같습니다" 표시').toBeGreaterThan(0);
-  expect(await previewBtn(page).isDisabled(), '미리보기 실행 비활성').toBe(true);
+  expect(rec.step2.sameNotice, '"원본과 대상이 같습니다" 경고 표시').toBeGreaterThan(0);
+  expect(rec.step2.applyDisabled, '"이 경로 사용" 비활성').toBe(true);
 
   const s3 = await arrow(page, w, 'ArrowDown');
   rec.step3_toQAT3 = brief(s3);
   expectFocus(s3, '원본', 'QA-T3', '원본 ArrowDown(QA-T3)');
-  rec.step4 = { sameNotice: await same.count(), previewDisabled: await previewBtn(page).isDisabled(), packageDefinition: await page.getByText('선택 안 됨', { exact: true }).count() };
+  rec.step4 = { sameNotice: await sameAlert(page).count(), applyDisabled: await applyRouteBtn(page).isDisabled() };
+  expect(rec.step4.sameNotice, '같다는 안내 사라짐').toBe(0);
+  expect(rec.step4.applyDisabled, '"이 경로 사용" 활성').toBe(false);
+  await applyRoute(page);
+  const next = page.getByRole('button', { name: '다음', exact: true });
+  // QA-T3(127.0.0.1:18082)의 패키지 목록은 이 스텁에서 읽기 오류가 날 수 있다. 목록이 아니라 패키지 단계가 된 것을 기다린다.
+  await expect(stepBtn(page, '패키지')).toHaveAttribute('aria-current', 'step');
+  await page.waitForTimeout(500);
+  rec.step5 = { packageChecked: await checkedLabels(pkgRadios(page)), nextDisabled: await blocked(next), artifactStepDisabled: await stepBtn(page, '아티팩트').isDisabled() };
   await shot(page, 'QA-145-different');
-  expect(await same.count(), '같다는 안내 사라짐').toBe(0);
-  expect(await previewBtn(page).isDisabled(), '패키지를 고르지 않았으므로 비활성').toBe(true);
-  expect(await page.getByText('선택 안 됨', { exact: true }).count(), '비활성 이유 = 패키지 미선택').toBeGreaterThan(0);
+  expect(rec.step5.packageChecked, '적용 뒤 패키지 선택 없음').toEqual([]);
+  expect(rec.step5.nextDisabled, '패키지를 고르지 않았으므로 "다음" 비활성(또는 목록 오류로 없음)').toBe(true);
+  expect(rec.step5.artifactStepDisabled, '아티팩트 단계 비활성').toBe(true);
+  // 이 앱은 읽기 전용 기본값이다. 미리보기 전이라 실제 이관 단계로 갈 수도 없다(기록과 판정).
+  rec.realStepDisabled = await stepBtn(page, '실제 이관').isDisabled();
+  expect(rec.realStepDisabled, '실제 이관 단계 비활성(미리보기 전)').toBe(true);
   finish('QA-145', w);
-
-  // 이 앱은 읽기 전용 기본값이라 "실제 이관" 항목을 고를 수 없다. 그 사실만 기록한다(qa_cases: "미리보기 실행"·실제 이관은 비활성).
-  rec.realModeRadioDisabled = await modeRadio(page, '실제 이관').isDisabled();
-  expect(rec.realModeRadioDisabled, '실제 이관 항목 비활성(읽기 전용 앱)').toBe(true);
 });
-
-/** QA-146 절차 1~6: 키보드(Tab·Shift+Tab·방향키)만으로 미리보기 실행 버튼 앞까지. click/focus/check 를 쓰지 않는다. */
-async function keyboardToReady(page: Page, w: Watch, rec: any) {
-  await openTransport(page);
-  const steps: any = (rec.steps = {});
-  const n1 = await keysTo(page, isTenantRadio('원본', 'DEV'), '원본 그룹 DEV');
-  steps.sourceTab = n1.presses;
-  const a = await arrow(page, w, 'ArrowDown');
-  expectFocus(a, '원본', 'PRD', '원본 ArrowDown');
-  const b = await arrow(page, w, 'ArrowUp');
-  expectFocus(b, '원본', 'DEV', '원본 ArrowUp');
-  steps.source = [brief(a), brief(b)];
-  const n2 = await keysTo(page, isTenantRadio('대상', 'PRD'), '대상 그룹 PRD');
-  steps.targetTab = n2.presses;
-  const c = await arrow(page, w, 'ArrowUp');
-  expectFocus(c, '대상', 'DEV', '대상 ArrowUp');
-  steps.sameNoticeAfterTargetUp = await page.getByText('원본과 대상이 같습니다', { exact: true }).count();
-  expect(steps.sameNoticeAfterTargetUp, '대상=원본일 때 같음 안내').toBeGreaterThan(0);
-  const d = await arrow(page, w, 'ArrowDown');
-  expectFocus(d, '대상', 'PRD', '대상 ArrowDown');
-  steps.target = [brief(c), brief(d)];
-  // 패키지 목록으로: DOM 순서상 패키지 목록이 테넌트 그룹보다 앞이라 Shift+Tab 으로 되돌아간다.
-  const n3 = await keysTo(page, (i) => i.tag === 'INPUT' && i.type === 'radio' && i.group === '패키지 목록', '패키지 목록 라디오', 'Shift+Tab');
-  steps.packageShiftTab = n3.presses;
-  steps.packageEntry = pick(n3.info);
-  const seen: any[] = [];
-  for (let i = 0; i < 5; i++) {
-    const cur = await active(page);
-    if (/PkgTransportDemo/.test(cur.name) && cur.checked) break;
-    await page.keyboard.press('ArrowUp');
-    await page.waitForTimeout(250);
-    seen.push(pick(await active(page)));
-  }
-  await page.keyboard.press('ArrowDown');
-  await page.waitForTimeout(300);
-  const down = pick(await active(page));
-  await page.keyboard.press('ArrowUp');
-  await expect(page.getByRole('list', { name: '아티팩트 목록' })).toBeVisible();
-  await page.waitForTimeout(300);
-  const fin = await active(page);
-  steps.packageKeys = { upward: seen, afterArrowDown: down, afterArrowUp: pick(fin) };
-  expect(fin.name, '키보드로 선택한 패키지 PkgTransportDemo').toMatch(/PkgTransportDemo/);
-  expect(fin.checked).toBe(true);
-  steps.selectedPackage = await checkedLabels(pkgRadios(page));
-  // ④ 아티팩트는 건드리지 않는다
-  steps.checkedArtifacts = await checkedLabels(page.getByRole('list', { name: '아티팩트 목록' }).getByRole('checkbox'));
-  const n4 = await keysTo(page, (i) => i.tag === 'BUTTON' && i.text === '미리보기 실행', '"미리보기 실행" 버튼', 'Tab');
-  steps.buttonTab = n4.presses;
-  steps.buttonDisabled = n4.info.disabled;
-  return steps;
-}
 
 test('QA-146: 키보드만으로 미리보기 시작', async ({ page, request }) => {
   const rec = R('QA-146');
   await ensureT3(request);
   const w = watch(page);
-  const steps = await keyboardToReady(page, w, rec);
+  const steps = await kbdFlow(page, w, 'PRD');
+  rec.steps = steps;
+  expect(steps.sameNoticeAfterTargetUp, '대상=원본일 때 같음 안내').toBeGreaterThan(0);
+  expect(steps.applyDisabledWhenSame, '대상=원본일 때 "이 경로 사용" 비활성').toBe(true);
   expect(steps.buttonDisabled, '미리보기 실행 버튼 활성').toBe(false);
-  expect(steps.buttonTab, 'Tab 40회 안').toBeLessThanOrEqual(40);
+  expect(steps.buttonTab, 'Tab 60회 안').toBeLessThanOrEqual(60);
   const out = await waitTransport(page, async () => {
     await page.keyboard.press('Enter');
   });
@@ -316,28 +298,44 @@ test('QA-147: 패키지 선택 뒤 방향키로 원본 변경', async ({ page, r
   const rec = R('QA-147');
   await ensureT3(request);
   const w = watch(page);
-  const steps = await keyboardToReady(page, w, rec);
+  const steps = await kbdFlow(page, w, 'PRD');
+  rec.steps = steps;
   expect(steps.buttonDisabled).toBe(false);
-  const n = await keysTo(page, isTenantRadio('원본', 'DEV'), '원본 그룹 DEV', 'Shift+Tab');
-  rec.shiftTabToSource = n.presses;
+  const isBtn = (text: string) => (i: any) => i.tag === 'BUTTON' && i.text === text;
+  // 키보드로 경로 변경 창을 열고 원본을 방향키로 바꾼 뒤 적용한다(대상 PRD 와 다른 QA-T3 로).
+  const changeSource = async (keysToPress: string[], expectName: string, label: string) => {
+    await keysTo(page, isBtn('경로 변경'), '"경로 변경" 버튼', 'Shift+Tab', 60);
+    await page.keyboard.press('Enter');
+    await expect(routeDialog(page)).toBeVisible();
+    await keysTo(page, isTenantRadio('원본'), '원본 그룹 선택 라디오');
+    let s: ArrowStep | null = null;
+    for (const k of keysToPress) s = await arrow(page, w, k);
+    expectFocus(s!, '원본', expectName, label);
+    await keysTo(page, isBtn('이 경로 사용'), '"이 경로 사용" 버튼');
+    await page.keyboard.press('Enter');
+    await expect(routeDialog(page)).toHaveCount(0);
+    await expect(stepBtn(page, '패키지')).toHaveAttribute('aria-current', 'step');
+    await settle(page, w);
+    return { ...brief(s!), state: await readState() };
+  };
   const readState = async () => ({
+    current: await stepBtn(page, '패키지').getAttribute('aria-current'),
     packageChecked: await checkedLabels(pkgRadios(page)),
-    previewDisabled: await previewBtn(page).isDisabled(),
-    packageAreaText: (await page.locator('section, div').filter({ has: page.getByRole('heading', { name: '패키지', level: 3, exact: true }) }).first().innerText().catch(() => '')).slice(0, 200),
-    definition: await page.locator('dd').allInnerTexts(),
+    nextDisabled: await blocked(page.getByRole('button', { name: '다음', exact: true })),
+    allPreviewDisabled: await blocked(page.getByRole('button', { name: '전체 아티팩트로 미리보기', exact: true })),
+    artifactStepDisabled: await stepBtn(page, '아티팩트').isDisabled(),
   });
-  const s1 = await arrow(page, w, 'ArrowDown');
-  rec.step2_ArrowDown = { ...brief(s1), state: await readState() };
-  await shot(page, 'QA-147-after-ArrowDown');
-  expectFocus(s1, '원본', 'PRD', '원본 ArrowDown');
-  expect(rec.step2_ArrowDown.state.packageChecked, '패키지 선택 비워짐').toEqual([]);
-  expect(rec.step2_ArrowDown.state.previewDisabled, '미리보기 실행 비활성').toBe(true);
-  const s2 = await arrow(page, w, 'ArrowUp');
-  rec.step4_ArrowUp = { ...brief(s2), state: await readState() };
-  await shot(page, 'QA-147-after-ArrowUp');
-  expectFocus(s2, '원본', 'DEV', '원본 ArrowUp');
-  expect(rec.step4_ArrowUp.state.packageChecked, '패키지 선택 자동 복원 안 됨').toEqual([]);
-  expect(rec.step4_ArrowUp.state.previewDisabled).toBe(true);
+  rec.step2_toQAT3 = await changeSource(['ArrowDown', 'ArrowDown'], 'QA-T3', '원본 ArrowDown×2');
+  await shot(page, 'QA-147-after-change');
+  expect(rec.step2_toQAT3.state.current, '경로를 바꾸면 패키지 단계').toBe('step');
+  expect(rec.step2_toQAT3.state.packageChecked, '패키지 선택 비워짐').toEqual([]);
+  expect(rec.step2_toQAT3.state.nextDisabled, '"다음" 비활성').toBe(true);
+  expect(rec.step2_toQAT3.state.allPreviewDisabled, '"전체 아티팩트로 미리보기" 비활성').toBe(true);
+  expect(rec.step2_toQAT3.state.artifactStepDisabled, '아티팩트 단계 비활성').toBe(true);
+  rec.step4_backToDEV = await changeSource(['ArrowUp', 'ArrowUp'], 'DEV', '원본 ArrowUp×2');
+  await shot(page, 'QA-147-after-back');
+  expect(rec.step4_backToDEV.state.packageChecked, '패키지 선택 자동 복원 안 됨').toEqual([]);
+  expect(rec.step4_backToDEV.state.nextDisabled).toBe(true);
   finish('QA-147', w);
 });
 
@@ -353,19 +351,19 @@ test('QA-148: 원본 변경 뒤 패키지 목록을 새 원본 기준으로 다�
   rec.tempMapping = { id: mapId, mappingsBefore: before };
   const w = watch(page);
   await openTransport(page);
-  await grp(page, '대상').getByRole('radio', { name: 'QA-T3', exact: true }).check();
-  const nav = await keysTo(page, isTenantRadio('원본', 'DEV'), '원본 그룹 DEV');
-  rec.tabPresses = nav.presses;
+  await setRoute(page, 'DEV', 'QA-T3');
   const lastTenant = () => new URL(w.packageReqs[w.packageReqs.length - 1]).searchParams.get('tenantId');
-  const s2 = await arrow(page, w, 'ArrowDown');
-  rec.step2_PRD = { ...brief(s2), packages: await packageIds(page), lastRequestTenantId: lastTenant() };
-  expect(rec.step2_PRD.lastRequestTenantId, 'PRD 선택 뒤 마지막 GET /packages tenantId').toBe('PRD');
+  await setRoute(page, 'PRD', 'QA-T3');
+  await settle(page, w);
+  rec.step2_PRD = { packages: await packageIds(page), lastRequestTenantId: lastTenant() };
+  expect(rec.step2_PRD.lastRequestTenantId, 'PRD 적용 뒤 마지막 GET /packages tenantId').toBe('PRD');
   expect(rec.step2_PRD.packages, 'PRD 목록').toEqual(['PkgPrdOnly']);
-  const s4 = await arrow(page, w, 'ArrowUp');
-  rec.step4_DEV = { ...brief(s4), packages: await packageIds(page), lastRequestTenantId: lastTenant() };
+  await setRoute(page, 'DEV', 'QA-T3');
+  await settle(page, w);
+  rec.step4_DEV = { packages: await packageIds(page), lastRequestTenantId: lastTenant() };
   expect(rec.step4_DEV.lastRequestTenantId).toBe('DEV');
   expect(rec.step4_DEV.packages).toEqual(PKGS_DEV);
-  // 5. DEV 응답 1500ms 지연, 빠르게 PRD → DEV → PRD
+  // 5. DEV 응답 1500ms 지연, 빠르게 PRD → DEV → PRD 로 적용
   const delayed: string[] = [];
   await page.route(
     (u) => u.pathname === '/packages' && u.searchParams.get('tenantId') === 'DEV',
@@ -377,15 +375,15 @@ test('QA-148: 원본 변경 뒤 패키지 목록을 새 원본 기준으로 다�
   );
   rec.replacedUrls = 'GET http://localhost:8080/packages?tenantId=DEV 응답 1500ms 지연 (page.route, route.continue)';
   const seqStart = w.packageReqs.length;
-  for (const k of ['ArrowDown', 'ArrowUp', 'ArrowDown']) {
-    await page.keyboard.press(k);
-    await page.waitForTimeout(30);
-  }
+  const t0 = Date.now();
+  for (const src of ['PRD', 'DEV', 'PRD']) await setRoute(page, src, 'QA-T3');
+  rec.raceElapsedMs = Date.now() - t0;
   await page.waitForLoadState('networkidle').catch(() => undefined);
-  await settle(page, w, 800);
-  rec.step6 = { sourceSelected: await selectedOf(page, '원본'), packages: await packageIds(page), requestsInRace: w.packageReqs.slice(seqStart).map((u) => new URL(u).searchParams.get('tenantId')), delayedDevRequests: delayed.length, focus: pick(await active(page)) };
+  await settle(page, w, 1800);
+  rec.step6 = { routeText: await page.getByRole('group', { name: '이관 경로' }).innerText(), packages: await packageIds(page), requestsInRace: w.packageReqs.slice(seqStart).map((u) => new URL(u).searchParams.get('tenantId')), delayedDevRequests: delayed.length, focus: pick(await active(page)) };
   await shot(page, 'QA-148-after-race');
-  expect(rec.step6.sourceSelected).toEqual(['PRD']);
+  expect(rec.step6.routeText).toContain('PRD → QA-T3');
+  expect(rec.step6.delayedDevRequests, '지연된 DEV 요청이 경쟁 중에 나감').toBeGreaterThan(0);
   expect(rec.step6.packages, '마지막 선택 PRD 의 목록만 (DEV 의 오래된 응답이 덮어쓰지 않음)').toEqual(['PkgPrdOnly']);
   await page.unroute(() => true).catch(() => undefined);
   // 매핑 삭제 확인

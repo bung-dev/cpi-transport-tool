@@ -1,7 +1,7 @@
 // round 02 공용 도우미 (REQ-312·315·316·317·318 묶음). qa.ts·ui.ts 를 그대로 쓰고 여기서는 새 것만 더한다.
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { app, call, STUB } from './qa';
-import { resultRegion } from './ui';
+import { resultRegion, gotoFresh } from './ui';
 
 export const NOTICE = '대상 테넌트에서 이 아티팩트가 편집 중(잠김)일 수 있습니다. CPI 화면에서 편집을 저장하거나 취소한 뒤 다시 시도하세요.';
 export const countOf = (s: string, sub: string): number => (sub ? s.split(sub).length - 1 : 0);
@@ -34,7 +34,7 @@ export async function openAllCards(page: Page): Promise<void> {
 export const resultText = async (page: Page): Promise<string> => flat(await resultRegion(page).first().innerText());
 export { expect };
 
-/** 결과 머리 값: "실패" 타일 값, "문제 항목 N건", "실패 아티팩트 M개" 와 두 문구의 위치 관계 */
+/** 결과 머리 값: "실패" 타일 값, "치환 문제 N건"(S3 REQ-424 문구), "실패 아티팩트 M개" 와 두 문구의 위치 관계 */
 export async function headStats(page: Page): Promise<Record<string, any>> {
   const region = resultRegion(page).first();
   return region.evaluate((r) => {
@@ -44,10 +44,10 @@ export async function headStats(page: Page): Promise<Record<string, any>> {
     const leaves = all.filter((e) => e.children.length === 0);
     const tileLabel = leaves.find((e) => txt(e) === '실패');
     const tileValue = tileLabel?.parentElement ? txt(tileLabel.parentElement).replace(/^실패\s*/, '') : null;
-    const prob = smallest(/문제 항목 \d+건/);
+    const prob = smallest(/치환 문제 \d+건/);
     const fa = smallest(/실패 아티팩트 \d+개/);
     const full = (r as HTMLElement).innerText.replace(/\s+/g, ' ');
-    const pm = full.match(/문제 항목 (\d+)건/);
+    const pm = full.match(/치환 문제 (\d+)건/);
     const fm = [...full.matchAll(/실패 아티팩트 (\d+)개/g)];
     let ancestor: Element | null = null;
     if (prob[0] && fa[0]) {
@@ -80,7 +80,7 @@ export const P_SRC = '원본 테넌트를 선택하세요';
 export const P_DST = '대상 테넌트를 선택하세요';
 export const P_SAME = '원본과 대상이 같습니다';
 export const P_NONE = '등록된 테넌트가 없습니다';
-export const P_GO = '테넌트 탭으로 이동';
+export const P_GO = '테넌트 화면으로 이동';
 
 /** 화면(body.innerText + 접근성 트리)에서 문구 개수와, 문구를 담은 가장 작은 요소의 가까운 머리글 */
 export async function phraseReport(page: Page, phrases: string[]): Promise<Record<string, any>> {
@@ -176,8 +176,7 @@ export async function replaceHistory(page: Page, rows: any[]): Promise<() => Pro
   };
 }
 export async function openHistory(page: Page): Promise<void> {
-  await page.goto('/');
-  await page.getByRole('tab', { name: '이력', exact: true }).click();
+  await gotoFresh(page, '/#/history');
   await expect(page.getByRole('columnheader', { name: '모드', exact: true })).toBeVisible();
   await expect(page.locator('table tbody tr').first()).toBeVisible();
   await page.waitForTimeout(300);
@@ -227,7 +226,7 @@ export async function measureHistory(page: Page, rowIndex = 0): Promise<Record<s
       m2_ok: lr ? lr.right <= inner + 0.5 : false,
       m3_headerCount: ths.length,
       m3_headers: headerIn,
-      m3_allInside: ths.length === 8 && headerIn.every((h) => h.inside),
+      m3_allInside: ths.length === 9 && headerIn.every((h) => h.inside),
       cellsInside: cellIn,
       tableWidth: table.getBoundingClientRect().width,
       verticalScroll: document.documentElement.scrollHeight > document.documentElement.clientHeight,

@@ -1,21 +1,26 @@
 // 묶음 s11 — REQ-319 테넌트 0개 앱 (QA-225). qa_cases.md "묶음 s11" 절 그대로.
 // 앱: --profile stub --dev unset --prd unset (테넌트 0개).
+// S3b(REQ-420): 새 이관 부제·단계 줄을 보고, "템플릿 없이 진행" 뒤 패키지 단계의 등록 안내와 "테넌트 화면으로 이동"을 본다.
 import { expect, test, type Page } from '@playwright/test';
 import { after, app, R, shot, tenantList } from '../../lib/qa';
 import {
+  blocked,
   brief,
-  CLOSING_SENTENCE,
   foreignHosts,
-  modeInfo,
   OLD_TERM,
   openTab,
-  previewBtn,
+  openWizard,
+  runInfo,
+  startManual,
+  STEP_LABELS,
+  stepBtn,
+  SUBTITLE_TAIL,
   scannerControl,
   scanOldTerm,
   watch,
   type ScanResult,
   type Watch,
-} from '../../lib/ui';
+  tabBtn } from '../../lib/ui';
 
 test.afterEach(async ({ request }) => {
   await after(request);
@@ -35,41 +40,43 @@ test('QA-225: 테넌트 0개 앱 - 안내 문구와 이름 유지', async ({ pag
   const w = watch(page);
   rec.tenantsAtStart = (await tenantList(request)).length;
   expect(rec.tenantsAtStart, '테넌트 0개로 시작').toBe(0);
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: '패키지 이관', exact: true })).toBeVisible();
+  await openWizard(page);
   await page.waitForTimeout(800);
   rec.scannerControl = await scannerControl(page, w);
   expect(rec.scannerControl.allFound, 'H-9 변형 5종 모두 찾음').toBe(true);
   expect(rec.scannerControl.cleanZero, 'H-9 제거 뒤 0건').toBe(true);
 
-  // 1. 설명 끝문장, 항목 제목, 버튼 이름, 비활성 이유, 설명 문장(기록만)
+  // 1. 부제 끝문장, 단계 줄 이름, 비활성 단계, 등록 안내
   const para = (await page.locator('main p').first().innerText()).trim();
   rec.paragraph = para;
-  expect.soft(para.endsWith(CLOSING_SENTENCE), '설명 문단이 끝문장으로 끝남').toBe(true);
-  const mi = await modeInfo(page);
-  rec.modeInfo = mi;
-  expect.soft(mi.items.map((i) => i.title), '두 제목').toEqual(['미리보기', '실제 이관']);
-  expect.soft(mi.items.map((i) => i.checked), '기본 선택 미리보기').toEqual([true, false]);
-  rec.descriptionSentences_recordOnly = mi.items.map((i) => i.desc);
-  for (const i of mi.items) expect.soft(hasOld(i.desc), `설명 문장에 옛 명칭 없음: ${i.desc}`).toBe(false);
-  rec.previewBtnCount = await previewBtn(page).count();
-  expect.soft(rec.previewBtnCount, '실행 버튼 이름 정확히 미리보기 실행').toBe(1);
-  rec.previewDisabled = await previewBtn(page).isDisabled();
-  expect.soft(rec.previewDisabled, '버튼 비활성').toBe(true);
+  expect.soft(para.endsWith(` · ${SUBTITLE_TAIL}`), '부제가 미리보기 안내로 끝남').toBe(true);
+  expect.soft(hasOld(para), '부제에 옛 명칭 없음').toBe(false);
+  await startManual(page);
+  await page.waitForTimeout(400);
+  const ri = await runInfo(page);
+  rec.runInfo = ri;
+  expect.soft(ri.steps, '단계 줄 이름').toEqual([...STEP_LABELS]);
+  for (const s of ri.steps) expect.soft(hasOld(s), `단계 이름에 옛 명칭 없음: ${s}`).toBe(false);
+  rec.disabled = {
+    next: await blocked(page.getByRole('button', { name: '다음', exact: true })),
+    allPreview: await blocked(page.getByRole('button', { name: '전체 아티팩트로 미리보기', exact: true })),
+    previewStep: await stepBtn(page, '미리보기').isDisabled(),
+  };
+  expect.soft(rec.disabled, '패키지 단계 버튼과 미리보기 단계 비활성').toEqual({ next: true, allPreview: true, previewStep: true });
   const mainText = (await page.locator('main').innerText()).replace(/\s+/g, ' ');
   rec.mainText = mainText.slice(0, 600);
   rec.disabledReason = (await page.getByText(/먼저 테넌트를 등록하세요/).allInnerTexts()).map((s) => s.replace(/\s+/g, ' '));
-  rec.noTenantNotice = (await page.getByText(/등록된 테넌트가 없습니다/).allInnerTexts()).map((s) => s.replace(/\s+/g, ' '));
-  expect.soft(rec.disabledReason.length, '비활성 이유 "먼저 테넌트를 등록하세요"').toBeGreaterThan(0);
+  expect.soft(rec.disabledReason.length, '안내 "먼저 테넌트를 등록하세요"').toBeGreaterThan(0);
   // 2. 실행 카드·패키지 영역·안내
   await scan(page, rec, '0개-이관', w);
   await shot(page, 'QA-225-transport');
-  // 3. "테넌트 탭으로 이동"
-  const go = page.getByRole('button', { name: '테넌트 탭으로 이동', exact: true });
+  // 3. "테넌트 화면으로 이동"
+  const go = page.getByRole('button', { name: '테넌트 화면으로 이동', exact: true });
   rec.goButtonCount = await go.count();
+  expect.soft(rec.goButtonCount, '"테넌트 화면으로 이동" 버튼').toBe(1);
   if (rec.goButtonCount) await go.click();
   else await openTab(page, '테넌트');
-  await expect(page.getByRole('tab', { name: '테넌트', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(tabBtn(page, '테넌트')).toHaveAttribute('aria-current', 'page');
   await scan(page, rec, '0개-테넌트', w);
   await shot(page, 'QA-225-tenants');
   // 4. 이력 탭

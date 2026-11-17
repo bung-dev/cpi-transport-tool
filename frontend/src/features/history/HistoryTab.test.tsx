@@ -3,8 +3,8 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TransportResponse } from '../../api/types';
-import App from '../../App';
 import { PACKAGES, json, mockApi } from '../../test/mockFetch';
+import { navLink, renderAt } from '../../test/appRoutes';
 import { formatTime } from '../../lib/formatTime';
 import { HistoryTab } from './HistoryTab';
 
@@ -25,7 +25,7 @@ function entry(id: string, over: Partial<TransportResponse> = {}): TransportResp
 }
 
 describe('이력 탭', () => {
-  it('REQ-007 AC-1: API 순서 그대로 행을 보이고 열은 시작 시각·패키지·모드·배포·결과·이관 ID', async () => {
+  it('REQ-007 AC-1 / REQ-425: API 순서 그대로 행을 보이고 열은 시작 시각·템플릿·원본·대상·패키지·모드·배포·결과·이관 ID', async () => {
     mockApi({
       'GET /transport/history': () =>
         json([entry('t-new', { dryRun: false, deploy: true, packageId: 'PkgB' }), entry('t-old')]),
@@ -34,9 +34,10 @@ describe('이력 탭', () => {
     await screen.findByRole('table');
     expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
       '시작 시각',
-      '패키지',
+      '템플릿',
       '원본',
       '대상',
+      '패키지',
       '모드',
       '배포',
       '결과',
@@ -45,7 +46,7 @@ describe('이력 탭', () => {
     const rows = screen.getAllByRole('row').slice(1);
     expect(rows).toHaveLength(2);
     const cells = within(rows[0]).getAllByRole('cell').map((c) => c.textContent);
-    expect(cells).toEqual([formatTime('2026-09-29T07:05:05.351940500Z'), 'PkgB', '-', '-', '실제 이관', '배포', '성공 1 / 전체 2실패 1', 't-new']);
+    expect(cells).toEqual([formatTime('2026-09-29T07:05:05.351940500Z'), '—', '-', '-', 'PkgB', '실제 이관', '배포', '성공 1 / 전체 2실패 1', 't-new']);
     expect(within(rows[1]).getByRole('button', { name: 't-old' })).toBeInTheDocument();
   });
 
@@ -142,10 +143,10 @@ describe('이력 탭', () => {
     const region = screen.getByRole('region', { name: '이관 결과' });
     expect(within(region).getByText('이관 ID').nextElementSibling).toHaveTextContent('t-2');
     expect(within(region).getByText('패키지 ID').nextElementSibling).toHaveTextContent('PkgZ');
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn.mock.calls.filter(([url]) => String(url) === '/transport/history')).toHaveLength(1);
     await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
     expect(screen.getByRole('table')).toBeInTheDocument();
-    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn.mock.calls.filter(([url]) => String(url) === '/transport/history')).toHaveLength(1);
   });
 
   it('REQ-007 AC-3: 이력이 없으면 안내 문구를 보인다', async () => {
@@ -163,7 +164,7 @@ describe('이력 탭', () => {
     render(<HistoryTab />);
     await screen.findByRole('table');
     await userEvent.click(screen.getByRole('button', { name: '새로고침' }));
-    expect(fn).toHaveBeenCalledTimes(2);
+    expect(fn.mock.calls.filter(([url]) => String(url) === '/transport/history')).toHaveLength(2);
     expect(screen.getByRole('button', { name: '새로고침' })).toBeDisabled();
     release(json([entry('t-3')]));
     expect(await screen.findByRole('button', { name: 't-3' })).toBeInTheDocument();
@@ -177,11 +178,11 @@ describe('이력 탭', () => {
       'GET /packages?tenantId=DEV': () => json(PACKAGES),
       'GET /transport/history': () => json([entry('t-1')]),
     });
-    render(<App />);
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    renderAt('#/transport');
+    await userEvent.click(navLink('이관 이력'));
     await screen.findByRole('table');
-    await userEvent.click(screen.getByRole('tab', { name: '이관' }));
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    await userEvent.click(navLink('새 이관'));
+    await userEvent.click(navLink('이관 이력'));
     await screen.findByRole('table');
     await waitFor(() =>
       expect(fn.mock.calls.filter((c) => String(c[0]) === '/transport/history')).toHaveLength(2),
@@ -226,12 +227,12 @@ describe('이력 탭', () => {
       'GET /packages?tenantId=DEV': () => json(PACKAGES),
       'GET /transport/history': () => json([entry('t-1'), entry('t-2')]),
     });
-    render(<App />);
-    await userEvent.click(screen.getByRole('tab', { name: '이력' }));
+    renderAt('#/transport');
+    await userEvent.click(navLink('이관 이력'));
     await userEvent.click(await screen.findByRole('button', { name: 't-1' }));
     await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
-    await userEvent.click(screen.getByRole('tab', { name: '이관' }));
-    const historyTab = screen.getByRole('tab', { name: '이력' });
+    await userEvent.click(navLink('새 이관'));
+    const historyTab = navLink('이관 이력');
     await userEvent.click(historyTab);
     await screen.findByRole('button', { name: 't-1' });
     expect(document.activeElement).not.toBe(screen.getByRole('button', { name: 't-1' }));

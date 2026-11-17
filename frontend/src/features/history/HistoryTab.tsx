@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { getHistory } from '../../api/client';
+import { getHistory, getTemplates } from '../../api/client';
+import type { TransportResponse } from '../../api/types';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -31,8 +32,17 @@ function TableSkeleton() {
   );
 }
 
+/** 템플릿 칸: 없으면 "—", 있으면 실행 당시 이름. 지금 목록에 그 id가 없으면 "(삭제됨)"을 붙인다(목록을 못 읽었으면 판단하지 않는다). */
+function templateLabel(h: TransportResponse, liveIds: Set<string> | null): string {
+  if (!h.template) return '—';
+  return liveIds && !liveIds.has(h.template.id) ? `${h.template.name} (삭제됨)` : h.template.name;
+}
+
 export function HistoryTab() {
   const { state, retry } = useRemote(getHistory, 'history');
+  // 템플릿 열의 "(삭제됨)" 판단에만 쓴다. 실패해도 오류를 보이지 않고 기록된 이름만 보인다(REQ-425).
+  const { state: templates } = useRemote(getTemplates, 'templates');
+  const liveTemplateIds = templates.status === 'ok' ? new Set(templates.data.map((t) => t.id)) : null;
   const [selected, setSelected] = useState<number | null>(null);
   const backRef = useRef<HTMLButtonElement>(null);
   const rowButtons = useRef(new Map<number, HTMLButtonElement>());
@@ -109,9 +119,10 @@ export function HistoryTab() {
               <thead>
                 <Tr>
                   <Th>시작 시각</Th>
-                  <Th>패키지</Th>
+                  <Th>템플릿</Th>
                   <Th>원본</Th>
                   <Th>대상</Th>
+                  <Th>패키지</Th>
                   <Th>모드</Th>
                   <Th>배포</Th>
                   <Th>결과</Th>
@@ -124,7 +135,7 @@ export function HistoryTab() {
                   return (
                   // 행의 어느 곳을 눌러도 상세가 열린다(마우스 편의). 키보드 경로는 행마다 이관 ID 버튼 하나이고 행에는 tabindex를 주지 않는다(ADR-012).
                   // 이관 ID 버튼의 클릭은 행으로 올라가 같은 핸들러가 처리한다. 짧은 셀(시작 시각·모드·배포·결과)은 줄바꿈하지 않고, 좁은 폭에서는 표 래퍼 안에서 가로로 스크롤한다(REQ-108 AC-1).
-                  // AI-NOTE: 긴 텍스트 셀(패키지·원본·대상·이관 ID)에 whitespace-nowrap을 주지 않는다. Td 기본 break-all로 줄바꿈해야 1280px(본문 최대 1200px)에서 40자 값 세 개와 UUID가 있어도 모든 열이 래퍼 안에 든다. 말줄임은 쓰지 않아 전체 값이 항상 보인다. min-w-28은 390px 가로 스크롤 때 긴 셀이 몇 글자 폭으로 눌려 행이 매우 높아지는 것을 막는 하한이며, 네 셀 하한 합과 짧은 셀 폭을 더해도 1280px 본문 폭 안에 든다 (근거: REQ-317 AC-1·AC-2, 판정 데이터 측정 변경 전 1280px 넘침 707px·변경 뒤 0px, 하한 없을 때 390px 행 높이 421px·하한 112px일 때 121px, run 20261020-defect-fix)
+                  // AI-NOTE: 긴 텍스트 셀(템플릿·패키지·원본·대상·이관 ID)에 whitespace-nowrap을 주지 않는다. Td 기본 break-all로 줄바꿈해야 1280px(본문 최대 1200px)에서 40자 값 세 개와 UUID가 있어도 모든 열이 래퍼 안에 든다. 말줄임은 쓰지 않아 전체 값이 항상 보인다. min-w-28은 390px 가로 스크롤 때 긴 셀이 몇 글자 폭으로 눌려 행이 매우 높아지는 것을 막는 하한이며, 네 셀 하한 합과 짧은 셀 폭을 더해도 1280px 본문 폭 안에 든다 (근거: REQ-317 AC-1·AC-2, 판정 데이터 측정 변경 전 1280px 넘침 707px·변경 뒤 0px, 하한 없을 때 390px 행 높이 421px·하한 112px일 때 121px, run 20261020-defect-fix)
                   <Tr
                     key={`${h.transportId}-${i}`}
                     className="cursor-pointer"
@@ -134,9 +145,10 @@ export function HistoryTab() {
                     }}
                   >
                     <Td className="whitespace-nowrap">{formatTime(h.startedAt)}</Td>
-                    <Td className="min-w-28 font-mono text-[13px]">{h.packageId}</Td>
+                    <Td className="min-w-28">{templateLabel(h, liveTemplateIds)}</Td>
                     <Td className="min-w-28">{h.sourceTenant?.name ?? '-'}</Td>
                     <Td className="min-w-28">{h.targetTenant?.name ?? '-'}</Td>
+                    <Td className="min-w-28 font-mono text-[13px]">{h.packageId}</Td>
                     <Td className="whitespace-nowrap">{h.dryRun ? <Badge tone="neutral">미리보기</Badge> : <Badge tone="accent">실제 이관</Badge>}</Td>
                     <Td className="whitespace-nowrap">
                       <span className="inline-flex items-center gap-2">

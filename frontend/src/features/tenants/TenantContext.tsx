@@ -28,11 +28,14 @@ export const DEFAULT_TENANT_CONTEXT: TenantContextValue = {
 export const TenantContext = createContext<TenantContextValue>(DEFAULT_TENANT_CONTEXT);
 export function useTenants() { return useContext(TenantContext); }
 export function useReadOnlyState() {
-  const { readOnly, status } = useTenants();
+  const { readOnly, status, targetTenantId } = useTenants();
+  const target = status.state === 'success' ? status.data.tenants.find(t => t.id === targetTenantId) : undefined;
+  const targetFailed = target !== undefined && target.check !== 'OK';
   return {
-    realDisabled: readOnly !== false,
+    realDisabled: readOnly !== false || targetFailed,
     notice: readOnly === true ? '읽기 전용 모드입니다. 실제 이관은 꺼져 있습니다'
-      : status.state === 'error' ? '읽기 전용 여부를 확인하지 못했습니다. 상태 칩을 눌러 다시 확인하세요' : undefined,
+      : status.state === 'error' ? '읽기 전용 여부를 확인하지 못했습니다. 상태 칩을 눌러 다시 확인하세요'
+      : targetFailed ? `${target.name} 연결 확인에 실패해 실제 이관을 할 수 없습니다. 상태 칩을 눌러 다시 확인하세요` : undefined,
   };
 }
 export function TenantProvider({ children, openTenantsTab }: { children: ReactNode; openTenantsTab: () => void }) {

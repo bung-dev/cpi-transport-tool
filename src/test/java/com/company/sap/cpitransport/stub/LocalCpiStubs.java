@@ -96,6 +96,9 @@ public final class LocalCpiStubs {
         var packages = List.of(metadata("PkgTransportDemo", "Transport Demo", "1.0.0"),
                 metadata("PkgFaultDemo", "Fault Demo", "1.0.0"), metadata("PkgNotInPrd", "Not In PRD", "1.0.0"));
         getJson(dev, ROOT + "IntegrationPackages", results(packages));
+        // PRD도 패키지 목록을 돌려준다(PkgNotInPrd 제외). 연결 확인(IntegrationPackages?$top=1)이 OK가 되어야
+        // 대상 연결 확인 실패 때 실제 이관을 막는 규칙(REQ-430·423, 2026-11-16 사람 결정) 아래에서 화면 실제 이관을 검증할 수 있다.
+        getJson(prd, ROOT + "IntegrationPackages", results(packages.stream().filter(p -> !p.get("Id").equals("PkgNotInPrd")).toList()));
         Files.createDirectories(zipDirectory);
         for (var pkg : packages) {
             String id = pkg.get("Id");
