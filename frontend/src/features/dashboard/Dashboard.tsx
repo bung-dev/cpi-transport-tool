@@ -45,14 +45,31 @@ export function Dashboard({ onForward }: { onForward: (template: TransportTempla
     </li>;
   }
 
-  return <div className="grid min-w-0 gap-5">
+  // 테넌트 목록을 읽었고 0개면 첫 화면은 시작 안내만 보인다. 빈 요약·경로·대기 항목은 그리지 않는다.
+  if (hasNoTenants(tenants)) return <div className="grid min-w-0 gap-5">
     <PageHeader title="대시보드" description="환경 사이의 경로를 살펴보고, 다음 이관을 준비하세요." />
-    {hasNoTenants(tenants) && <div className="rounded-xl border border-hairline bg-canvas p-6">
+    <section aria-label="시작하기" className="min-w-0 rounded-xl border border-hairline bg-canvas p-6">
+      <h3 className="mb-2 text-lg font-semibold">시작하기</h3>
+      <p className="mb-5 text-ink-secondary">CPI 테넌트를 등록하면 한 테넌트의 패키지를 다른 테넌트로 옮길 수 있습니다.</p>
+      <ol className="mb-6 grid gap-4 sm:grid-cols-3">
+        {([
+          ['테넌트 등록', '원본과 대상 테넌트를 각각 서비스 키(JSON)로 등록합니다.'],
+          ['미리보기', '새 이관에서 원본·대상과 패키지를 고르고, 대상에 쓰지 않고 결과를 먼저 확인합니다.'],
+          ['실제 이관', '미리보기를 확인한 뒤 대상 테넌트로 옮깁니다.'],
+        ] as const).map(([title, text], i) => <li key={title} className="flex min-w-0 gap-3 rounded-lg bg-surface p-4">
+          <span aria-hidden="true" className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary-soft text-sm font-semibold text-primary">{i + 1}</span>
+          <span className="min-w-0"><strong className="block font-semibold">{title}</strong><span className="mt-1 block text-sm text-ink-secondary">{text}</span></span>
+        </li>)}
+      </ol>
       <p className="mb-3">{REGISTER_TENANT_FIRST}</p>
       <Button onClick={() => navigate('tenants')}>테넌트 화면으로 이동</Button>
-    </div>}
+    </section>
+  </div>;
+
+  return <div className="grid min-w-0 gap-5">
+    <PageHeader title="대시보드" description="환경 사이의 경로를 살펴보고, 다음 이관을 준비하세요." />
     {templates.state.status === 'error' && <ErrorAlert error={templates.state.error} onRetry={templates.retry} />}
-    {!hasNoTenants(tenants) && templates.state.status === 'ok' && templateList.length === 0 && <div className="rounded-xl border border-hairline bg-canvas p-6">
+    {templates.state.status === 'ok' && templateList.length === 0 && <div className="rounded-xl border border-hairline bg-canvas p-6">
       <p className="mb-3">템플릿을 만들면 경로와 대기 항목이 보입니다</p>
       <Button onClick={() => navigate('templates')}>템플릿 만들기</Button>
     </div>}

@@ -37,7 +37,7 @@ public class ApiExceptionHandler {
             case ENVIRONMENT_NOT_CONFIGURED -> 503;
             case MAPPING_INVALID -> 422;
             case PACKAGE_NOT_FOUND, TENANT_NOT_FOUND, TEMPLATE_NOT_FOUND -> 404;
-            case TEMPLATE_STORE_UNREADABLE -> 500;
+            case TEMPLATE_STORE_UNREADABLE, AUDIT_STORE_UNREADABLE -> 500;
             case CPI_UNAVAILABLE -> 502;
             case TEMPLATE_NAME_DUPLICATE, TENANT_NAME_DUPLICATE, TENANT_READ_ONLY, TENANT_STORE_NOT_CONFIGURED,
                     TENANT_STORE_UNREADABLE, READ_ONLY_MODE -> 409;
@@ -63,6 +63,7 @@ public class ApiExceptionHandler {
             case TEMPLATE_NOT_FOUND -> "Template not found";
             case TEMPLATE_MISMATCH -> "Template does not match the requested route";
             case TEMPLATE_STORE_UNREADABLE -> "Template store unreadable";
+            case AUDIT_STORE_UNREADABLE -> "Audit store unreadable";
         };
     }
 }
