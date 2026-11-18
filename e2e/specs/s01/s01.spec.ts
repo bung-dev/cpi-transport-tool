@@ -36,7 +36,7 @@ test.afterEach(async ({ request }) => {
 });
 
 let t3Id = '';
-const PKGS_DEV = ['PkgTransportDemo', 'PkgFaultDemo', 'PkgNotInPrd'];
+const PKGS_DEV = ['PkgTransportDemo', 'PkgFaultDemo', 'PkgNotInPrd', 'PkgCreateFail'];
 
 async function ensureT3(request: any): Promise<string> {
   if (t3Id) return t3Id;

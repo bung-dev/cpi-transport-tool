@@ -128,7 +128,7 @@ test('QA-153: 다음 페이지(__next) 요청의 Accept', async ({ request }) =>
   for (const id of [idA, idB]) await call(request, 'DELETE', `${STUB[18081]}/__admin/mappings/${id}`);
   const again = await app(request, 'GET', '/packages?tenantId=DEV');
   rec.afterDeleteIds = (again.json ?? []).map((p: any) => p.id);
-  expect(rec.afterDeleteIds).toEqual(['PkgTransportDemo', 'PkgFaultDemo', 'PkgNotInPrd']);
+  expect(rec.afterDeleteIds).toEqual(['PkgTransportDemo', 'PkgFaultDemo', 'PkgNotInPrd', 'PkgCreateFail']);
 });
 
 test('QA-154: 배포 오류 상세(ErrorInformation/$value) 요청 헤더 비변경', async ({ request }) => {
