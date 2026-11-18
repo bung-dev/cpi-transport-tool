@@ -103,7 +103,8 @@ describe('REQ-623 결과의 패키지별 묶음', () => {
   it('REQ-623: 상단 합계·"구성 값 문제 N건"·"실패 아티팩트 M개"는 전체 합계이고, "문제 항목만 보기"는 묶음 안의 문제 카드만 남긴다', async () => {
     render(<TransportResult result={REAL} />);
     const region = screen.getByRole('region', { name: '이관 결과' });
-    const valueOf = (label: string) => within(region).getByText(label).nextElementSibling;
+    // 문제 카드는 처음부터 펼쳐져 구성 값 배지 "실패"도 같은 글자다. 상단 합계 타일은 DOM에서 먼저 나온다.
+    const valueOf = (label: string) => within(region).getAllByText(label)[0].nextElementSibling;
     expect(valueOf('전체')).toHaveTextContent('4');
     expect(valueOf('성공')).toHaveTextContent('3');
     expect(valueOf('실패')).toHaveTextContent('1');
