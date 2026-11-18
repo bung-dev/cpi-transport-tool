@@ -69,7 +69,7 @@ export function TransportWizard({ wizard: w }: { wizard: Wizard }) {
 function StepBar({ w }: { w: Wizard }) {
   const summary: Record<WizardStep, string | null> = {
     template: w.template ? w.template.name : w.templateDone ? '템플릿 없음' : null,
-    package: w.pkg && w.pendingPackage === null ? w.pkg.name : w.pkg?.id ?? null,
+    package: w.pkg?.name ?? null,
     artifacts: !w.pkg || (!w.preview && w.artifactIds.length === 0) ? null
       : w.artifactIds.length === 0 ? '전체' : `${w.artifactIds.length} / ${w.artifactTotal ?? '?'}개`,
     preview: null,
@@ -131,7 +131,6 @@ function TemplateStep({ w }: { w: Wizard }) {
                 <li key={t.id} aria-labelledby={nameId} className="flex min-w-0 flex-col gap-1.5 rounded-md border border-hairline p-3">
                   <p id={nameId} className="font-medium break-all">{t.name}</p>
                   <p className="text-sm break-all">{`${w.tenantName(t.sourceTenantId)} → ${w.tenantName(t.targetTenantId)}`}</p>
-                  <p className="font-mono text-[13px] text-ink-secondary break-all">{t.packageId || '실행 때 선택'}</p>
                   {!t.usable && <p className="text-sm text-danger-fg">{templateReason(t)}</p>}
                   <div className="mt-1">
                     <Button size="sm" disabled={!t.usable} onClick={() => w.applyTemplate(t)}>이 템플릿으로 시작</Button>
@@ -173,9 +172,6 @@ const ROW_BASE = 'flex min-h-10 min-w-0 cursor-pointer items-center gap-2.5 roun
 function PackageList({ w, source }: { w: Wizard; source: string }) {
   const { state, retry } = useRemote(() => getPackages(source), 'packages:' + source);
   const [query, setQuery] = useState('');
-  const { resolvePackage } = w;
-  const data = state.status === 'ok' ? state.data : null;
-  useEffect(() => { if (data && w.pendingPackage !== null) resolvePackage(data); }, [data, w.pendingPackage]);
 
   if (state.status === 'loading') return <ListSkeleton />;
   if (state.status === 'error') return <ErrorAlert error={state.error} onRetry={retry} />;
@@ -185,7 +181,6 @@ function PackageList({ w, source }: { w: Wizard; source: string }) {
   const selectedId = w.pkg?.id ?? null;
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      {w.missingPackage !== null && <p className="rounded-md bg-warning-bg px-3 py-2.5 text-warning-fg">{`템플릿의 패키지(${w.missingPackage})를 원본에서 찾을 수 없습니다. 패키지를 다시 고르세요`}</p>}
       {state.data.length === 0 ? <EmptyState title="패키지가 없습니다" /> : (
         <div className="flex min-w-0 flex-col">
           <TextInput label="패키지 검색" hideLabel icon={<SearchIcon />} placeholder="이름 또는 ID로 검색" value={query} onChange={e => setQuery(e.target.value)} />

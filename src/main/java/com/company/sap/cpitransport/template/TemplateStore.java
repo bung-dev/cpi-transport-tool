@@ -10,6 +10,8 @@ import java.util.function.UnaryOperator;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 
 @Service
 public class TemplateStore {
@@ -31,11 +33,38 @@ public class TemplateStore {
         synchronized (LOCK) { write(change.apply(read())); }
     }
 
+    public List<StoredTemplate> deleteLegacyTemplates() {
+        synchronized (LOCK) {
+            var snapshot = readSnapshot();
+            if (!snapshot.legacy()) return List.of();
+            // Commit before returning deletions for audit. A failed write preserves the old file.
+            write(List.of());
+            return snapshot.entries();
+        }
+    }
+
+    private record Snapshot(List<StoredTemplate> entries, boolean legacy) {}
+
     private List<StoredTemplate> read() {
+        var snapshot = readSnapshot();
+        if (snapshot.legacy()) throw new ApiException(Code.TEMPLATE_STORE_UNREADABLE);
+        return snapshot.entries();
+    }
+
+    private Snapshot readSnapshot() {
         try {
-            StoredTemplate[] entries = json.readerFor(StoredTemplate[].class)
+            JsonNode root = json.readerFor(JsonNode.class)
                     .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readValue(Files.readAllBytes(file));
-            if (entries == null) throw new IllegalArgumentException();
+            if (root == null || !root.isArray()) throw new IllegalArgumentException();
+            boolean legacy = false;
+            for (var entry : root) {
+                if (!entry.isObject()) throw new IllegalArgumentException();
+                if (entry.has("packageId")) {
+                    legacy = true;
+                    ((ObjectNode) entry).remove("packageId");
+                }
+            }
+            var entries = json.treeToValue(root, StoredTemplate[].class);
             var ids = new HashSet<String>();
             var names = new HashSet<String>();
             for (var t : entries) {
@@ -49,9 +78,9 @@ public class TemplateStore {
                     throw new IllegalArgumentException();
                 }
             }
-            return List.of(entries);
+            return new Snapshot(List.of(entries), legacy);
         } catch (NoSuchFileException missing) {
-            return List.of();
+            return new Snapshot(List.of(), false);
         } catch (IOException | RuntimeException ignored) {
             throw new ApiException(Code.TEMPLATE_STORE_UNREADABLE);
         }

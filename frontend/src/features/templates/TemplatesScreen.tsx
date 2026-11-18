@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { deleteTemplate, getPackages, getTemplates, saveTemplate } from '../../api/client';
+import { deleteTemplate, getTemplates, saveTemplate } from '../../api/client';
 import { toApiError, type ApiError } from '../../api/errors';
 import type { TransportTemplate } from '../../api/types';
 import { ErrorAlert } from '../../components/ErrorAlert';
@@ -33,13 +33,13 @@ export function TemplatesScreen({ initiallyCreate = false, onUse }: { initiallyC
     finally { setBusy(false); }
   }
   return <section className="grid min-w-0 gap-5">
-    <PageHeader title="템플릿" description="자주 사용하는 경로와 패키지를 저장해 이관을 준비하세요." actions={<Button variant="primary" disabled={!list.length} onClick={() => setEditing('new')}>템플릿 만들기</Button>} />
+    <PageHeader title="템플릿" description="자주 사용하는 경로를 저장해 이관을 준비하세요." actions={<Button variant="primary" disabled={!list.length} onClick={() => setEditing('new')}>템플릿 만들기</Button>} />
     {empty && <div className="grid justify-items-start gap-3"><p>테넌트를 먼저 등록해야 템플릿을 만들 수 있습니다</p><Button onClick={() => navigate('tenants')}>테넌트 화면으로 이동</Button></div>}
     {state.status === 'loading' && <p role="status">불러오는 중</p>}
     {state.status === 'error' && <ErrorAlert error={state.error} onRetry={retry} />}
     {state.status === 'ok' && (state.data.length ? <Table className="min-w-[740px]">
-      <thead><Tr>{['이름', '경로', '패키지', '상태', '작업'].map(h => <Th key={h}>{h}</Th>)}</Tr></thead>
-      <tbody>{state.data.map(t => <Tr key={t.id}><Td>{t.name}</Td><Td>{name(t.sourceTenantId)} → {name(t.targetTenantId)}</Td><Td>{t.packageId || '실행 때 선택'}</Td>
+      <thead><Tr>{['이름', '경로', '상태', '작업'].map(h => <Th key={h}>{h}</Th>)}</Tr></thead>
+      <tbody>{state.data.map(t => <Tr key={t.id}><Td>{t.name}</Td><Td>{name(t.sourceTenantId)} → {name(t.targetTenantId)}</Td>
         <Td><span className={t.usable ? 'text-success-fg' : 'text-danger-fg'}>{templateReason(t)}</span></Td>
         <Td><div className="flex flex-wrap gap-2"><Button size="sm" disabled={!t.usable} onClick={() => onUse(t)}>이 템플릿으로 이관</Button><Button size="sm" onClick={() => setEditing(t)}>수정</Button><Button size="sm" onClick={() => { setDeleting(t); setError(undefined); }}>삭제</Button></div></Td>
       </Tr>)}</tbody>
@@ -62,16 +62,14 @@ function TemplateForm({ template, onCancel, onSaved }: { template?: TransportTem
   const [name, setName] = useState(template?.name ?? '');
   const [source, setSource] = useState(template?.sourceTenantId ?? list[0]?.id ?? '');
   const [target, setTarget] = useState(template?.targetTenantId ?? list[1]?.id ?? '');
-  const [pkg, setPkg] = useState(template?.packageId ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError>();
-  const packages = useRemote(() => source && list.some(t => t.id === source) ? getPackages(source) : Promise.resolve([]), source);
   const same = source === target;
   const valid = name.trim() && !same && list.some(t => t.id === source) && list.some(t => t.id === target);
   return <form className="grid gap-4" onSubmit={async e => {
     e.preventDefault(); if (!valid || busy) return;
     setBusy(true); setError(undefined);
-    try { await saveTemplate({ name: name.trim(), sourceTenantId: source, targetTenantId: target, packageId: pkg || null }, template?.id); onSaved(); }
+    try { await saveTemplate({ name: name.trim(), sourceTenantId: source, targetTenantId: target }, template?.id); onSaved(); }
     catch (err) { setError(toApiError(err)); }
     finally { setBusy(false); }
   }}>
@@ -79,7 +77,7 @@ function TemplateForm({ template, onCancel, onSaved }: { template?: TransportTem
       <TextInput label="이름" required maxLength={60} value={name} onChange={e => setName(e.target.value)} />
       {(['원본', '대상'] as const).map(label => <div key={label} className="grid gap-2"><label htmlFor={`${id}-${label}`}>{label}</label>
         <select id={`${id}-${label}`} className="rounded-md border border-control-border bg-canvas p-2" value={label === '원본' ? source : target} onChange={e => {
-          if (label === '원본') { setSource(e.target.value); setPkg(''); } else setTarget(e.target.value);
+          if (label === '원본') setSource(e.target.value); else setTarget(e.target.value);
         }}>
           <option value="">선택하세요</option>
           {![...list.map(t => t.id), ''].includes(label === '원본' ? source : target) && <option value={label === '원본' ? source : target}>{label === '원본' ? source : target} (삭제됨)</option>}
@@ -87,14 +85,8 @@ function TemplateForm({ template, onCancel, onSaved }: { template?: TransportTem
         </select>
       </div>)}
       {same && <p className="text-warning-fg">원본과 대상이 같습니다</p>}
-      <div className="grid gap-2"><label htmlFor={`${id}-package`}>패키지</label><select id={`${id}-package`} className="min-w-0 rounded-md border border-control-border bg-canvas p-2" value={pkg} onChange={e => setPkg(e.target.value)}>
-        <option value="">실행 때 선택</option>
-        {pkg && (packages.state.status !== 'ok' || !packages.state.data.some(p => p.id === pkg)) && <option value={pkg}>{pkg}</option>}
-        {packages.state.status === 'ok' && packages.state.data.map(p => <option key={p.id} value={p.id}>{p.name} ({p.id})</option>)}
-      </select></div>
       <div className="flex gap-2"><Button type="submit" variant="primary" disabled={!valid || busy}>저장</Button><Button onClick={onCancel}>취소</Button></div>
     </fieldset>
-    {packages.state.status === 'error' && <ErrorAlert error={packages.state.error} onRetry={packages.retry} />}
     {error && <ErrorAlert error={error} />}
   </form>;
 }

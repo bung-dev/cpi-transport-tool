@@ -6,6 +6,8 @@ import com.company.sap.cpitransport.model.ErrorResponse.ApiException;
 import com.company.sap.cpitransport.model.ErrorResponse.Code;
 import com.company.sap.cpitransport.model.TemplateRef;
 import com.company.sap.cpitransport.tenant.TenantRegistry;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.util.*;
 import java.util.function.Supplier;
@@ -24,6 +26,18 @@ public class TemplateService {
         this.tenants = tenants;
         this.audit = audit;
         this.clock = clock;
+    }
+
+    @PostConstruct
+    void upgradeTemplates() {
+        try {
+            for (var t : store.deleteLegacyTemplates()) {
+                audit.append(new AuditChange("template", "deleted", t.id(), t.name(), "업그레이드로 삭제"));
+            }
+        } catch (ApiException failure) {
+            // Keep startup available; template APIs report the unreadable store.
+            LoggerFactory.getLogger(TemplateService.class).warn("Template store upgrade failed");
+        }
     }
 
     // Serialize template operations with the entire cascade, including rollback.
@@ -59,18 +73,12 @@ public class TemplateService {
                 String source = required(body, "sourceTenantId"), target = required(body, "targetTenantId");
                 if (source.equals(target) || tenants.find(source).isEmpty() || tenants.find(target).isEmpty())
                     throw new ApiException(Code.INVALID_REQUEST);
-                String packageId = null;
-                var pkg = body.get("packageId");
-                if (pkg != null && !pkg.isNull()) {
-                    if (!pkg.isString()) throw new ApiException(Code.INVALID_REQUEST);
-                    packageId = pkg.asString().isBlank() ? null : pkg.asString();
-                }
                 String folded = name.toLowerCase(Locale.ROOT);
                 if (entries.stream().anyMatch(t -> !t.id().equals(id) && t.name().toLowerCase(Locale.ROOT).equals(folded)))
                     throw new ApiException(Code.TEMPLATE_NAME_DUPLICATE);
                 var now = clock.instant();
                 var replacement = new StoredTemplate(id == null ? UUID.randomUUID().toString() : id,
-                        name, source, target, packageId, previous == null ? now : previous.createdAt(), now);
+                        name, source, target, previous == null ? now : previous.createdAt(), now);
                 var next = new ArrayList<>(entries);
                 if (previous == null) next.add(replacement); else next.set(next.indexOf(previous), replacement);
                 saved.add(replacement);
@@ -141,7 +149,7 @@ public class TemplateService {
     private static TemplateView view(StoredTemplate t, Set<String> tenantIds) {
         String reason = !tenantIds.contains(t.sourceTenantId()) ? "SOURCE_TENANT_MISSING"
                 : !tenantIds.contains(t.targetTenantId()) ? "TARGET_TENANT_MISSING" : null;
-        return new TemplateView(t.id(), t.name(), t.sourceTenantId(), t.targetTenantId(), t.packageId(),
+        return new TemplateView(t.id(), t.name(), t.sourceTenantId(), t.targetTenantId(),
                 t.createdAt(), t.updatedAt(), reason == null, reason);
     }
 }

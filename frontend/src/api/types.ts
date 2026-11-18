@@ -74,7 +74,7 @@ export interface TenantStatusItem { id: string; name: string; source: TenantSour
 export interface TenantStatusResponse { readOnly: boolean; tenants: TenantStatusItem[] }
 export interface TenantRef { id: string; name: string }
 
-export interface TemplateInput { name: string; sourceTenantId: string; targetTenantId: string; packageId?: string | null }
+export interface TemplateInput { name: string; sourceTenantId: string; targetTenantId: string }
 export interface TransportTemplate extends TemplateInput {
   id: string; createdAt: string; updatedAt: string; usable: boolean;
   unusableReason?: 'SOURCE_TENANT_MISSING' | 'TARGET_TENANT_MISSING';
