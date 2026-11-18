@@ -511,6 +511,8 @@ test('QA-221: 확인 대화상자 - 열기·닫기 반복과 문구', async ({ p
   const open = async () => {
     await realFromResult(page).click();
     await expect(dlg).toBeVisible();
+    // 20261118 S3(REQ-622): 확인창은 열 때 대상 패키지 상태를 읽는다. 확인이 끝나 "실행"이 켜진 뒤에 문구를 읽는다
+    await expect(dlg.getByRole('button', { name: '실행', exact: true })).toBeEnabled();
   };
   const readDlg = async () => ({
     name: await dlg.evaluate((d: any) => (document.getElementById(d.getAttribute('aria-labelledby') || '')?.textContent || d.getAttribute('aria-label') || '').trim()),

@@ -125,10 +125,16 @@ export const SET_B: StrSet = { name: '세트 B', pkg: W40, src: W40, tgt: W40 };
 export const SET_C: StrSet = { name: '세트 C', pkg: W40, src: '가'.repeat(40), tgt: '가'.repeat(40) };
 export const UUID_MAX = '123e4567-e89b-42d3-a456-426614174000';
 
+/** 20261118 S3(REQ-602): 이력 응답은 패키지를 `packages`로 준다(예전 줄도 서버가 바꿔 돌려준다). over의 packageId는 packages로 옮긴다. */
+const withPackages = (packageId: string, over: Record<string, any>) => {
+  const { packageId: id = packageId, ...rest } = over;
+  return { packages: [{ packageId: id, packageName: null, targetPackage: null }], ...rest };
+};
 export function rMax(s: StrSet, over: Record<string, any> = {}): any {
+  const { packages, ...rest } = withPackages(s.pkg, over);
   return {
     transportId: UUID_MAX,
-    packageId: s.pkg,
+    packages,
     dryRun: false,
     deploy: true,
     startedAt: '2026-10-20T09:00:00Z',
@@ -140,15 +146,16 @@ export function rMax(s: StrSet, over: Record<string, any> = {}): any {
     ],
     sourceTenant: { id: 's1', name: s.src },
     targetTenant: { id: 't1', name: s.tgt },
-    ...over,
+    ...rest,
   };
 }
 let uuidSeq = 0;
 export const fakeUuid = (): string => `00000000-0000-4000-8000-${String(++uuidSeq).padStart(12, '0')}`;
 export function plainRow(i: number, over: Record<string, any> = {}): any {
+  const { packages, ...rest } = withPackages(`PkgPlain${i}`, over);
   return {
     transportId: fakeUuid(),
-    packageId: `PkgPlain${i}`,
+    packages,
     dryRun: false,
     deploy: false,
     startedAt: `2026-10-19T0${i % 10}:00:00Z`,
@@ -160,7 +167,7 @@ export function plainRow(i: number, over: Record<string, any> = {}): any {
     ],
     sourceTenant: { id: 's1', name: 'DEV' },
     targetTenant: { id: 't1', name: 'PRD' },
-    ...over,
+    ...rest,
   };
 }
 /** 이력 응답 대체 (GET /transport/history). 해제 함수를 돌려준다. */
