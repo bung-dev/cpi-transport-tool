@@ -6,6 +6,7 @@ import com.company.sap.cpitransport.model.ErrorResponse.Code;
 import com.company.sap.cpitransport.model.TransportResponse;
 import com.company.sap.cpitransport.model.ArtifactResult;
 import com.company.sap.cpitransport.model.ArtifactStatus;
+import com.company.sap.cpitransport.model.TargetPackageStatus;
 import com.company.sap.cpitransport.service.TransportHistoryStore;
 import com.company.sap.cpitransport.template.TemplateService;
 import com.company.sap.cpitransport.tenant.TenantRegistry;
@@ -64,11 +65,22 @@ public class DashboardService {
             String source = t.sourceTenant() == null ? "DEV" : t.sourceTenant().id();
             String target = t.targetTenant() == null ? "PRD" : t.targetTenant().id();
             var perPackage = new LinkedHashMap<String, List<ArtifactResult>>();
+            var unavailablePackages = new HashSet<String>();
+            // Include empty packages in request order, including normalized legacy history.
+            if (t.packages() != null) {
+                for (var pkg : t.packages()) {
+                    perPackage.computeIfAbsent(pkg.packageId(), key -> new ArrayList<>());
+                    var status = pkg.targetPackage();
+                    if (status != null && status != TargetPackageStatus.EXISTING && status != TargetPackageStatus.CREATED)
+                        unavailablePackages.add(pkg.packageId());
+                }
+            }
             for (var result : t.results()) {
                 perPackage.computeIfAbsent(result.packageId(), key -> new ArrayList<>()).add(result);
             }
             for (var entry : perPackage.entrySet()) {
-                if (entry.getValue().stream().anyMatch(r -> r.status() == ArtifactStatus.FAILED)) continue;
+                if (unavailablePackages.contains(entry.getKey())
+                        || entry.getValue().stream().anyMatch(r -> r.status() == ArtifactStatus.FAILED)) continue;
                 arrivals.merge(new Arrival(entry.getKey(), target), new PackageArrival(t, entry.getValue().size()),
                         (a, b) -> a.transport().startedAt().isBefore(b.transport().startedAt()) ? b : a);
                 departures.merge(new Departure(entry.getKey(), source, target), t.startedAt(),
