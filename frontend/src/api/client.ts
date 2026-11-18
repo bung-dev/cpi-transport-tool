@@ -36,6 +36,10 @@ export function getArtifacts(packageId: string, tenantId?: string): Promise<Arti
   return request(`/packages/${encodeURIComponent(packageId)}/artifacts${tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : ''}`);
 }
 
+export function getTargetPackageStatus(tenantId: string, packageIds: string[]): Promise<{ packageId: string; exists: boolean }[]> {
+  return request(`/packages/target-status?tenantId=${encodeURIComponent(tenantId)}&packageIds=${packageIds.map(encodeURIComponent).join(',')}`);
+}
+
 export function postTransport(body: TransportRequest): Promise<TransportResponse> {
   return request('/transport', {
     method: 'POST',

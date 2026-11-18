@@ -67,7 +67,7 @@ export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
         {expanded && (
           <div id={bodyId} className="flex min-w-0 flex-col gap-3">
             {r.error && (
-              <Callout tone="danger" title={<span className="font-mono">{r.error.code}</span>}>
+              <Callout tone="danger" title={<>{r.error.code === 'PACKAGE_CREATE_FAILED' && <span>패키지 생성 실패</span>} <span className="font-mono">{r.error.code}</span></>}>
                 {r.error.message}
               </Callout>
             )}

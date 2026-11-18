@@ -1,3 +1,4 @@
+import { packageSummary } from '../../lib/packageSummary';
 import { getHistory } from '../../api/client';
 import type { DashboardNode, DashboardQueueItem, TransportTemplate } from '../../api/types';
 import { ErrorAlert } from '../../components/ErrorAlert';
@@ -45,7 +46,7 @@ export function NodeDrawer({ node, templates, queue, onClose }: {
         {history.state.status === 'loading' && <p role="status">이력을 불러오는 중</p>}
         {history.state.status === 'error' && <ErrorAlert error={history.state.error} onRetry={history.retry} />}
         <ul aria-label="최근 이관" className="grid gap-3">{recent.map(item => <li key={item.transportId} className="min-w-0 rounded-lg border border-hairline p-3">
-          <p className="break-all font-medium">{item.packageId}</p>
+          <p className="break-all font-medium">{packageSummary(item.packages)}</p>
           <p className="mt-1 break-all text-sm text-ink-secondary">{item.sourceTenant?.name ?? '원본'} → {item.targetTenant?.name ?? '대상'}</p>
           <p className="mt-1 text-xs text-ink-secondary">{formatTime(item.startedAt)} · {item.dryRun ? '미리보기' : '실제 이관'}</p>
         </li>)}</ul>
