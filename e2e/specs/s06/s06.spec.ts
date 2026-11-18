@@ -174,7 +174,7 @@ test('QA-199: 실제 백엔드 이력의 40자 테넌트 이름', async ({ page,
     await openTab(page, '이관');
     await startManual(page);
     await setRoute(page, SRC, TGT);
-    await expect(page.getByRole('list', { name: '패키지 목록' }).getByRole('radio').first()).toBeVisible();
+    await expect(page.getByRole('list', { name: '패키지 목록' }).getByRole('checkbox').first()).toBeVisible();
     // S3b(REQ-423): 미리보기 → "이 구성으로 실제 이관" → 확인창
     const { real: out } = await realFlow(page);
     rec.run = { http: out.status, summary: out.body?.summary, transportId: out.body?.transportId, request: out.postData };

@@ -10,7 +10,7 @@ import { TransportResult } from './TransportResult';
 
 const BASE: TransportResponse = {
   transportId: 't-1',
-  packageId: 'PkgTransportDemo',
+  packages: [{ packageId: 'PkgTransportDemo', packageName: 'Transport Demo', targetPackage: 'NOT_CHECKED' }],
   dryRun: true,
   deploy: false,
   startedAt: '2026-09-29T07:05:05.351940500Z',
@@ -61,14 +61,14 @@ afterEach(() => vi.unstubAllGlobals());
 const expandAll = () => userEvent.click(screen.getByRole('button', { name: '모두 펼치기' }));
 
 describe('이관 결과', () => {
-  it('REQ-006 AC-1: 머리 정보(transportId, packageId, 미리보기/배포 예·아니오, 시각, 요약)', () => {
+  it('REQ-006 AC-1·REQ-623: 머리 정보(transportId, 패키지 요약, 미리보기/배포 예·아니오, 시각, 요약)', () => {
     render(<TransportResult result={BASE} />);
     expect(screen.getByRole('heading', { name: '이관 결과' })).toBeInTheDocument();
-    const region = screen.getByRole('region');
+    const region = screen.getByRole('region', { name: '이관 결과' });
     // 표현이 라벨/값 분리로 바뀌었다(REQ-105 AC-1): 라벨과 값을 각각 확인한다.
     const valueOf = (label: string) => within(region).getByText(label).nextElementSibling;
     expect(valueOf('이관 ID')).toHaveTextContent('t-1');
-    expect(valueOf('패키지 ID')).toHaveTextContent('PkgTransportDemo');
+    expect(valueOf('패키지')).toHaveTextContent('Transport Demo');
     expect(within(region).getByText('미리보기')).toBeInTheDocument();
     expect(within(region).queryByText('실제 이관')).toBeNull();
     expect(within(region).queryByText('배포', { selector: 'span.rounded-full' })).toBeNull();
@@ -132,7 +132,7 @@ describe('이관 결과', () => {
     expect(container).toHaveTextContent('"><svg onload=alert(3)>');
     expect(container).toHaveTextContent('<b>bold</b>');
     expect(container).toHaveTextContent('<iframe src=about:blank>');
-    expect(container.querySelector('script, img, iframe, b, i')).toBeNull();
+    expect(container.querySelector('script, img, iframe, b, i, u')).toBeNull();
     // 아이콘 SVG는 컴포넌트가 그린 자리(접기 버튼, 오류 Callout)의 2개뿐이다: 서버 문자열이 svg 요소를 만들지 않는다.
     expectOnlyComponentIcons(container, 2);
   });
@@ -174,9 +174,9 @@ describe('이관 결과', () => {
     expect(num('성공').parentElement?.parentElement?.className).toContain('grid-cols-3');
   });
 
-  it('REQ-105 AC-1: 메타 정보 4개(이관 ID, 패키지 ID, 시작, 종료)의 ID 값은 고정폭이고 시각은 로컬 시간 초 단위다', () => {
+  it('REQ-105 AC-1·REQ-623: 메타 정보 4개(이관 ID, 패키지, 시작, 종료)가 있고 ID 값(이관 ID, 패키지 묶음 제목의 패키지 ID)은 고정폭이며 시각은 로컬 시간 초 단위다', () => {
     render(<TransportResult result={BASE} />);
-    const labels = ['이관 ID', '패키지 ID', '시작', '종료'].map((l) => screen.getByText(l));
+    const labels = ['이관 ID', '패키지', '시작', '종료'].map((l) => screen.getByText(l));
     expect(labels.map((e) => e.tagName)).toEqual(['DT', 'DT', 'DT', 'DT']);
     expect(screen.getByText('t-1').className).toContain('font-mono');
     expect(screen.getByText('PkgTransportDemo').className).toContain('font-mono');
@@ -238,7 +238,7 @@ describe('이관 결과', () => {
     const result: TransportResponse = {
       ...BASE,
       transportId: '<script>alert(1)</script>',
-      packageId: '<img src=x onerror=alert(2)>',
+      packages: [{ packageId: '<img src=x onerror=alert(2)>', packageName: '<u>name</u>', targetPackage: 'CREATED' }],
       results: [
         {
           artifactId: '<script>alert(3)</script>',
@@ -254,10 +254,10 @@ describe('이관 결과', () => {
       ],
     };
     const { container } = render(<TransportResult result={result} />);
-    for (const t of ['<script>alert(1)</script>', '<img src=x onerror=alert(2)>', '<script>alert(3)</script>', '<b>code</b>', '<iframe src=about:blank></iframe>', '<i>k</i>', '<script>b</script>', '"><svg onload=alert(4)>']) {
+    for (const t of ['<script>alert(1)</script>', '<img src=x onerror=alert(2)>', '<u>name</u>', '<script>alert(3)</script>', '<b>code</b>', '<iframe src=about:blank></iframe>', '<i>k</i>', '<script>b</script>', '"><svg onload=alert(4)>']) {
       expect(container).toHaveTextContent(t);
     }
-    expect(container.querySelector('script, img, iframe, b, i')).toBeNull();
+    expect(container.querySelector('script, img, iframe, b, i, u')).toBeNull();
     expectOnlyComponentIcons(container, 2);
   });
 

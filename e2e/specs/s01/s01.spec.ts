@@ -18,7 +18,7 @@ import {
   openRouteDialog,
   openTransport,
   packageIds,
-  pkgRadios,
+  pkgChecks,
   radiosOf,
   routeDialog,
   selectedOf,
@@ -249,7 +249,7 @@ test('QA-145: 방향키로 원본을 대상과 같게 옮길 때', async ({ page
   // QA-T3(127.0.0.1:18082)의 패키지 목록은 이 스텁에서 읽기 오류가 날 수 있다. 목록이 아니라 패키지 단계가 된 것을 기다린다.
   await expect(stepBtn(page, '패키지')).toHaveAttribute('aria-current', 'step');
   await page.waitForTimeout(500);
-  rec.step5 = { packageChecked: await checkedLabels(pkgRadios(page)), nextDisabled: await blocked(next), artifactStepDisabled: await stepBtn(page, '아티팩트').isDisabled() };
+  rec.step5 = { packageChecked: await checkedLabels(pkgChecks(page)), nextDisabled: await blocked(next), artifactStepDisabled: await stepBtn(page, '아티팩트').isDisabled() };
   await shot(page, 'QA-145-different');
   expect(rec.step5.packageChecked, '적용 뒤 패키지 선택 없음').toEqual([]);
   expect(rec.step5.nextDisabled, '패키지를 고르지 않았으므로 "다음" 비활성(또는 목록 오류로 없음)').toBe(true);
@@ -276,14 +276,14 @@ test('QA-146: 키보드만으로 미리보기 시작', async ({ page, request })
   rec.request = out.postData;
   rec.response = { status: out.status, dryRun: out.body?.dryRun, summary: out.body?.summary, results: (out.body?.results ?? []).map((r: any) => `${r.artifactId}:${r.status}`) };
   expect(out.status).toBe(200);
-  expect(out.postData.packageId).toBe('PkgTransportDemo');
+  // 20261118 S3(REQ-601·621): 아티팩트를 건드리지 않으면 모두 선택이고 패키지 전체로(artifactIds 없이) 보낸다
+  expect(out.postData.packages).toEqual([{ packageId: 'PkgTransportDemo' }]);
+  expect(out.postData).not.toHaveProperty('packageId');
   expect(out.postData.sourceTenantId).toBe('DEV');
   expect(out.postData.targetTenantId).toBe('PRD');
   expect(out.postData.dryRun).toBe(true);
   const sel: string[] = steps.checkedArtifacts;
-  const reqIds = out.postData.artifactIds;
-  if (sel.length === 0) expect(reqIds === undefined || reqIds === null || (Array.isArray(reqIds) && reqIds.length === 0), `artifactIds 기본값 일치 (조작 없음, 요청=${JSON.stringify(reqIds)})`).toBe(true);
-  else expect(reqIds.length).toBe(sel.length);
+  expect(sel, '처음엔 모든 아티팩트가 선택돼 있다').toEqual(['IF_Order_Sync', 'IF_Customer_Push']);
   await expect(page.getByRole('region', { name: '이관 결과' })).toBeVisible();
   await expect(page.getByRole('region', { name: '이관 결과' }).getByRole('heading', { name: 'IF_Order_Sync', level: 4 })).toBeVisible();
   rec.resultSummaryText = (await page.getByRole('region', { name: '이관 결과' }).innerText()).slice(0, 300);
@@ -320,7 +320,7 @@ test('QA-147: 패키지 선택 뒤 방향키로 원본 변경', async ({ page, r
   };
   const readState = async () => ({
     current: await stepBtn(page, '패키지').getAttribute('aria-current'),
-    packageChecked: await checkedLabels(pkgRadios(page)),
+    packageChecked: await checkedLabels(pkgChecks(page)),
     nextDisabled: await blocked(page.getByRole('button', { name: '다음', exact: true })),
     allPreviewDisabled: await blocked(page.getByRole('button', { name: '전체 아티팩트로 미리보기', exact: true })),
     artifactStepDisabled: await stepBtn(page, '아티팩트').isDisabled(),

@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TransportResponse } from '../../api/types';
-import { json, mockApi } from '../../test/mockFetch';
+import { json, mockApi, packagesOf } from '../../test/mockFetch';
 import { tpl } from '../../test/appRoutes';
 import { HistoryTab } from './HistoryTab';
 
@@ -13,7 +13,7 @@ const entry = (id: string, over: Partial<TransportResponse> = {}): TransportResp
   sourceTenant: { id: 'DEV', name: 'DEV' },
   targetTenant: { id: 'PRD', name: 'PRD' },
   transportId: id,
-  packageId: 'PkgH',
+  packages: packagesOf('PkgH'),
   dryRun: true,
   deploy: false,
   startedAt: '2026-11-16T01:00:00Z',

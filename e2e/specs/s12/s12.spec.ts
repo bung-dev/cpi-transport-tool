@@ -151,8 +151,8 @@ test('REQ-413·REQ-610: 템플릿 화면에서 만든 템플릿(경로만)이 �
   await expect(page).toHaveURL(/#\/transport$/);
   await expect(page.getByRole('banner').getByRole('group', { name: '경로' })).toContainText('DEV');
   const pkgList = page.getByRole('list', { name: '패키지 목록' });
-  await expect(pkgList.getByRole('radio').first()).toBeVisible();
-  await expect(pkgList.getByRole('radio', { checked: true })).toHaveCount(0);
+  await expect(pkgList.getByRole('checkbox').first()).toBeVisible();
+  await expect(pkgList.getByRole('checkbox', { checked: true })).toHaveCount(0);
 });
 
 test('REQ-414: 테넌트 변경이 감사 이력에 남고 분류 필터로 좁힌다', async ({ page, request }) => {
@@ -201,7 +201,7 @@ test('REQ-403·REQ-425: 템플릿으로 시작한 화면 실제 이관은 templa
   const card = page.getByRole('listitem', { name: NAME });
   await card.getByRole('button', { name: '이 템플릿으로 시작', exact: true }).click();
   // REQ-610: 템플릿은 경로만 채우고 패키지는 비어 있다
-  const demo = page.getByRole('list', { name: '패키지 목록' }).getByRole('radio', { name: /PkgTransportDemo/ });
+  const demo = page.getByRole('list', { name: '패키지 목록' }).getByRole('checkbox', { name: /PkgTransportDemo/ });
   await expect(demo).not.toBeChecked();
   await demo.check();
   await page.getByRole('button', { name: '다음', exact: true }).click();

@@ -215,7 +215,7 @@ export async function startManual(page: Page): Promise<void> {
 export async function openTransport(page: Page): Promise<void> {
   await openWizard(page);
   await startManual(page);
-  await expect(pkgRadios(page).first()).toBeVisible();
+  await expect(pkgChecks(page).first()).toBeVisible();
 }
 /** 버튼이 없거나(원본 없음·목록 읽기 오류로 패키지 목록을 그리지 않음) 비활성이면 진행할 수 없다. */
 export const blocked = async (loc: Locator): Promise<boolean> => (await loc.count()) === 0 || (await loc.isDisabled());
@@ -236,13 +236,14 @@ export async function setRoute(page: Page, source: string, target: string): Prom
   await grp(page, '대상').getByRole('radio', { name: target, exact: true }).check();
   await applyRoute(page);
 }
-export const pkgRadios = (page: Page) => page.getByRole('list', { name: '패키지 목록' }).getByRole('radio');
+// 20261118 S3(REQ-620): 패키지 단계는 체크 목록이다(여러 개 선택).
+export const pkgChecks = (page: Page) => page.getByRole('list', { name: '패키지 목록' }).getByRole('checkbox');
 /** 체크된 입력(라디오·체크박스)의 label 텍스트 */
 export const checkedLabels = (loc: Locator): Promise<string[]> =>
   loc.evaluateAll((es) => es.filter((e: any) => e.checked).map((e: any) => (e.labels?.[0]?.textContent || '').trim()));
 /** 패키지 단계에서 패키지만 고른다(단계는 그대로). */
 export async function pickPackage(page: Page, id: string): Promise<void> {
-  await page.getByRole('list', { name: '패키지 목록' }).getByRole('radio', { name: new RegExp(id) }).first().check();
+  await page.getByRole('list', { name: '패키지 목록' }).getByRole('checkbox', { name: new RegExp(id) }).first().check();
 }
 /** 패키지를 고르고 "다음"으로 아티팩트 단계(표)까지 간다. */
 export async function choosePackage(page: Page, id: string): Promise<void> {
@@ -251,13 +252,15 @@ export async function choosePackage(page: Page, id: string): Promise<void> {
   await expect(artifactGrid(page)).toBeVisible();
 }
 export async function packageIds(page: Page): Promise<string[]> {
-  const names = await pkgRadios(page).evaluateAll((es) => es.map((e: any) => (e.labels?.[0]?.textContent || '').trim()));
+  const names = await pkgChecks(page).evaluateAll((es) => es.map((e: any) => (e.labels?.[0]?.textContent || '').trim()));
   return names.map((n) => (n.match(/(Pkg[A-Za-z]+)/) || [, n])[1] as string);
 }
 // S3b(REQ-422): 아티팩트는 체크박스 목록이 아니라 한 열 grid다. 행의 ID 글자로 찾는다.
 export const artifactGrid = (page: Page) => page.getByRole('grid', { name: '이관할 아티팩트', exact: true });
 export const artifactRow = (page: Page, id: string) => artifactGrid(page).getByRole('row').filter({ has: page.getByText(id, { exact: true }) });
+/** 고른 패키지의 아티팩트를 ids만 남긴다. 20261118 S3(REQ-621): 처음엔 모두 선택돼 있으므로 "모두 해제" 뒤에 고른다. */
 export async function selectArtifacts(page: Page, ids: string[]): Promise<void> {
+  await page.getByRole('button', { name: '모두 해제', exact: true }).click();
   for (const id of ids) {
     await artifactRow(page, id).click();
     await expect(artifactRow(page, id)).toHaveAttribute('aria-selected', 'true');
@@ -541,7 +544,7 @@ export async function kbdFlow(page: Page, w: Watch, targetName = 'PRD'): Promise
   steps.manualTab = (await keysTo(page, isBtn('템플릿 없이 진행'), '"템플릿 없이 진행" 버튼')).presses;
   await page.keyboard.press('Enter');
   await expect(stepBtn(page, '패키지')).toHaveAttribute('aria-current', 'step');
-  await expect(pkgRadios(page).first()).toBeVisible();
+  await expect(pkgChecks(page).first()).toBeVisible();
   steps.routeTab = (await keysTo(page, isBtn('경로 변경'), '"경로 변경" 버튼')).presses;
   await page.keyboard.press('Enter');
   await expect(routeDialog(page)).toBeVisible();
@@ -574,32 +577,22 @@ export async function kbdFlow(page: Page, w: Watch, targetName = 'PRD'): Promise
   await page.keyboard.press('Enter');
   await expect(routeDialog(page)).toHaveCount(0);
   await expect(routeBar(page)).toContainText(`DEV → ${targetName}`);
-  await expect(pkgRadios(page).first()).toBeVisible();
-  const n3 = await keysTo(page, (i) => i.tag === 'INPUT' && i.type === 'radio' && i.group === '패키지 목록', '패키지 목록 라디오', 'Tab', 60);
+  await expect(pkgChecks(page).first()).toBeVisible();
+  // 20261118 S3(REQ-620): 패키지는 체크박스마다 Tab 정지이고 Space로 체크한다.
+  const n3 = await keysTo(page, (i) => i.tag === 'INPUT' && i.type === 'checkbox' && i.group === '패키지 목록' && /PkgTransportDemo/.test(i.name), '패키지 목록 PkgTransportDemo 체크박스', 'Tab', 60);
   steps.packageTab = n3.presses;
   steps.packageEntry = pickInfo(n3.info);
-  const seen: any[] = [];
-  for (let i = 0; i < 5; i++) {
-    const cur = await active(page);
-    if (/PkgTransportDemo/.test(cur.name) && cur.checked) break;
-    await page.keyboard.press('ArrowUp');
-    await page.waitForTimeout(250);
-    seen.push(pickInfo(await active(page)));
-  }
-  await page.keyboard.press('ArrowDown');
-  await page.waitForTimeout(300);
-  const down = pickInfo(await active(page));
-  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press(' ');
   await page.waitForTimeout(300);
   const fin = await active(page);
-  steps.packageKeys = { upward: seen, afterArrowDown: down, afterArrowUp: pickInfo(fin) };
+  steps.packageKeys = { afterSpace: pickInfo(fin) };
   expect(fin.name, '키보드로 선택한 패키지').toMatch(/PkgTransportDemo/);
   expect(fin.checked).toBe(true);
-  steps.selectedPackage = await checkedLabels(pkgRadios(page));
+  steps.selectedPackage = await checkedLabels(pkgChecks(page));
   steps.nextTab = (await keysTo(page, isBtn('다음'), '"다음" 버튼')).presses;
   await page.keyboard.press('Enter');
   await expect(artifactGrid(page)).toBeVisible();
-  // 아티팩트는 건드리지 않는다(0개 = 패키지 전체)
+  // 아티팩트는 건드리지 않는다(처음엔 모두 선택 = 패키지 전체, REQ-621)
   steps.checkedArtifacts = await selectedArtifacts(page);
   const n4 = await keysTo(page, isBtn('미리보기 실행'), '"미리보기 실행" 버튼', 'Tab', 60);
   steps.buttonTab = n4.presses;

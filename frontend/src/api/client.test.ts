@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getArtifacts, getHistory, getPackages, postTransport } from './client';
+import { getArtifacts, getHistory, getPackages, getTargetPackageStatus, postTransport } from './client';
 import { toApiError, type ApiError } from './errors';
 
 function mockFetch(impl: () => Promise<Response>) {
@@ -71,17 +71,20 @@ describe('API 클라이언트 URL', () => {
     await getPackages();
     await getArtifacts('Pkg A/b?c');
     await getHistory();
-    await postTransport({ packageId: 'P', dryRun: true, deploy: false });
+    await postTransport({ packages: [{ packageId: 'P' }], dryRun: true, deploy: false });
+    // 20261118 S3 REQ-603·622: 대상 패키지 확인. 값은 하나씩 인코딩하고 쉼표로 잇는다
+    await getTargetPackageStatus('PRD 1', ['A', 'B/c']);
     const urls = fn.mock.calls.map((c) => String(c[0]));
     expect(urls).toEqual([
       '/packages',
       '/packages/Pkg%20A%2Fb%3Fc/artifacts',
       '/transport/history',
       '/transport',
+      '/packages/target-status?tenantId=PRD%201&packageIds=A,B%2Fc',
     ]);
     expect(urls.every((u) => u.startsWith('/') && !u.startsWith('//'))).toBe(true);
     const post = fn.mock.calls[3][1] as RequestInit;
     expect(post.method).toBe('POST');
-    expect(JSON.parse(post.body as string)).toEqual({ packageId: 'P', dryRun: true, deploy: false });
+    expect(JSON.parse(post.body as string)).toEqual({ packages: [{ packageId: 'P' }], dryRun: true, deploy: false });
   });
 });

@@ -37,7 +37,7 @@ import {
   openTab,
   openTransport,
   openWizard,
-  pkgRadios,
+  pkgChecks,
   previewBtn,
   realBtn,
   realFromResult,
@@ -62,7 +62,7 @@ test.afterEach(async ({ request }) => {
   await after(request);
 });
 
-const PUBLIC_KEYS = ['transportId', 'packageId', 'dryRun', 'deploy', 'startedAt', 'finishedAt', 'summary', 'results', 'sourceTenant', 'targetTenant'];
+const PUBLIC_KEYS = ['transportId', 'packages', 'dryRun', 'deploy', 'startedAt', 'finishedAt', 'summary', 'results', 'sourceTenant', 'targetTenant'];
 
 /** H-8 스캔 한 번. 결과를 rec.scans 에 쌓고 옛 명칭이 나오면 (soft) 실패로 센다. */
 async function scan(page: Page, rec: any, state: string, w: Watch, mask: string[] = []): Promise<ScanResult> {
@@ -147,7 +147,7 @@ test('QA-216: 미리보기 실행 - 결과 머리 배지, 요청 본문, 응답 
   expect(out.postData.dryRun, '요청 dryRun').toBe(true);
   expect(out.postData.sourceTenantId).toBe('DEV');
   expect(out.postData.targetTenantId).toBe('PRD');
-  expect(out.postData.packageId).toBe('PkgTransportDemo');
+  expect(out.postData.packages?.[0]?.packageId).toBe('PkgTransportDemo');
   expect(body.dryRun, '응답 dryRun 불리언 true').toBe(true);
   expect(Object.keys(body)).toEqual(expect.arrayContaining(PUBLIC_KEYS));
   rec.extraResponseKeys_INFO = Object.keys(body).filter((k) => !PUBLIC_KEYS.includes(k));
@@ -644,7 +644,7 @@ test('QA-222: 오류·안내 상태 전수', async ({ page, request }) => {
   for (const [nm, mode] of [['abort', ABORT], ['500json', JSON500], ['500html', HTML500]] as const) {
     const off = await replaceWith(isArtifacts, 'GET', mode, `GET /packages/*/artifacts -> ${nm}`);
     await openTransport(page);
-    await pkgRadios(page).first().check();
+    await pkgChecks(page).first().check();
     await page.getByRole('button', { name: '다음', exact: true }).click();
     await expect(page.getByRole('alert').first()).toBeVisible();
     await guide(`아티팩트목록-${nm}`);
@@ -828,7 +828,7 @@ test('QA-223: 사용자가 입력한 데이터는 치환되지 않는다', async
   expect.soft(rec.tenantTabItems.some((s: string) => s.includes(NAME)), '테넌트 탭 목록에 입력한 이름 그대로').toBe(true);
   await openTab(page, '이관');
   await startManual(page);
-  await expect(pkgRadios(page).first()).toBeVisible();
+  await expect(pkgChecks(page).first()).toBeVisible();
   await page.getByRole('group', { name: '이관 경로' }).getByRole('button', { name: '경로 변경', exact: true }).click();
   const targetRadio = page.getByRole('dialog', { name: '원본과 대상 선택' }).getByRole('radiogroup', { name: '대상', exact: true }).getByRole('radio', { name: NAME, exact: true });
   rec.targetRadioCount = await targetRadio.count();

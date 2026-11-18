@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TenantsResponse, TenantStatusResponse, TransportRequest, TransportResponse } from '../../api/types';
 import { ARTIFACTS, PACKAGES, json, mockApi } from '../../test/mockFetch';
 import { baseRoutes, navLink, renderAt, tpl } from '../../test/appRoutes';
-import { currentStep, findArtifactGrid, postBodies, routeBar, stepButton } from '../../test/wizard';
+import { currentStep, findArtifactGrid, findPackageSection, postBodies, routeBar, stepButton } from '../../test/wizard';
 
 // S4 REQ-430 대시보드. 앱 전체를 #/dashboard로 그려 확인한다.
 // 데이터: GET /dashboard(?templateId=)의 nodes·edges·queue·today, GET /templates(이름·필터·0개 판단),
@@ -41,12 +41,12 @@ const DASH = {
 };
 const DASH_QP = { ...DASH, edges: [DASH.edges[0]], queue: [Q_QAS] };
 const preview = (body: TransportRequest): TransportResponse => ({
-  transportId: 't-dry', packageId: body.packageId, dryRun: true, deploy: false,
+  transportId: 't-dry', packages: body.packages.map((p) => ({ packageId: p.packageId, packageName: null, targetPackage: 'NOT_CHECKED' as const })), dryRun: true, deploy: false,
   startedAt: '2026-11-16T03:00:00Z', finishedAt: '2026-11-16T03:00:01Z', summary: { total: 0, succeeded: 0, failed: 0 }, results: [],
   sourceTenant: { id: body.sourceTenantId ?? '', name: '품질' }, targetTenant: { id: body.targetTenantId ?? '', name: '운영' },
 });
 const hist = (i: number, src: string, tgt: string): TransportResponse => ({
-  transportId: `t-h${i}`, packageId: `PkgHist${i}`, dryRun: i % 2 === 0, deploy: false,
+  transportId: `t-h${i}`, packages: [{ packageId: `PkgHist${i}`, packageName: null, targetPackage: null }], dryRun: i % 2 === 0, deploy: false,
   startedAt: `2026-11-1${i}T01:00:00Z`, finishedAt: `2026-11-1${i}T01:00:01Z`, summary: { total: 1, succeeded: 1, failed: 0 }, results: [],
   sourceTenant: { id: src, name: src }, targetTenant: { id: tgt, name: tgt },
 });
@@ -148,7 +148,36 @@ describe('REQ-430 대시보드', () => {
     expect(postBodies(fn)).toEqual([]);
     await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('region', { name: '이관 결과' });
-    expect(postBodies(fn)).toEqual([{ packageId: 'PkgTransportDemo', dryRun: true, deploy: false, sourceTenantId: 'QAS', targetTenantId: 'PRD', templateId: 'tp-qp' }]);
+    expect(postBodies(fn)).toEqual([{ packages: [{ packageId: 'PkgTransportDemo' }], dryRun: true, deploy: false, sourceTenantId: 'QAS', targetTenantId: 'PRD', templateId: 'tp-qp' }]);
+  });
+
+  it('REQ-612: "전달"로 연 새 이관에서 패키지 단계로 가면 그 패키지가 선택돼 있고 패키지를 더 골라 함께 미리보기할 수 있다(템플릿 연결 유지)', async () => {
+    const fn = mockApi(routes({
+      'GET /packages/PkgTransportDemo/artifacts?tenantId=QAS': () => json(ARTIFACTS),
+      'GET /packages/PkgFaultDemo/artifacts?tenantId=QAS': () => json([{ id: 'IF_Fault', name: 'Fault', version: '1.0.0' }]),
+      'GET /packages?tenantId=QAS': () => json(PACKAGES),
+      'POST /transport': (init) => json(preview(JSON.parse(String(init?.body)))),
+    }));
+    renderAt('#/dashboard');
+    const queue = within(await queueRegion());
+    await waitFor(() => expect(queue.getAllByRole('listitem')).toHaveLength(2));
+    const item = queue.getAllByRole('listitem').find((li) => li.textContent?.includes('PkgTransportDemo'))!;
+    await userEvent.click(within(item).getByRole('button', { name: '전달' }));
+    await findArtifactGrid();
+    await userEvent.click(stepButton('패키지'));
+    expect(await screen.findByRole('checkbox', { name: /Transport Demo/ })).toBeChecked();
+    await userEvent.click(screen.getByRole('checkbox', { name: /Fault Demo/ }));
+    await userEvent.click(screen.getByRole('button', { name: '다음' }));
+    await findPackageSection('PkgFaultDemo');
+    await findPackageSection('PkgTransportDemo');
+    expect(stepButton('패키지')).toHaveTextContent('Transport Demo 외 1개');
+    expect(postBodies(fn)).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
+    await screen.findByRole('region', { name: '이관 결과' });
+    expect(postBodies(fn)).toEqual([{
+      packages: [{ packageId: 'PkgTransportDemo' }, { packageId: 'PkgFaultDemo' }],
+      dryRun: true, deploy: false, sourceTenantId: 'QAS', targetTenantId: 'PRD', templateId: 'tp-qp',
+    }]);
   });
 
   it('REQ-430: 템플릿 필터는 모든 템플릿과 각 템플릿을 고를 수 있고, 고르면 그 템플릿의 경로와 대기 항목만 남는다', async () => {

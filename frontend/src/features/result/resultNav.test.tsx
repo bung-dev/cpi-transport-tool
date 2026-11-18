@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ArtifactResult, TransportResponse } from '../../api/types';
+import { packagesOf } from '../../test/mockFetch';
 import { TransportResult } from './TransportResult';
 
 // S3 REQ-424·REQ-511: 결과 머리(경로·템플릿 이름), "구성 값 문제 N건"·"실패 아티팩트 M개", 왼쪽 탐색 목록 → 오른쪽 상세 카드.
@@ -16,7 +17,7 @@ const RESULT: TransportResponse = {
   targetTenant: { id: 'QA', name: '품질' },
   template: { id: 'tpl-1', name: '개발→품질 정기' },
   transportId: 't-nav',
-  packageId: 'PkgNav',
+  packages: packagesOf('PkgNav'),
   dryRun: true,
   deploy: false,
   startedAt: '2026-11-16T01:00:00Z',
