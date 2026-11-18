@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ArtifactResult, DeployStatus, TransportResponse } from '../../api/types';
-import { json, mockApi } from '../../test/mockFetch';
+import { json, mockApi, packagesOf } from '../../test/mockFetch';
 import { HistoryTab } from './HistoryTab';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -15,7 +15,7 @@ function entry(id: string, statuses: DeployStatus[], overrides: Partial<Transpor
       detail: '첫 줄\n둘째 줄 <img src=x>', detailHttpStatus: 200 } : null,
   }));
   return {
-    transportId: id, packageId: 'PkgFaultDemo', dryRun: false, deploy: true,
+    transportId: id, packages: packagesOf('PkgFaultDemo'), dryRun: false, deploy: true,
     startedAt: '2026-10-14T00:00:00Z', finishedAt: '2026-10-14T00:01:00Z',
     summary: { total: results.length, succeeded: results.filter((r) => r.status === 'SUCCESS').length,
       failed: results.filter((r) => r.status === 'FAILED').length },

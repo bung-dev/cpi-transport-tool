@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Tenant, TenantsResponse, TenantStatusResponse } from '../../api/types';
-import { ARTIFACTS, json, mockApi, PACKAGES } from '../../test/mockFetch';
+import { ARTIFACTS, json, mockApi, PACKAGES, respondTo } from '../../test/mockFetch';
 import { baseRoutes, navLink, renderAt, routeGroup, tpl } from '../../test/appRoutes';
 import { artifactRow, currentStep, findArtifactGrid, postBodies, startManual, stepButton, toArtifacts } from '../../test/wizard';
 
@@ -32,9 +32,9 @@ function setup(hash = '', extra: Parameters<typeof mockApi>[0] = {}) {
       'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json(ARTIFACTS),
       'POST /transport': (init) => {
         const body = JSON.parse(init?.body as string);
-        return json({ transportId: body.dryRun ? 't-dry' : 't-real', packageId: body.packageId, dryRun: body.dryRun, deploy: body.deploy,
-          startedAt: '', finishedAt: '', summary: { total: 0, succeeded: 0, failed: 0 }, results: [] });
+        return json(respondTo(body, { startedAt: '', finishedAt: '', summary: { total: 0, succeeded: 0, failed: 0 }, results: [] }));
       },
+      'GET /packages/target-status?tenantId=PRD&packageIds=PkgTransportDemo': () => json([{ packageId: 'PkgTransportDemo', exists: true }]),
       'GET /packages/PkgTransportDemo/artifacts?tenantId=QAS': () => json([]),
       'GET /transport/history': () => json([]),
       'GET /audit?category=all': () => json([]),
@@ -221,7 +221,7 @@ describe('REQ-411 키보드와 실행', () => {
     expect(window.location.hash).toBe('#/transport');
     expect(await within(routeGroup()).findByRole('button', { name: '원본 QAS 연결됨' })).toBeInTheDocument();
     expect(within(routeGroup()).getByRole('button', { name: '대상 PRD 연결됨' })).toBeInTheDocument();
-    const radios = await screen.findAllByRole('radio', { name: /Demo/ });
+    const radios = await screen.findAllByRole('checkbox', { name: /Demo/ });
     expect(radios.every((r) => !(r as HTMLInputElement).checked)).toBe(true);
   });
 
@@ -306,7 +306,7 @@ describe('REQ-411 마법사 동작 (S3b)', () => {
   it('REQ-411: 아티팩트 단계에서 "미리보기 실행"은 지금 선택으로 미리보기를 보낸다(확인창 없음)', async () => {
     const fn = setup('#/transport');
     await toArtifacts();
-    await userEvent.click(artifactRow('IF_Order_Sync'));
+    await userEvent.click(artifactRow('IF_Customer_Push'));
     await openWithKeys();
     await userEvent.type(input(), '미리보기 실행');
     expect(option(/미리보기 실행/)).toHaveAttribute('aria-disabled', 'false');
@@ -314,7 +314,7 @@ describe('REQ-411 마법사 동작 (S3b)', () => {
     expect(await screen.findByRole('region', { name: '이관 결과' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(postBodies(fn)).toEqual([
-      { packageId: 'PkgTransportDemo', artifactIds: ['IF_Order_Sync'], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
+      { packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Order_Sync'] }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
     ]);
   });
 

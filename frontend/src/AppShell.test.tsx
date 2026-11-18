@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from './test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { json, mockApi, PACKAGES } from './test/mockFetch';
+import { json, mockApi, PACKAGES, packagesOf } from './test/mockFetch';
 import { TENANT_STATUS_OK } from './test/tenantFixtures';
 import { NAV_NAMES, ROUTES, baseRoutes, mainNav, navLink, renderAt, routeGroup, setHash } from './test/appRoutes';
 
@@ -114,13 +114,13 @@ describe('REQ-410 앱 셸', () => {
     mockApi({
       ...screenRoutes(),
       'GET /tenants/status': () => json({}, 500),
-      'POST /transport': () => json({ transportId: 't-1', packageId: 'PkgTransportDemo', dryRun: true, deploy: false,
+      'POST /transport': () => json({ transportId: 't-1', packages: packagesOf('PkgTransportDemo'), dryRun: true, deploy: false,
         startedAt: '', finishedAt: '', summary: { total: 0, succeeded: 0, failed: 0 }, results: [] }),
     });
     renderAt('#/transport');
     await waitFor(() => expect(routeGroup()).toHaveTextContent('상태 모름'));
     await userEvent.click(await screen.findByRole('button', { name: '템플릿 없이 진행' }));
-    await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: /Transport Demo/ }));
     await userEvent.click(screen.getByRole('button', { name: '전체 아티팩트로 미리보기' }));
     const region = await screen.findByRole('region', { name: '이관 결과' });
     expect(within(region).getByRole('button', { name: '이 구성으로 실제 이관' })).toBeDisabled();

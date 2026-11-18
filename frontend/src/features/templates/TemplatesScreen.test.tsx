@@ -191,7 +191,7 @@ describe('REQ-413 만들기·수정·삭제', () => {
     expect(window.location.hash).toBe('#/transport');
     expect(within(routeGroup()).getByRole('button', { name: /^원본 DEV/ })).toBeInTheDocument();
     expect(within(routeGroup()).getByRole('button', { name: /^대상 PRD/ })).toBeInTheDocument();
-    const radios = await screen.findAllByRole('radio', { name: /Demo/ });
+    const radios = await screen.findAllByRole('checkbox', { name: /Demo/ });
     expect(radios.every((r) => !(r as HTMLInputElement).checked)).toBe(true);
     expect(screen.getByRole('button', { name: '다음' })).toBeDisabled();
   });

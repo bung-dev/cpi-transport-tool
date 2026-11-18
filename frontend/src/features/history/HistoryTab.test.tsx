@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TransportResponse } from '../../api/types';
-import { PACKAGES, json, mockApi } from '../../test/mockFetch';
+import { PACKAGES, json, mockApi, packagesOf } from '../../test/mockFetch';
 import { navLink, renderAt } from '../../test/appRoutes';
 import { formatTime } from '../../lib/formatTime';
 import { HistoryTab } from './HistoryTab';
@@ -13,7 +13,7 @@ afterEach(() => vi.unstubAllGlobals());
 function entry(id: string, over: Partial<TransportResponse> = {}): TransportResponse {
   return {
     transportId: id,
-    packageId: 'PkgTransportDemo',
+    packages: packagesOf('PkgTransportDemo'),
     dryRun: true,
     deploy: false,
     startedAt: '2026-09-29T07:05:05.351940500Z',
@@ -28,7 +28,7 @@ describe('이력 탭', () => {
   it('REQ-007 AC-1 / REQ-425: API 순서 그대로 행을 보이고 열은 시작 시각·템플릿·원본·대상·패키지·모드·배포·결과·이관 ID', async () => {
     mockApi({
       'GET /transport/history': () =>
-        json([entry('t-new', { dryRun: false, deploy: true, packageId: 'PkgB' }), entry('t-old')]),
+        json([entry('t-new', { dryRun: false, deploy: true, packages: packagesOf('PkgB') }), entry('t-old')]),
     });
     render(<HistoryTab />);
     await screen.findByRole('table');
@@ -81,7 +81,7 @@ describe('이력 탭', () => {
   });
 
   it('REQ-106 AC-2: 이관 ID 버튼은 primary 글자에 hover 밑줄이고 행 어디를 눌러도 상세가 열리며 행에 cursor-pointer가 있고 행에 tabindex가 없다', async () => {
-    mockApi({ 'GET /transport/history': () => json([entry('t-1'), entry('t-2', { packageId: 'PkgZ' })]) });
+    mockApi({ 'GET /transport/history': () => json([entry('t-1'), entry('t-2', { packages: packagesOf('PkgZ') })]) });
     render(<HistoryTab />);
     const btn = await screen.findByRole('button', { name: 't-2' });
     expect(btn.className).toContain('text-primary');
@@ -137,12 +137,12 @@ describe('이력 탭', () => {
   });
 
   it('REQ-007 AC-2: transportId 버튼으로 상세(REQ-006 결과 화면)를 열고 추가 fetch 없이 목록으로 돌아온다', async () => {
-    const fn = mockApi({ 'GET /transport/history': () => json([entry('t-1'), entry('t-2', { packageId: 'PkgZ' })]) });
+    const fn = mockApi({ 'GET /transport/history': () => json([entry('t-1'), entry('t-2', { packages: packagesOf('PkgZ') })]) });
     render(<HistoryTab />);
     await userEvent.click(await screen.findByRole('button', { name: 't-2' }));
     const region = screen.getByRole('region', { name: '이관 결과' });
     expect(within(region).getByText('이관 ID').nextElementSibling).toHaveTextContent('t-2');
-    expect(within(region).getByText('패키지 ID').nextElementSibling).toHaveTextContent('PkgZ');
+    expect(within(region).getByText('패키지').nextElementSibling).toHaveTextContent('PkgZ');
     expect(fn.mock.calls.filter(([url]) => String(url) === '/transport/history')).toHaveLength(1);
     await userEvent.click(screen.getByRole('button', { name: '목록으로' }));
     expect(screen.getByRole('table')).toBeInTheDocument();

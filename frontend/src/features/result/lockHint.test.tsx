@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ArtifactResult, TransportResponse } from '../../api/types';
-import { json, mockApi } from '../../test/mockFetch';
+import { json, mockApi, packagesOf } from '../../test/mockFetch';
 import { HistoryTab } from '../history/HistoryTab';
 import { TransportResult } from './TransportResult';
 
@@ -32,7 +32,7 @@ function result(transportId: string, results: ArtifactResult[]): TransportRespon
   const failedCount = results.filter((r) => r.status === 'FAILED').length;
   return {
     transportId,
-    packageId: 'PkgTransportDemo',
+    packages: packagesOf('PkgTransportDemo'),
     dryRun: false,
     deploy: true,
     startedAt: '2026-10-20T07:05:05Z',

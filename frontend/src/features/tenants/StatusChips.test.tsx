@@ -2,7 +2,7 @@ import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { TenantCheck, TransportResponse } from '../../api/types';
-import { json, mockApi } from '../../test/mockFetch';
+import { json, mockApi, packagesOf } from '../../test/mockFetch';
 import { renderAt } from '../../test/appRoutes';
 import { TENANTS_OK, TENANT_STATUS_OK } from '../../test/tenantFixtures';
 import { TestTenantProvider } from '../../test/tenantProvider';
@@ -11,7 +11,7 @@ import { StatusChips } from './StatusChips';
 import { TenantProvider } from './TenantContext';
 
 afterEach(() => vi.unstubAllGlobals());
-const RESULT: TransportResponse = { transportId: 't-chip', packageId: 'P', dryRun: true, deploy: false,
+const RESULT: TransportResponse = { transportId: 't-chip', packages: packagesOf('P'), dryRun: true, deploy: false,
   startedAt: '', finishedAt: '', summary: { total: 0, succeeded: 0, failed: 0 }, results: [] };
 
 it('REQ-303 AC-4·AC-5: 응답 전 확인 중이며 두 네이티브 버튼은 활성과 aria-busy를 유지한다', () => {

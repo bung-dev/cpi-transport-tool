@@ -2,11 +2,11 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { TransportResponse } from '../../api/types';
-import { json, mockApi } from '../../test/mockFetch';
+import { json, mockApi, packagesOf } from '../../test/mockFetch';
 import { TransportResult } from '../result/TransportResult';
 import { HistoryTab } from './HistoryTab';
 
-const old: TransportResponse = { transportId: 't-old', packageId: 'P', dryRun: true, deploy: false,
+const old: TransportResponse = { transportId: 't-old', packages: packagesOf('P'), dryRun: true, deploy: false,
   startedAt: '2026-10-07T00:00:00Z', finishedAt: '2026-10-07T00:00:01Z', summary: { total: 0, succeeded: 0, failed: 0 }, results: [] };
 const named: TransportResponse = { ...old, transportId: 't-named', sourceTenant: { id: 'deleted-source', name: '원본 당시 이름' },
   targetTenant: { id: 'renamed-target', name: '<b>대상 당시 이름</b>' } };
@@ -29,7 +29,7 @@ it.each([['기록된 이름', named], ['필드 없는 기존 항목', old]] as c
   render(<HistoryTab />);
   await userEvent.click(await screen.findByRole('button', { name: entry.transportId }));
   const result = screen.getByRole('region', { name: '이관 결과' });
-  expect(within(result).getAllByRole('term').map(t => t.textContent)).toEqual(['이관 ID', '패키지 ID', '시작', '종료', '원본 테넌트', '대상 테넌트']);
+  expect(within(result).getAllByRole('term').map(t => t.textContent)).toEqual(['이관 ID', '패키지', '시작', '종료', '원본 테넌트', '대상 테넌트']);
   expect(within(result).getByText('원본 테넌트').nextElementSibling?.textContent).toBe(entry.sourceTenant?.name ?? '-');
   expect(within(result).getByText('대상 테넌트').nextElementSibling?.textContent).toBe(entry.targetTenant?.name ?? '-');
   expect(fn.mock.calls.filter(([url]) => String(url) === '/transport/history')).toHaveLength(1);
