@@ -60,10 +60,13 @@ public class DashboardService {
             // Histories predating tenant selection used the fixed DEV -> PRD route.
             String source = t.sourceTenant() == null ? "DEV" : t.sourceTenant().id();
             String target = t.targetTenant() == null ? "PRD" : t.targetTenant().id();
-            arrivals.merge(new Arrival(t.packageId(), target), t,
-                    (a, b) -> a.startedAt().isBefore(b.startedAt()) ? b : a);
-            departures.merge(new Departure(t.packageId(), source, target), t.startedAt(),
-                    (a, b) -> a.isBefore(b) ? b : a);
+            // Keep the existing whole-transport success rule for this slice.
+            for (var selectedPackage : t.packages()) {
+                arrivals.merge(new Arrival(selectedPackage.packageId(), target), t,
+                        (a, b) -> a.startedAt().isBefore(b.startedAt()) ? b : a);
+                departures.merge(new Departure(selectedPackage.packageId(), source, target), t.startedAt(),
+                        (a, b) -> a.isBefore(b) ? b : a);
+            }
         }
         var queue = new ArrayList<QueueItem>();
         for (var entry : arrivals.entrySet()) {
