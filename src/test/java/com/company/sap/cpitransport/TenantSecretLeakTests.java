@@ -43,7 +43,9 @@ class TenantSecretLeakTests {
             "dummy-dev-client", "dummy-dev-secret", "dummy-prd-client", "dummy-prd-secret",
             "dummy-dev-token-0001", "dummy-prd-token-0001", "dummy-dev-csrf-0001", "dummy-prd-csrf-0001",
             "dummy-dev-session-0001", "dummy-prd-session-0001",
-            "dummy-dev-apikey-123", "dummy-prd-apikey-456", "dummy-dev-pass-XYZ", "dummy-prd-pass-UVW"));
+            "dummy-dev-apikey-123", "dummy-prd-apikey-456", "dummy-prd-pass-UVW"));
+    // REQ-505: 구성 값(민감 키 포함)은 응답·이력에 평문으로 남지만 로그에는 남지 않는다.
+    private static final String[] CONFIGURATION_VALUES = {"dummy-dev-pass-XYZ", "http://dev-receiver.localhost/customers"};
     private final List<String> responses = new ArrayList<>();
     private LocalCpiStubs stubs;
     private String sourceId;
@@ -68,7 +70,6 @@ class TenantSecretLeakTests {
     static void properties(DynamicPropertyRegistry values) {
         values.add("cpi.tenants.store-file", () -> directory.resolve("tenants.enc").toString());
         values.add("cpi.transport.history.file", () -> directory.resolve("history.jsonl").toString());
-        values.add("cpi.transport.mapping-file", () -> Path.of("examples/mapping-example.yml").toAbsolutePath().toString());
         // AI-NOTE: isolate both initial tenants from the caller's configuration (REQ-305 AC-3).
         for (String env : List.of("dev", "prd")) {
             for (String field : List.of("api-url", "token-url", "client-id", "client-secret")) {
@@ -145,7 +146,7 @@ class TenantSecretLeakTests {
     private void noLeaks(CapturedOutput output) throws Exception {
         request("GET", "/transport/history", null, 200);
         String[] forbidden = SECRETS.toArray(String[]::new);
-        assertThat(output.getAll()).contains("TRACE").doesNotContain(forbidden)
+        assertThat(output.getAll()).contains("TRACE").doesNotContain(forbidden).doesNotContain(CONFIGURATION_VALUES)
                 .doesNotContain("\"oauth\":{", "\"serviceKey\":{");
         for (String response : responses) {
             assertThat(response).doesNotContain(forbidden).doesNotContain("\"oauth\":{", "\"serviceKey\":{");

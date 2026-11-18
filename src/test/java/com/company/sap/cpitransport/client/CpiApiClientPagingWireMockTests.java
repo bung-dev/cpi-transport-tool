@@ -43,7 +43,7 @@ class CpiApiClientPagingWireMockTests {
         var connection = new CpiProperties.Connection(base, server.baseUrl() + "/token",
                 "test-dummy-page-client", "test-dummy-page-secret");
         var properties = new CpiProperties(connection, connection);
-        var settings = new TransportProperties("", new TransportProperties.History(directory.resolve("history.jsonl")),
+        var settings = new TransportProperties(new TransportProperties.History(directory.resolve("history.jsonl")),
                 new TransportProperties.Retry(1, Duration.ZERO),
                 new TransportProperties.Deploy(Duration.ofSeconds(1), Duration.ofSeconds(3)), List.of());
         Sleeper sleeper = duration -> { throw new AssertionError("Unexpected retry"); };

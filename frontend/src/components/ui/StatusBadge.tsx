@@ -1,4 +1,4 @@
-import { badgeTone, type StatusKind } from '../../design/statusBadges';
+import { badgeLabel, badgeTone, type StatusKind } from '../../design/statusBadges';
 import { Badge } from './Badge';
 
 interface Props {
@@ -8,8 +8,8 @@ interface Props {
 
 export function StatusBadge({ kind, value }: Props) {
   return (
-    <Badge tone={badgeTone(kind, value)} dot>
-      {value}
+    <Badge tone={badgeTone(kind, value)} dot className={kind === 'configurationStatus' ? 'max-w-full' : ''}>
+      {badgeLabel(kind, value)}
     </Badge>
   );
 }

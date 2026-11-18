@@ -138,14 +138,13 @@ public final class LocalCpiStubs {
             case "IF_Fault_NotZip" -> dev.stubFor(get(urlPathEqualTo(value)).willReturn(ok("NOT-A-ZIP-FILE")));
             default -> dev.stubFor(get(urlPathEqualTo(value)).willReturn(download));
         }
-        String configs = results(configurations(id));
-        getJson(dev, path + "/Configurations", configs);
-        if (id.equals("IF_Fault_AuthRetry")) once(prd, id, get(urlPathEqualTo(path + "/Configurations")),
-                get(urlPathEqualTo(path + "/Configurations")), aResponse().withStatus(401), okJson(configs));
-        else if (id.equals("IF_Fault_ConfigRead500")) prd.stubFor(get(urlPathEqualTo(path + "/Configurations")).willReturn(serverError()));
-        else getJson(prd, path + "/Configurations", configs);
-        prd.stubFor(put(urlPathMatching(java.util.regex.Pattern.quote(path) + "/\\$links/Configurations\\('[^']*'\\)"))
-                .atPriority(8).willReturn(aResponse().withStatus(202)));
+        // REQ-506: 구성 값은 원본(DEV)에서만 읽는다. 읽기 500은 원본 쪽, 401 재시도는 대상 구성 값 PUT에서 난다.
+        if (id.equals("IF_Fault_ConfigRead500")) dev.stubFor(get(urlPathEqualTo(path + "/Configurations")).willReturn(serverError()));
+        else getJson(dev, path + "/Configurations", results(configurations(id)));
+        String links = java.util.regex.Pattern.quote(path) + "/\\$links/Configurations\\('[^']*'\\)";
+        prd.stubFor(put(urlPathMatching(links)).atPriority(8).willReturn(aResponse().withStatus(202)));
+        if (id.equals("IF_Fault_AuthRetry")) once(prd, id, put(urlPathMatching(links)).atPriority(7),
+                put(urlPathMatching(links)).atPriority(7), aResponse().withStatus(401), aResponse().withStatus(202));
         if (id.equals("IF_Fault_ParamPutFail")) prd.stubFor(put(urlPathEqualTo(path + "/$links/Configurations('ParamA')")).willReturn(serverError()));
         prd.stubFor(post(urlPathEqualTo(ROOT + "DeployIntegrationDesigntimeArtifact"))
                 .withQueryParam("Id", equalTo("'" + id + "'")).withQueryParam("Version", equalTo("'active'"))
@@ -161,6 +160,11 @@ public final class LocalCpiStubs {
         }
     }
     private static List<Map<String, String>> configurations(String id) {
+        // REQ-506: 민감 키(ApiToken)의 빈 값은 SKIPPED_EMPTY가 된다.
+        if (id.equals("IF_Order_Sync")) return List.of(
+                parameter("Endpoint", "http://dev-backend.localhost/orders", "xsd:string"),
+                parameter("BatchSize", "100", "xsd:integer"), parameter("ApiToken", "", "xsd:string"));
+        if (id.equals("IF_Fault_AuthRetry")) return List.of(parameter("RetryKey", "retry-dev", "xsd:string"));
         if (id.equals("IF_Customer_Push")) return List.of(
                 parameter("ReceiverUrl", "http://dev-receiver.localhost/customers", "xsd:string"),
                 parameter("Timeout", "30000", "xsd:integer"), parameter("ClientPassword", "dummy-dev-pass-XYZ", "xsd:string"),

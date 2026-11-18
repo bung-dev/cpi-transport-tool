@@ -1,11 +1,13 @@
 package com.company.sap.cpitransport.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record ArtifactResult(String artifactId, ArtifactStatus status, TransportAction action,
-        List<Replacement> replacements, List<UnmappedKey> unmappedKeys, DeployStatus deployStatus, ArtifactError error) {
+        List<ConfigurationItem> configurations, DeployStatus deployStatus, ArtifactError error) {
     public ArtifactResult {
         status = error == null ? ArtifactStatus.SUCCESS : ArtifactStatus.FAILED;
-        replacements = List.copyOf(replacements);
-        unmappedKeys = List.copyOf(unmappedKeys);
+        configurations = configurations == null ? List.of() : List.copyOf(configurations);
     }
 }

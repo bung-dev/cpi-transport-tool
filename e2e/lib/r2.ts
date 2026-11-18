@@ -34,7 +34,7 @@ export async function openAllCards(page: Page): Promise<void> {
 export const resultText = async (page: Page): Promise<string> => flat(await resultRegion(page).first().innerText());
 export { expect };
 
-/** 결과 머리 값: "실패" 타일 값, "치환 문제 N건"(S3 REQ-424 문구), "실패 아티팩트 M개" 와 두 문구의 위치 관계 */
+/** 결과 머리 값: "실패" 타일 값, "구성 값 문제 N건"(S3 REQ-424 문구), "실패 아티팩트 M개" 와 두 문구의 위치 관계 */
 export async function headStats(page: Page): Promise<Record<string, any>> {
   const region = resultRegion(page).first();
   return region.evaluate((r) => {
@@ -44,10 +44,10 @@ export async function headStats(page: Page): Promise<Record<string, any>> {
     const leaves = all.filter((e) => e.children.length === 0);
     const tileLabel = leaves.find((e) => txt(e) === '실패');
     const tileValue = tileLabel?.parentElement ? txt(tileLabel.parentElement).replace(/^실패\s*/, '') : null;
-    const prob = smallest(/치환 문제 \d+건/);
+    const prob = smallest(/구성 값 문제 \d+건/);
     const fa = smallest(/실패 아티팩트 \d+개/);
     const full = (r as HTMLElement).innerText.replace(/\s+/g, ' ');
-    const pm = full.match(/치환 문제 (\d+)건/);
+    const pm = full.match(/구성 값 문제 (\d+)건/);
     const fm = [...full.matchAll(/실패 아티팩트 (\d+)개/g)];
     let ancestor: Element | null = null;
     if (prob[0] && fa[0]) {
@@ -135,8 +135,8 @@ export function rMax(s: StrSet, over: Record<string, any> = {}): any {
     finishedAt: '2026-10-20T09:01:00Z',
     summary: { total: 2, succeeded: 0, failed: 2 },
     results: [
-      { artifactId: 'A1', status: 'FAILED', action: 'UPDATED', replacements: [], unmappedKeys: [], deployStatus: 'ERROR', error: { code: 'DEPLOY_FAILED', message: 'DEPLOY: CPI deployment ERROR' } },
-      { artifactId: 'A2', status: 'FAILED', action: 'UPDATED', replacements: [], unmappedKeys: [], deployStatus: 'TIMEOUT', error: { code: 'DEPLOY_TIMEOUT', message: 'DEPLOY: timeout' } },
+      { artifactId: 'A1', status: 'FAILED', action: 'UPDATED', configurations: [], deployStatus: 'ERROR', error: { code: 'DEPLOY_FAILED', message: 'DEPLOY: CPI deployment ERROR' } },
+      { artifactId: 'A2', status: 'FAILED', action: 'UPDATED', configurations: [], deployStatus: 'TIMEOUT', error: { code: 'DEPLOY_TIMEOUT', message: 'DEPLOY: timeout' } },
     ],
     sourceTenant: { id: 's1', name: s.src },
     targetTenant: { id: 't1', name: s.tgt },
@@ -155,8 +155,8 @@ export function plainRow(i: number, over: Record<string, any> = {}): any {
     finishedAt: `2026-10-19T0${i % 10}:01:00Z`,
     summary: { total: 2, succeeded: 2, failed: 0 },
     results: [
-      { artifactId: 'A1', status: 'SUCCESS', action: 'UPDATED', replacements: [], unmappedKeys: [], deployStatus: 'NOT_REQUESTED', error: null },
-      { artifactId: 'A2', status: 'SUCCESS', action: 'CREATED', replacements: [], unmappedKeys: [], deployStatus: 'NOT_REQUESTED', error: null },
+      { artifactId: 'A1', status: 'SUCCESS', action: 'UPDATED', configurations: [], deployStatus: 'NOT_REQUESTED', error: null },
+      { artifactId: 'A2', status: 'SUCCESS', action: 'CREATED', configurations: [], deployStatus: 'NOT_REQUESTED', error: null },
     ],
     sourceTenant: { id: 's1', name: 'DEV' },
     targetTenant: { id: 't1', name: 'PRD' },

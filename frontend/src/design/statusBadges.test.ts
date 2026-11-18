@@ -3,17 +3,15 @@ import { createElement } from 'react';
 import { describe, it, expect } from 'vitest';
 import { Badge } from '../components/ui/Badge';
 import { StatusBadge } from '../components/ui/StatusBadge';
-import { badgeTone, type StatusKind, type StatusTone } from './statusBadges';
+import { badgeLabel, badgeTone, type StatusKind, type StatusTone } from './statusBadges';
 
 const table: [StatusKind, string, StatusTone][] = [
   ['artifactStatus', 'SUCCESS', 'success'],
   ['artifactStatus', 'FAILED', 'danger'],
-  ['replacementStatus', 'APPLIED', 'success'],
-  ['replacementStatus', 'PLANNED', 'accent'],
-  ['replacementStatus', 'VALUE_MISMATCH', 'warning'],
-  ['replacementStatus', 'KEY_NOT_FOUND', 'neutral'],
-  ['replacementStatus', 'SENSITIVE_SKIPPED', 'caution'],
-  ['replacementStatus', 'FAILED', 'danger'],
+  ['configurationStatus', 'PLANNED', 'accent'],
+  ['configurationStatus', 'COPIED', 'success'],
+  ['configurationStatus', 'SKIPPED_EMPTY', 'caution'],
+  ['configurationStatus', 'FAILED', 'danger'],
   ['deployStatus', 'STARTED', 'success'],
   ['deployStatus', 'ERROR', 'danger'],
   ['deployStatus', 'TIMEOUT', 'warning'],
@@ -32,12 +30,28 @@ describe('상태 배지 매핑', () => {
   it('REQ-103 AC-4: 표에 없는 값과 prototype 이름은 neutral', () => {
     expect(badgeTone('artifactStatus', 'WHATEVER')).toBe('neutral');
     expect(badgeTone('deployStatus', 'toString')).toBe('neutral');
-    expect(badgeTone('replacementStatus', 'constructor')).toBe('neutral');
+    expect(badgeTone('configurationStatus', 'constructor')).toBe('neutral');
     expect(badgeTone('transportAction', '__proto__')).toBe('neutral');
   });
 
-  it('REQ-103 AC-4: 표는 16쌍이다', () => {
-    expect(table).toHaveLength(16);
+  it('REQ-103 AC-4: 표는 14쌍이다', () => {
+    expect(table).toHaveLength(14);
+  });
+
+  it.each([
+    ['PLANNED', '복사 예정'],
+    ['COPIED', '복사됨'],
+    ['SKIPPED_EMPTY', '빈 값이라 건너뜀'],
+    ['FAILED', '실패'],
+  ])('REQ-510: 구성 값 상태 %s의 배지 이름은 "%s"', (value, label) => {
+    expect(badgeLabel('configurationStatus', value)).toBe(label);
+  });
+
+  it('REQ-510: 이름표에 없는 구성 값 상태와 다른 분류의 값은 글자 원문이다', () => {
+    expect(badgeLabel('configurationStatus', 'SOMETHING_NEW')).toBe('SOMETHING_NEW');
+    expect(badgeLabel('configurationStatus', 'toString')).toBe('toString');
+    expect(badgeLabel('deployStatus', 'TIMEOUT')).toBe('TIMEOUT');
+    expect(badgeLabel('artifactStatus', 'FAILED')).toBe('FAILED');
   });
 });
 
@@ -77,5 +91,17 @@ describe('Badge 컴포넌트', () => {
     expect(screen.getByText('TIMEOUT').className).toContain('bg-warning-bg');
     expect(screen.getByText('TIMEOUT').className).toContain('text-warning-fg');
     expect(screen.getByText('toString').className).toContain('bg-neutral-bg');
+  });
+
+  it('REQ-510: 구성 값 상태 StatusBadge는 배지 이름을 보이고 색은 매핑 모듈을 따른다', () => {
+    render(
+      createElement('div', null, [
+        createElement(StatusBadge, { key: 1, kind: 'configurationStatus', value: 'SKIPPED_EMPTY' }),
+        createElement(StatusBadge, { key: 2, kind: 'configurationStatus', value: 'FAILED' }),
+      ]),
+    );
+    expect(screen.getByText('빈 값이라 건너뜀').className).toContain('bg-caution-bg');
+    expect(screen.getByText('실패').className).toContain('bg-danger-bg');
+    expect(screen.queryByText('SKIPPED_EMPTY')).toBeNull();
   });
 });

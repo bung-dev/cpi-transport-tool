@@ -56,11 +56,8 @@ class ReadOnlyModeTests {
 
     private org.springframework.context.ConfigurableApplicationContext app(LocalCpiStubs stubs,
                                                                           boolean readOnly, boolean prd) throws Exception {
-        Files.copy(Path.of("examples/mapping-example.yml"), directory.resolve("mapping.yml"),
-                StandardCopyOption.REPLACE_EXISTING);
         var args = new ArrayList<String>(List.of("--server.port=0",
                 "--cpi.transport.read-only=" + readOnly,
-                "--cpi.transport.mapping-file=" + directory.resolve("mapping.yml"),
                 "--cpi.transport.history.file=" + directory.resolve(prd ? "history.jsonl" : "missing-prd-history.jsonl"),
                 "--cpi.tenants.store-file=" + directory.resolve("tenants.enc")));
         for (String env : List.of("dev", "prd")) {

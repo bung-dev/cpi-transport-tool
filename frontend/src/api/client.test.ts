@@ -23,12 +23,16 @@ describe('오류 정규화', () => {
   it.each([
     [400, 'INVALID_REQUEST', '요청 값이 올바르지 않습니다', 'Invalid request'],
     [503, 'ENVIRONMENT_NOT_CONFIGURED', '서버 연결 설정이 없습니다', 'CPI_DEV_API_URL, CPI_DEV_CLIENT_ID'],
-    [422, 'MAPPING_INVALID', '매핑 파일이 올바르지 않습니다', 'mapping broken at line 1'],
     [404, 'PACKAGE_NOT_FOUND', '패키지를 찾을 수 없습니다', 'Package not found'],
     [502, 'CPI_UNAVAILABLE', 'CPI에 연결할 수 없습니다', 'CPI unavailable'],
   ])('REQ-008 AC-1: %i %s 는 한국어 제목과 서버 message 원문', async (status, code, title, message) => {
     mockFetch(async () => new Response(JSON.stringify({ error: code, message }), { status }));
     expect(await failure(getPackages())).toEqual({ title, message });
+  });
+
+  it('REQ-512: 제목표에서 뺀 MAPPING_INVALID는 알 수 없는 오류(HTTP 422)다', async () => {
+    mockFetch(async () => new Response(JSON.stringify({ error: 'MAPPING_INVALID', message: 'mapping broken at line 1' }), { status: 422 }));
+    expect(await failure(getPackages())).toEqual({ title: '알 수 없는 오류(HTTP 422)' });
   });
 
   it('REQ-008 AC-2: JSON이 아닌 본문(HTML 500)은 알 수 없는 오류(HTTP 500)', async () => {

@@ -10,7 +10,6 @@ import java.util.jar.Manifest;
 import java.util.regex.Pattern;
 import java.util.zip.ZipInputStream;
 import com.company.sap.cpitransport.config.TransportProperties;
-import com.company.sap.cpitransport.model.TargetType;
 import com.company.sap.cpitransport.service.*;
 import org.junit.jupiter.api.*;
 import tools.jackson.databind.json.JsonMapper;
@@ -114,36 +113,21 @@ class RealSampleStubTests {
         assertThat(text(entries, ".project")).contains("<name>" + RealSampleStub.ID + "</name>");
     }
 
-    @Test @DisplayName("REQ-306 AC-3: one header property and external parameter agree with the three mappings")
+    @Test @DisplayName("REQ-306 AC-3: the sample bundle carries one externalized parameter whose source value is DEV_MESSAGE")
     void req306_ac3_values() throws Exception {
         var entries = entries(stub.bundle());
-        var settings = new TransportProperties("examples/real-transport-mapping.yml", null, null, null, List.of());
-        var mappings = new MappingFileLoader(settings).load();
-        assertThat(mappings).hasSize(3);
-        assertThat(mappings).allSatisfy(m -> {
-            assertThat(m.artifactId()).isEqualTo(RealSampleStub.ID);
-            assertThat(m.devValue()).isNotEqualTo(m.prdValue());
-            assertThat(new SensitiveKeyMatcher(settings).isSensitive(m.key())).isFalse();
-        });
-        var result = new IflwReplacer(new SensitiveKeyMatcher(settings)).process(stub.bundle(), mappings, true);
-        assertThat(result.replacements()).hasSize(2).allSatisfy(r -> {
-            assertThat(r.status()).isEqualTo(com.company.sap.cpitransport.model.ReplacementStatus.PLANNED);
-            assertThat(r.occurrences()).isEqualTo(1);
-        });
-        assertThat(result.unmappedKeys()).isEmpty();
-        var external = mappings.stream().filter(m -> m.targetType() == TargetType.EXTERNAL_PARAM).findFirst().orElseThrow();
-        assertThat(text(entries, IFLW)).contains("{{" + external.key() + "}}");
+        assertThat(text(entries, IFLW)).contains("{{SampleMessage}}", "DEV_HEADER", "DEV_PROPERTY");
         var properties = new Properties(); properties.load(new StringReader(text(entries, "src/main/resources/parameters.prop")));
         assertThat(properties).hasSize(1);
-        assertThat(properties.getProperty(external.key())).isEqualTo(external.devValue());
+        assertThat(properties.getProperty("SampleMessage")).isEqualTo("DEV_MESSAGE");
         var definitions = parse(entries.get("src/main/resources/parameters.propdef"));
         assertThat(definitions.getElementsByTagName("parameter").getLength()).isEqualTo(1);
-        assertThat(definitions.getElementsByTagName("key").item(0).getTextContent()).isEqualTo(external.key());
+        assertThat(definitions.getElementsByTagName("key").item(0).getTextContent()).isEqualTo("SampleMessage");
         assertThat(definitions.getElementsByTagName("type").item(0).getTextContent()).isEqualTo("xsd:string");
         var configs = json.readTree(get(RealSampleStub.ARTIFACT + "/Configurations").body()).path("d").path("results");
         assertThat(configs.size()).isEqualTo(1);
-        assertThat(configs.get(0).path("ParameterKey").asString()).isEqualTo(external.key());
-        assertThat(configs.get(0).path("ParameterValue").asString()).isEqualTo(external.devValue());
+        assertThat(configs.get(0).path("ParameterKey").asString()).isEqualTo("SampleMessage");
+        assertThat(configs.get(0).path("ParameterValue").asString()).isEqualTo("DEV_MESSAGE");
         assertThat(configs.get(0).path("DataType").asString()).isEqualTo("xsd:string");
     }
 
@@ -184,7 +168,6 @@ class RealSampleStubTests {
         var files = new ArrayList<Path>();
         try (var paths = Files.walk(RealSampleStub.SAMPLE)) { files.addAll(paths.filter(Files::isRegularFile).toList()); }
         files.add(Path.of("src/test/java/com/company/sap/cpitransport/stub/RealSampleStub.java"));
-        files.add(Path.of("examples/real-transport-mapping.yml"));
         // Scheme and complete scheme-specific part are compared separately so the existing test-source
         // connection scanner does not mistake this exact identifier allowlist for connection URLs.
         Set<String> identifiers = Set.of("//www.omg.org/spec/BPMN/20100524/MODEL", "//www.omg.org/spec/BPMN/20100524/DI",

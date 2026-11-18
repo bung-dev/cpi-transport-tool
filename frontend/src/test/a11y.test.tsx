@@ -17,8 +17,7 @@ const art = (artifactId: string, over: Partial<ArtifactResult>): ArtifactResult 
   action: 'NONE',
   deployStatus: 'NOT_REQUESTED',
   error: null,
-  replacements: [],
-  unmappedKeys: [],
+  configurations: [],
   ...over,
 });
 const RESULT: TransportResponse = {
@@ -31,7 +30,7 @@ const RESULT: TransportResponse = {
   summary: { total: 3, succeeded: 2, failed: 1 },
   results: [
     art('A_Mismatch', {
-      replacements: [{ targetType: 'header', key: 'K', status: 'KEY_NOT_FOUND', before: null, after: null, occurrences: 0 }],
+      configurations: [{ key: 'K', value: null, dataType: 'xsd:string', status: 'FAILED' }],
     }),
     art('B_Failed', { status: 'FAILED', error: { code: 'ERR_B', message: 'failed b' } }),
     art('C_Clean', {}),

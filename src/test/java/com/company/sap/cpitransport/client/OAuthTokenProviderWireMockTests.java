@@ -41,7 +41,7 @@ class OAuthTokenProviderWireMockTests {
 
     private OAuthTokenProvider provider(int attempts, Sleeper sleeper) {
         var properties = new CpiProperties(connection("dev"), connection("prd"));
-        var transport = new TransportProperties("", null,
+        var transport = new TransportProperties(null,
                 new TransportProperties.Retry(attempts, Duration.ofSeconds(1)), null, List.of());
         return new OAuthTokenProvider(properties, transport, clock, sleeper);
     }

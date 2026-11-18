@@ -41,7 +41,7 @@ class TransportTenantSelectionTests {
         source.stubFor(get(urlEqualTo("/api/v1/IntegrationPackages('Pkg')")).willReturn(okJson("{\"d\":{\"Id\":\"Pkg\",\"Name\":\"Source package\",\"Version\":\"1\"}}")));
         source.stubFor(get(urlEqualTo("/api/v1/IntegrationPackages('Pkg')/IntegrationDesigntimeArtifacts")).willReturn(okJson("{\"d\":{\"results\":[]}}")));
         source.stubFor(get(urlEqualTo("/api/v1/IntegrationPackages")).willReturn(okJson("{\"d\":{\"results\":[{\"Id\":\"Pkg\",\"Name\":\"Source package\",\"Version\":\"1\"}]}}")));
-        settings = new TransportProperties("", new TransportProperties.History(directory.resolve("history.jsonl")),
+        settings = new TransportProperties(new TransportProperties.History(directory.resolve("history.jsonl")),
                 new TransportProperties.Retry(1, Duration.ZERO), new TransportProperties.Deploy(Duration.ofSeconds(1), Duration.ofSeconds(3)), List.of());
         configure(true, true, false);
     }
@@ -60,8 +60,8 @@ class TransportTenantSelectionTests {
         var tokens = new OAuthTokenProvider(tenants, settings, clock, duration -> {});
         var api = new CpiApiClient(new CpiHttpExecutor(tenants, tokens, new CsrfTokenStore(), settings, duration -> {}), json);
         var sensitive = new SensitiveKeyMatcher(settings);
-        var transport = new TransportService(api, new IflwReplacer(sensitive), new ExternalParameterReplacer(api, sensitive),
-                new DeployService(api, settings, clock, duration -> {}), new MappingFileLoader(settings), clock);
+        var transport = new TransportService(api, new ConfigurationCopier(api, sensitive),
+                new DeployService(api, settings, clock, duration -> {}), clock);
         history = new TransportHistoryStore(settings, json);
         var guard = new EnvironmentGuard(properties, tenants);
         mvc = MockMvcBuilders.standaloneSetup(new TransportController(transport, guard, history, new ReadOnlyProperties(readOnly)),

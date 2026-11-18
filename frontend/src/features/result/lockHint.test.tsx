@@ -21,8 +21,7 @@ const art = (artifactId: string, over: Partial<ArtifactResult> = {}): ArtifactRe
   action: 'UPDATED',
   deployStatus: 'NOT_REQUESTED',
   error: null,
-  replacements: [],
-  unmappedKeys: [],
+  configurations: [],
   ...over,
 });
 

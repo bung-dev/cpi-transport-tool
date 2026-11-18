@@ -38,7 +38,7 @@ class TransportServiceWireMockTests {
         prd = new WireMockServer(wireMockConfig().dynamicPort().bindAddress("localhost"));
         dev.start();
         prd.start();
-        settings = new TransportProperties("", new TransportProperties.History(temporary.resolve("history.jsonl")),
+        settings = new TransportProperties(new TransportProperties.History(temporary.resolve("history.jsonl")),
                 new TransportProperties.Retry(3, Duration.ofSeconds(1)),
                 new TransportProperties.Deploy(Duration.ofSeconds(1), Duration.ofSeconds(3)), List.of("password", "token"));
         var connections = new CpiProperties(connection(dev, "dev"), connection(prd, "prd"));
@@ -46,8 +46,8 @@ class TransportServiceWireMockTests {
         var tokens = new OAuthTokenProvider(connections, settings, clock, sleeper);
         api = new CpiApiClient(new CpiHttpExecutor(connections, tokens, new CsrfTokenStore(), settings, sleeper), json);
         sensitive = new SensitiveKeyMatcher(settings);
-        service = new TransportService(api, new IflwReplacer(sensitive), new ExternalParameterReplacer(api, sensitive),
-                new DeployService(api, settings, clock, sleeper), new MappingFileLoader(settings), clock);
+        service = new TransportService(api, new ConfigurationCopier(api, sensitive),
+                new DeployService(api, settings, clock, sleeper), clock);
         dev.stubFor(post(urlEqualTo("/token")).willReturn(okJson("{\"access_token\":\"dummy-dev-token-0001\",\"expires_in\":3600}")));
         prd.stubFor(post(urlEqualTo("/token")).willReturn(okJson("{\"access_token\":\"dummy-prd-token-0001\",\"expires_in\":3600}")));
         prd.stubFor(get(urlEqualTo("/api/v1/")).willReturn(ok().withHeader("X-CSRF-Token", "dummy-prd-csrf-0001")));
@@ -59,9 +59,8 @@ class TransportServiceWireMockTests {
             dev.stubFor(get(urlEqualTo(path(id) + "/$value")).willReturn(ok().withBody(zip())));
             prd.stubFor(get(urlEqualTo(path(id))).willReturn(notFound()));
             prd.stubFor(put(urlEqualTo(path(id))).willReturn(noContent()));
-            for (var server : List.of(dev, prd)) server.stubFor(get(urlEqualTo(path(id) + "/Configurations"))
-                    .willReturn(okJson("{\"d\":{\"results\":[{\"ParameterKey\":\"Endpoint\",\"ParameterValue\":\"dev\",\"DataType\":\"xsd:string\"}]}}")));
-            prd.stubFor(put(urlEqualTo(parameter(id))).willReturn(noContent()));
+            configurations(id, "{\"ParameterKey\":\"Endpoint\",\"ParameterValue\":\"dev\",\"DataType\":\"xsd:string\"}");
+            prd.stubFor(put(urlMatching(java.util.regex.Pattern.quote(path(id)) + "/\\$links/Configurations\\(.*\\)")).willReturn(noContent()));
             prd.stubFor(post(urlEqualTo(deploy(id))).willReturn(noContent()));
             prd.stubFor(get(urlEqualTo(runtime(id))).willReturn(okJson("{\"d\":{\"Status\":\"STARTED\"}}")));
         }
@@ -71,57 +70,72 @@ class TransportServiceWireMockTests {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
-    @DisplayName("REQ-005 AC-4, AC-4a: create and update upload replaced zip and preserve version")
-    void req005_ac4_upload(boolean existing) throws Exception {
+    @DisplayName("REQ-501, REQ-502: create and update upload the downloaded zip byte for byte and copy the source value without reading the target")
+    void req501_upload(boolean existing) throws Exception {
         if (existing) prd.stubFor(get(urlEqualTo(path("A"))).willReturn(okJson("{\"d\":{\"Id\":\"A\"}}")));
         var response = run(List.of("A"), false, true);
         var result = response.results().getFirst();
         assertThat(result.action()).isEqualTo(existing ? TransportAction.UPDATED : TransportAction.CREATED);
         assertThat(result.status()).isEqualTo(ArtifactStatus.SUCCESS);
         assertThat(result.deployStatus()).isEqualTo(DeployStatus.STARTED);
+        assertThat(result.configurations()).containsExactly(
+                new ConfigurationItem("Endpoint", "dev", "xsd:string", ConfigurationStatus.COPIED));
         var requests = existing ? prd.findAll(putRequestedFor(urlEqualTo(path("A"))))
                 : prd.findAll(postRequestedFor(urlEqualTo(COLLECTION)));
         assertThat(requests).hasSize(1);
         var body = json.readTree(requests.getFirst().getBodyAsString());
         assertThat(body.path("Name").asString()).isEqualTo("Name A");
         if (!existing) assertThat(body.path("PackageId").asString()).isEqualTo("PKG");
-        try (var zip = new ZipInputStream(new ByteArrayInputStream(Base64.getDecoder().decode(body.path("ArtifactContent").asString())))) {
-            assertThat(zip.getNextEntry().getName()).endsWith("flow.iflw");
-            String xml = new String(zip.readAllBytes(), StandardCharsets.UTF_8);
-            assertThat(xml).contains("prd").doesNotContain(">dev<");
-            assertThat(zip.getNextEntry().getName()).isEqualTo("version.txt");
-            assertThat(new String(zip.readAllBytes(), StandardCharsets.UTF_8)).isEqualTo("1.0");
-        }
+        assertThat(Base64.getDecoder().decode(body.path("ArtifactContent").asString())).isEqualTo(zip());
+        prd.verify(1, putRequestedFor(urlEqualTo(parameter("A")))
+                .withRequestBody(equalToJson("{\"ParameterValue\":\"dev\",\"DataType\":\"xsd:string\"}")));
+        prd.verify(0, getRequestedFor(urlMatching(".*/Configurations")));
         assertThat(UUID.fromString(response.transportId()).toString()).isEqualTo(response.transportId());
         assertThat(response.finishedAt()).isAfter(response.startedAt());
         assertThat(json.readTree(json.writeValueAsString(response)).path("startedAt").asString()).endsWith("Z");
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {"notZip", "brokenIflw"})
+    @DisplayName("REQ-501: an unparsable bundle or broken .iflw is uploaded unchanged and does not fail the artifact")
+    void req501_unparsable(String kind) throws Exception {
+        byte[] bundle = kind.equals("notZip") ? "invalid zip".getBytes(StandardCharsets.UTF_8) : brokenZip();
+        dev.stubFor(get(urlEqualTo(path("A") + "/$value")).willReturn(ok().withBody(bundle)));
+        var result = run(List.of("A"), false, false).results().getFirst();
+        assertThat(result.status()).isEqualTo(ArtifactStatus.SUCCESS);
+        assertThat(result.error()).isNull();
+        var upload = prd.findAll(postRequestedFor(urlEqualTo(COLLECTION)));
+        assertThat(upload).hasSize(1);
+        assertThat(Base64.getDecoder().decode(json.readTree(upload.getFirst().getBodyAsString())
+                .path("ArtifactContent").asString())).isEqualTo(bundle);
+    }
+
+    @ParameterizedTest
     @ValueSource(booleans = {false, true})
-    @DisplayName("REQ-005 AC-1: omitted and empty artifactIds use DEV list order")
+    @DisplayName("REQ-005 AC-1, REQ-503: omitted and empty artifactIds use DEV list order and preview sends nothing to the target")
     void req005_ac1_all(boolean empty) {
         var response = service.execute(new TransportRequest("PKG", empty ? List.of() : null, true, false));
         assertThat(response.results()).extracting(ArtifactResult::artifactId).containsExactly("A", "B", "C");
         assertThat(response.summary()).isEqualTo(new TransportSummary(3, 3, 0));
+        assertThat(response.results()).allSatisfy(r -> assertThat(r.configurations()).containsExactly(
+                new ConfigurationItem("Endpoint", "dev", "xsd:string", ConfigurationStatus.PLANNED)));
         assertThat(prd.getAllServeEvents()).isEmpty();
     }
 
     @Test
-    @DisplayName("REQ-005 AC-6: unknown artifact fails alone and request order is preserved")
+    @DisplayName("REQ-005 AC-6, REQ-504: unknown artifact fails alone with empty configurations and request order is preserved")
     void req005_ac6_missing() {
         var response = run(List.of("C", "missing", "A"), false, false);
         assertThat(response.results()).extracting(ArtifactResult::artifactId).containsExactly("C", "missing", "A");
         var missing = response.results().get(1);
         assertThat(missing.error().code()).isEqualTo("ARTIFACT_NOT_FOUND");
-        assertThat(missing.replacements()).isEmpty();
-        assertThat(missing.unmappedKeys()).isEmpty();
+        assertThat(missing.configurations()).isEmpty();
         assertThat(response.summary()).isEqualTo(new TransportSummary(3, 2, 1));
     }
 
     @ParameterizedTest
     @ValueSource(ints = {404, 500})
-    @DisplayName("REQ-005 AC-5: target package absence or failure prevents uploads and retains planned diff")
+    @DisplayName("REQ-005 AC-5, REQ-504: target package absence or failure prevents uploads and leaves configurations empty")
     void req005_ac5_targetPackage(int status) {
         prd.stubFor(get(urlEqualTo(PACKAGE)).willReturn(aResponse().withStatus(status)));
         var result = run(List.of("A"), false, true).results().getFirst();
@@ -139,13 +153,13 @@ class TransportServiceWireMockTests {
     }
 
     @Test
-    @DisplayName("REQ-013 AC-2: upload failure retains planned diff and masks error body")
+    @DisplayName("REQ-013 AC-2, REQ-504: upload failure masks error body, writes no configuration and leaves configurations empty")
     void req013_ac2_upload() {
         prd.stubFor(post(urlEqualTo(COLLECTION)).willReturn(serverError().withBody("dummy-prd-secret Password=hidden-value")));
         var result = run(List.of("A"), false, true).results().getFirst();
         beforeUploadFailure(result, "UPLOAD_FAILED");
         assertThat(result.error().message()).contains("UPLOAD", "500", "CPI").doesNotContain("dummy-prd-secret", "hidden-value");
-        prd.verify(0, getRequestedFor(urlEqualTo(path("A") + "/Configurations")));
+        prd.verify(0, putRequestedFor(urlEqualTo(parameter("A"))));
     }
 
     @Test
@@ -157,76 +171,78 @@ class TransportServiceWireMockTests {
         assertThat(response.results()).extracting(ArtifactResult::status)
                 .containsExactly(ArtifactStatus.SUCCESS, ArtifactStatus.FAILED, ArtifactStatus.SUCCESS);
         assertThat(response.results().get(1).error().code()).isEqualTo("DOWNLOAD_FAILED");
-        assertThat(response.results().get(1).replacements()).isEmpty();
+        assertThat(response.results().get(1).configurations()).isEmpty();
         dev.verify(3, getRequestedFor(urlEqualTo(path("B") + "/$value")));
     }
 
-    @Test
-    @DisplayName("REQ-013 AC-2: malformed zip stops before target checks with empty diff")
-    void req013_ac2_parse() {
-        dev.stubFor(get(urlEqualTo(path("A") + "/$value")).willReturn(ok().withBody("invalid zip")));
-        var result = run(List.of("A"), false, true).results().getFirst();
-        assertThat(result.error().code()).isEqualTo("IFLW_PARSE_ERROR");
-        assertThat(result.replacements()).isEmpty();
-        assertThat(result.unmappedKeys()).isEmpty();
-        assertThat(prd.getAllServeEvents()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("REQ-005 AC-4a: configuration read failure retains successful upload and applied header")
-    void req005_ac4a_configurationRead() {
-        prd.stubFor(get(urlEqualTo(path("A") + "/Configurations")).willReturn(serverError()));
-        var result = run(List.of("A"), false, true).results().getFirst();
-        assertThat(result.error().code()).isEqualTo("CONFIGURATION_READ_FAILED");
-        assertThat(result.action()).isEqualTo(TransportAction.CREATED);
-        assertThat(result.replacements()).extracting(Replacement::status).containsOnly(ReplacementStatus.APPLIED);
-        assertThat(result.replacements()).noneMatch(r -> r.targetType() == TargetType.EXTERNAL_PARAM);
-        noDeploy(result);
-    }
-
-    @Test
-    @DisplayName("REQ-008 AC-4: failed parameter preserves upload and successful keys and blocks deploy")
-    void req008_ac4_parameterFailure() {
-        prd.stubFor(get(urlEqualTo(path("A") + "/Configurations")).willReturn(okJson(
-                "{\"d\":{\"results\":[{\"ParameterKey\":\"Endpoint\",\"ParameterValue\":\"dev\",\"DataType\":\"xsd:string\"},{\"ParameterKey\":\"Next\",\"ParameterValue\":\"dev\",\"DataType\":\"xsd:string\"}]}}")));
-        prd.stubFor(put(urlEqualTo(parameter("A"))).willReturn(serverError()));
-        prd.stubFor(put(urlEqualTo(path("A") + "/$links/Configurations('Next')")).willReturn(noContent()));
-        var rules = new ArrayList<>(rules());
-        rules.add(new MappingEntry("A", TargetType.EXTERNAL_PARAM, "Next", "dev", "prd"));
-        var result = service.execute(new TransportRequest("PKG", List.of("A"), false, true), artifacts(), rules).results().getFirst();
-        assertThat(result.error().code()).isEqualTo("CONFIGURATION_UPDATE_FAILED");
-        assertThat(result.action()).isEqualTo(TransportAction.CREATED);
-        assertThat(result.replacements()).filteredOn(r -> r.targetType() == TargetType.EXTERNAL_PARAM)
-                .extracting(Replacement::status).containsExactly(ReplacementStatus.FAILED, ReplacementStatus.APPLIED);
-        noDeploy(result);
-    }
-
     @ParameterizedTest
-    @ValueSource(strings = {"ERROR", "WAITING", "HTTP_FAILURE"})
-    @DisplayName("REQ-009 AC-3, AC-4: deployment failure or timeout preserves upload and replacements")
-    void req009_ac3_deployment(String status) {
-        if (status.equals("HTTP_FAILURE")) prd.stubFor(post(urlEqualTo(deploy("A"))).willReturn(serverError()));
-        else prd.stubFor(get(urlEqualTo(runtime("A"))).willReturn(okJson("{\"d\":{\"Status\":\"" + status + "\"}}")));
+    @ValueSource(booleans = {false, true})
+    @DisplayName("REQ-502, REQ-503: source configuration read failure fails only that artifact before any target request")
+    void req502_sourceReadFailure(boolean dryRun) {
+        dev.stubFor(get(urlEqualTo(path("A") + "/Configurations")).willReturn(serverError()));
+        var response = run(List.of("A", "B"), dryRun, false);
+        var failed = response.results().getFirst();
+        assertThat(failed.error().code()).isEqualTo("CONFIGURATION_READ_FAILED");
+        assertThat(failed.action()).isEqualTo(TransportAction.NONE);
+        assertThat(failed.configurations()).isEmpty();
+        assertThat(response.results().get(1).status()).isEqualTo(ArtifactStatus.SUCCESS);
+        prd.verify(0, getRequestedFor(urlEqualTo(path("A"))));
+        prd.verify(0, postRequestedFor(urlEqualTo(COLLECTION)).withRequestBody(matchingJsonPath("$.Id", equalTo("A"))));
+        prd.verify(0, putRequestedFor(urlMatching(java.util.regex.Pattern.quote(path("A")) + ".*")));
+    }
+
+    @Test
+    @DisplayName("REQ-502, REQ-504: every source key is written in order, empty sensitive values are skipped, sensitive values stay plain and PUT failures block deploy")
+    void req502_statuses() {
+        configurations("A",
+                "{\"ParameterKey\":\"Endpoint\",\"ParameterValue\":\"dev\",\"DataType\":\"xsd:string\"}",
+                "{\"ParameterKey\":\"Next\",\"ParameterValue\":\"42\",\"DataType\":\"xsd:integer\"}",
+                "{\"ParameterKey\":\"ClientPassword\",\"ParameterValue\":\"dummy-dev-pass-1\",\"DataType\":\"xsd:string\"}",
+                "{\"ParameterKey\":\"Password\",\"ParameterValue\":\"\",\"DataType\":\"xsd:string\"}",
+                "{\"ParameterKey\":\"AccessToken\",\"DataType\":\"xsd:string\"}",
+                "{\"ParameterKey\":\"Plain\",\"ParameterValue\":\"\",\"DataType\":\"xsd:string\"}");
+        prd.stubFor(put(urlEqualTo(parameter("A"))).willReturn(serverError().withBody("dev hidden-body")));
         var result = run(List.of("A"), false, true).results().getFirst();
-        assertThat(result.error().code()).isEqualTo(status.equals("WAITING") ? "DEPLOY_TIMEOUT" : "DEPLOY_FAILED");
-        assertThat(result.deployStatus()).isEqualTo(status.equals("WAITING") ? DeployStatus.TIMEOUT : DeployStatus.ERROR);
+        assertThat(result.configurations()).extracting(ConfigurationItem::key, ConfigurationItem::status).containsExactly(
+                tuple("Endpoint", ConfigurationStatus.FAILED), tuple("Next", ConfigurationStatus.COPIED),
+                tuple("ClientPassword", ConfigurationStatus.COPIED), tuple("Password", ConfigurationStatus.SKIPPED_EMPTY),
+                tuple("AccessToken", ConfigurationStatus.SKIPPED_EMPTY), tuple("Plain", ConfigurationStatus.COPIED));
+        assertThat(result.configurations().get(2)).isEqualTo(
+                new ConfigurationItem("ClientPassword", "dummy-dev-pass-1", "xsd:string", ConfigurationStatus.COPIED));
+        assertThat(result.error().code()).isEqualTo("CONFIGURATION_UPDATE_FAILED");
+        assertThat(result.error().message()).contains("Endpoint: HTTP 500").doesNotContain("Next", "42", "dummy-dev-pass-1", "hidden-body");
         assertThat(result.action()).isEqualTo(TransportAction.CREATED);
-        assertThat(result.replacements()).extracting(Replacement::status).containsOnly(ReplacementStatus.APPLIED);
+        prd.verify(1, putRequestedFor(urlEqualTo(path("A") + "/$links/Configurations('Next')"))
+                .withRequestBody(equalToJson("{\"ParameterValue\":\"42\",\"DataType\":\"xsd:integer\"}")));
+        prd.verify(1, putRequestedFor(urlEqualTo(path("A") + "/$links/Configurations('ClientPassword')"))
+                .withRequestBody(equalToJson("{\"ParameterValue\":\"dummy-dev-pass-1\",\"DataType\":\"xsd:string\"}")));
+        prd.verify(1, putRequestedFor(urlEqualTo(path("A") + "/$links/Configurations('Plain')"))
+                .withRequestBody(equalToJson("{\"ParameterValue\":\"\",\"DataType\":\"xsd:string\"}")));
+        prd.verify(0, putRequestedFor(urlEqualTo(path("A") + "/$links/Configurations('Password')")));
+        prd.verify(0, putRequestedFor(urlEqualTo(path("A") + "/$links/Configurations('AccessToken')")));
+        prd.verify(0, getRequestedFor(urlMatching(".*/Configurations")));
+        noDeploy(result);
     }
 
     @ParameterizedTest(name = "{displayName} [{index}] deploy={0}")
     @ValueSource(booleans = {false, true})
-    @DisplayName("REQ-010 AC-1, AC-2, AC-3, AC-4: dry run performs no writes CSRF or PRD requests even on failure")
-    void req010_ac1_dryRun(boolean deploy) {
+    @DisplayName("REQ-010, REQ-503: preview plans every source key, isolates source read failures and sends no request to the target")
+    void req503_preview(boolean deploy) {
+        configurations("A",
+                "{\"ParameterKey\":\"Endpoint\",\"ParameterValue\":\"dev\",\"DataType\":\"xsd:string\"}",
+                "{\"ParameterKey\":\"Password\",\"ParameterValue\":\"\",\"DataType\":\"xsd:string\"}",
+                "{\"ParameterKey\":\"ClientPassword\",\"ParameterValue\":\"dummy-dev-pass-1\",\"DataType\":\"xsd:string\"}");
         dev.stubFor(get(urlEqualTo(path("B") + "/Configurations")).willReturn(serverError()));
         var response = run(List.of("A", "B", "missing"), true, deploy);
         assertThat(response.summary()).isEqualTo(new TransportSummary(3, 1, 2));
         assertThat(response.results()).allMatch(r -> r.action() == TransportAction.NONE)
                 .allMatch(r -> r.deployStatus() == (deploy ? DeployStatus.SKIPPED_DRY_RUN : DeployStatus.NOT_REQUESTED));
-        assertThat(response.results().getFirst().replacements()).extracting(Replacement::status).containsOnly(ReplacementStatus.PLANNED);
-        assertThat(response.results().getFirst().replacements()).extracting(Replacement::targetType).contains(TargetType.EXTERNAL_PARAM);
+        assertThat(response.results().getFirst().configurations()).containsExactly(
+                new ConfigurationItem("Endpoint", "dev", "xsd:string", ConfigurationStatus.PLANNED),
+                new ConfigurationItem("Password", "", "xsd:string", ConfigurationStatus.SKIPPED_EMPTY),
+                new ConfigurationItem("ClientPassword", "dummy-dev-pass-1", "xsd:string", ConfigurationStatus.PLANNED));
         assertThat(response.results().get(1).error().code()).isEqualTo("CONFIGURATION_READ_FAILED");
-        assertThat(response.results().get(1).replacements()).extracting(Replacement::status).containsOnly(ReplacementStatus.PLANNED);
+        assertThat(response.results().get(1).configurations()).isEmpty();
         assertThat(prd.getAllServeEvents()).isEmpty();
         assertThat(dev.getAllServeEvents()).allMatch(e -> e.getRequest().getMethod().getName().equals("GET")
                 || e.getRequest().getUrl().equals("/token"));
@@ -234,32 +250,36 @@ class TransportServiceWireMockTests {
         dev.verify(0, anyRequestedFor(anyUrl()).withHeader("X-CSRF-Token", matching(".*")));
     }
 
-    @Test
-    @DisplayName("REQ-005 AC-3a: value mismatch alone succeeds")
-    void req005_ac3a_mismatch() {
-        var result = service.execute(new TransportRequest("PKG", List.of("A"), false, false), artifacts(),
-                List.of(new MappingEntry("A", TargetType.HEADER, "Endpoint", "different", "prd"))).results().getFirst();
-        assertThat(result.replacements()).extracting(Replacement::status).containsExactly(ReplacementStatus.VALUE_MISMATCH);
-        assertThat(result.status()).isEqualTo(ArtifactStatus.SUCCESS);
-        assertThat(result.error()).isNull();
-        noDeploy(result);
+    @ParameterizedTest
+    @ValueSource(strings = {"ERROR", "WAITING", "HTTP_FAILURE"})
+    @DisplayName("REQ-009 AC-3, AC-4: deployment failure or timeout preserves upload and copied configurations")
+    void req009_ac3_deployment(String status) {
+        if (status.equals("HTTP_FAILURE")) prd.stubFor(post(urlEqualTo(deploy("A"))).willReturn(serverError()));
+        else prd.stubFor(get(urlEqualTo(runtime("A"))).willReturn(okJson("{\"d\":{\"Status\":\"" + status + "\"}}")));
+        var result = run(List.of("A"), false, true).results().getFirst();
+        assertThat(result.error().code()).isEqualTo(status.equals("WAITING") ? "DEPLOY_TIMEOUT" : "DEPLOY_FAILED");
+        assertThat(result.deployStatus()).isEqualTo(status.equals("WAITING") ? DeployStatus.TIMEOUT : DeployStatus.ERROR);
+        assertThat(result.action()).isEqualTo(TransportAction.CREATED);
+        assertThat(result.configurations()).extracting(ConfigurationItem::status).containsOnly(ConfigurationStatus.COPIED);
     }
 
     @Test
     @DisplayName("REQ-013 AC-1: arbitrary runtime exception is isolated without exposing exception text")
     void req013_ac1_runtimeFailure() {
-        var replacer = new IflwReplacer(sensitive) {
+        var failing = new CpiApiClient(new CpiHttpExecutor(new CpiProperties(connection(dev, "dev"), connection(prd, "prd")),
+                new OAuthTokenProvider(new CpiProperties(connection(dev, "dev"), connection(prd, "prd")), settings, clock, sleeper),
+                new CsrfTokenStore(), settings, sleeper), json) {
             private int calls;
-            @Override public Result process(byte[] zip, List<MappingEntry> mappings, boolean dryRun) {
+            @Override public byte[] downloadArtifact(String environment, String id) {
                 if (++calls == 2) throw new IllegalStateException("sensitive exception value");
-                return super.process(zip, mappings, dryRun);
+                return super.downloadArtifact(environment, id);
             }
         };
-        var isolated = new TransportService(api, replacer, new ExternalParameterReplacer(api, sensitive),
-                new DeployService(api, settings, clock, sleeper), new MappingFileLoader(settings), clock);
-        var response = isolated.execute(new TransportRequest("PKG", null, true, true), artifacts(), rules());
+        var isolated = new TransportService(failing, new ConfigurationCopier(failing, sensitive),
+                new DeployService(failing, settings, clock, sleeper), clock);
+        var response = isolated.execute(new TransportRequest("PKG", null, true, true), artifacts());
         assertThat(response.summary()).isEqualTo(new TransportSummary(3, 2, 1));
-        assertThat(response.results().get(1).error().code()).isEqualTo("IFLW_PARSE_ERROR");
+        assertThat(response.results().get(1).error().code()).isEqualTo("DOWNLOAD_FAILED");
         assertThat(response.results().get(1).error().message()).doesNotContain("sensitive exception value");
         assertThat(response.results()).allMatch(r -> r.deployStatus() == DeployStatus.SKIPPED_DRY_RUN);
         assertThat(prd.getAllServeEvents()).isEmpty();
@@ -282,29 +302,22 @@ class TransportServiceWireMockTests {
     private void beforeUploadFailure(ArtifactResult result, String code) {
         assertThat(result.error().code()).isEqualTo(code);
         assertThat(result.action()).isEqualTo(TransportAction.NONE);
-        assertThat(result.replacements()).extracting(Replacement::status).containsOnly(ReplacementStatus.PLANNED);
-        assertThat(result.replacements()).noneMatch(r -> r.targetType() == TargetType.EXTERNAL_PARAM);
-        assertThat(result.unmappedKeys()).contains(new UnmappedKey(TargetType.HEADER, "Unmapped"));
+        assertThat(result.configurations()).isEmpty();
         noDeploy(result);
     }
     private void noDeploy(ArtifactResult result) {
         assertThat(result.deployStatus()).isEqualTo(DeployStatus.NOT_REQUESTED);
         prd.verify(0, postRequestedFor(urlMatching("/api/v1/Deploy.*")));
     }
+    private void configurations(String id, String... items) {
+        dev.stubFor(get(urlEqualTo(path(id) + "/Configurations"))
+                .willReturn(okJson("{\"d\":{\"results\":[" + String.join(",", items) + "]}}")));
+    }
     private TransportResponse run(List<String> ids, boolean dry, boolean deploy) {
-        return service.execute(new TransportRequest("PKG", ids, dry, deploy), artifacts(), rules());
+        return service.execute(new TransportRequest("PKG", ids, dry, deploy), artifacts());
     }
     private List<CpiArtifact> artifacts() {
         return List.of(new CpiArtifact("A", "Name A", "1.0"), new CpiArtifact("B", "Name B", "1.0"), new CpiArtifact("C", "Name C", "1.0"));
-    }
-    private List<MappingEntry> rules() {
-        var rules = new ArrayList<MappingEntry>();
-        for (String id : List.of("A", "B", "C")) {
-            rules.add(new MappingEntry(id, TargetType.HEADER, "Endpoint", "dev", "prd"));
-            rules.add(new MappingEntry(id, TargetType.PROPERTY, "Property", "dev", "prd"));
-            rules.add(new MappingEntry(id, TargetType.EXTERNAL_PARAM, "Endpoint", "dev", "prd"));
-        }
-        return rules;
     }
     private CpiProperties.Connection connection(WireMockServer server, String env) {
         String base = "http://localhost:" + server.port();
@@ -315,17 +328,20 @@ class TransportServiceWireMockTests {
     private static String deploy(String id) { return "/api/v1/DeployIntegrationDesigntimeArtifact?Id='" + id + "'&Version='active'"; }
     private static String runtime(String id) { return "/api/v1/IntegrationRuntimeArtifacts('" + id + "')"; }
     private byte[] zip() throws IOException {
+        return zipOf("<b:definitions xmlns:b=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"><b:callActivity/></b:definitions>");
+    }
+    private byte[] brokenZip() throws IOException { return zipOf("<b:definitions><unclosed"); }
+    private byte[] zipOf(String iflw) throws IOException {
         var bytes = new ByteArrayOutputStream();
         try (var zip = new ZipOutputStream(bytes)) {
-            zip.putNextEntry(new ZipEntry("src/main/resources/scenarioflows/integrationflow/flow.iflw"));
-            zip.write(("<b:definitions xmlns:b=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:ifl=\"http:///com.sap.ifl.model/Ifl.xsd\">"
-                    + "<b:callActivity><ifl:property><key>activityType</key><value>Enricher</value></ifl:property>"
-                    + "<ifl:property><key>headerTable</key><value><![CDATA[<row><cell id='Name'>Endpoint</cell><cell id='Value'>dev</cell></row>"
-                    + "<row><cell id='Name'>Unmapped</cell><cell id='Value'>unchanged</cell></row>]]></value></ifl:property>"
-                    + "<ifl:property><key>propertyTable</key><value><![CDATA[<row><cell id='Name'>Property</cell><cell id='Value'>dev</cell></row>]]></value></ifl:property>"
-                    + "</b:callActivity></b:definitions>").getBytes(StandardCharsets.UTF_8));
+            var flow = new ZipEntry("src/main/resources/scenarioflows/integrationflow/flow.iflw");
+            flow.setTime(0);
+            zip.putNextEntry(flow);
+            zip.write(iflw.getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
-            zip.putNextEntry(new ZipEntry("version.txt"));
+            var version = new ZipEntry("version.txt");
+            version.setTime(0);
+            zip.putNextEntry(version);
             zip.write("1.0".getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
         }
