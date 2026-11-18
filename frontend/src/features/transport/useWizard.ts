@@ -19,10 +19,6 @@ interface WizardData {
   templateDone: boolean;
   template: TransportTemplate | null;
   pkg: ArtifactSummary | null;
-  /** 템플릿의 패키지가 원본 목록에 있는지 아직 확인하지 않았으면 그 ID */
-  pendingPackage: string | null;
-  /** 템플릿의 패키지가 원본에 없었으면 그 ID */
-  missingPackage: string | null;
   artifactIds: string[];
   artifactTotal: number | null;
   preview: TransportResponse | null;
@@ -36,7 +32,7 @@ interface WizardData {
 }
 
 const EMPTY_SELECTION = {
-  pkg: null, pendingPackage: null, missingPackage: null, artifactIds: [] as string[], artifactTotal: null,
+  pkg: null, artifactIds: [] as string[], artifactTotal: null,
   preview: null, real: null, error: null, templateFailure: null, confirm: null, busy: false,
 } satisfies Partial<WizardData>;
 
@@ -155,7 +151,6 @@ export function useWizard() {
       setTargetTenantId(t.targetTenantId);
       update(() => ({
         ...initial(t.sourceTenantId, t.targetTenantId), step: 'package', templateDone: true, template: t,
-        pkg: t.packageId ? { id: t.packageId, name: t.packageId, version: '' } : null, pendingPackage: t.packageId ?? null,
       }));
     },
     /** 대기 항목 전달: 템플릿 경로·연결을 유지하고 대기 패키지의 아티팩트 단계만 연다. 실행은 사용자가 요청한다. */
@@ -176,19 +171,9 @@ export function useWizard() {
       inFlight.current = false;
       update(d => ({ ...initial(d.route.source, d.route.target), step: 'artifacts', templateDone: true, pkg }));
     },
-    /** 패키지 단계가 원본 목록을 받으면 템플릿 패키지를 확인한다. */
-    resolvePackage(packages: ArtifactSummary[]) {
-      update(d => {
-        if (d.pendingPackage === null) return d;
-        const found = packages.find(p => p.id === d.pendingPackage);
-        if (found) return { ...d, pendingPackage: null, pkg: d.pkg?.id === found.id ? found : d.pkg };
-        if (d.pkg?.id !== d.pendingPackage) return { ...d, pendingPackage: null };
-        return { ...dropResults(d), pendingPackage: null, missingPackage: d.pendingPackage, pkg: null, artifactIds: [], artifactTotal: null };
-      });
-    },
     selectPackage(pkg: ArtifactSummary) {
       update(d => (d.pkg?.id === pkg.id ? d
-        : { ...dropResults(d), pkg, pendingPackage: null, missingPackage: null, artifactIds: [], artifactTotal: null }));
+        : { ...dropResults(d), pkg, artifactIds: [], artifactTotal: null }));
     },
     setArtifactIds(ids: string[]) {
       update(d => ({ ...dropResults(d), artifactIds: ids }));
