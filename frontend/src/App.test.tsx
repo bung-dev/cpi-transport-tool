@@ -23,8 +23,7 @@ const HISTORY_ENTRY: TransportResponse = {
       action: 'NONE',
       deployStatus: 'NOT_REQUESTED',
       error: null,
-      replacements: [],
-      unmappedKeys: [],
+      configurations: [],
     },
   ],
 };
@@ -145,7 +144,7 @@ describe('App', () => {
     for (let i = 1; i < levels.length; i++) expect(levels[i] - levels[i - 1], `제목 ${i}`).toBeLessThanOrEqual(1);
     expect(screen.getByRole('heading', { level: 3, name: '이관 결과' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 4, name: 'IF_Order_Sync' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 5, name: '치환 항목' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 5, name: '구성 값' })).toBeInTheDocument();
   });
 
   it('REQ-101 AC-4: 페이지 제목은 24px·굵기 600·음수 자간 클래스이고 이력 표의 packageId·transportId 값은 고정폭이다', async () => {

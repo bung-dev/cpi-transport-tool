@@ -10,7 +10,7 @@ afterEach(() => vi.unstubAllGlobals());
 function entry(id: string, statuses: DeployStatus[], overrides: Partial<TransportResponse> = {}): TransportResponse {
   const results: ArtifactResult[] = statuses.map((deployStatus, i) => ({
     artifactId: `IF_History_${i}`, status: deployStatus === 'ERROR' || deployStatus === 'TIMEOUT' ? 'FAILED' : 'SUCCESS',
-    action: 'UPDATED', deployStatus, replacements: [], unmappedKeys: [],
+    action: 'UPDATED', deployStatus, configurations: [],
     error: deployStatus === 'ERROR' ? { code: 'DEPLOY_FAILED', message: 'DEPLOY: CPI deployment ERROR',
       detail: '첫 줄\n둘째 줄 <img src=x>', detailHttpStatus: 200 } : null,
   }));

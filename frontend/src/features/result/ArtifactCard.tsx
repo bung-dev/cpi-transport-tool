@@ -6,11 +6,9 @@ import { ChevronDownIcon } from '../../components/ui/icons';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { Table, Td, Th, Tr } from '../../components/ui/Table';
 import type { StatusKind } from '../../design/statusBadges';
-import { isProblemReplacement, problemCount } from './problems';
+import { isProblemConfiguration, problemCount } from './problems';
 
 const orDash = (v: string | null): ReactNode => (v === null ? <span className="text-ink-tertiary">—</span> : v);
-// REQ-424: 민감 값(SENSITIVE_SKIPPED)은 서버가 값을 보내도 변경 전·후 칸에 쓰지 않는다. 키는 보인다.
-const hidden: ReactNode = <span className="text-ink-tertiary">숨김</span>;
 
 /** 분류 이름(12px, ink-tertiary)이 앞에 붙은 상태 배지. 배지 글자는 API 값 원문이다. */
 function LabeledBadge({ label, kind, value }: { label: string; kind: StatusKind; value: string }) {
@@ -27,7 +25,7 @@ interface Props {
   /** 펼침 여부 */
   expanded: boolean;
   onToggle: () => void;
-  /** "문제 항목만 보기"가 켜진 동안: 치환 표에 문제 항목 행만 보이고 접기 버튼은 비활성이다(D-018 ②, D-019 ④). */
+  /** "문제 항목만 보기"가 켜진 동안: 구성 값 표에 문제 항목 행만 보이고 접기 버튼은 비활성이다(D-018 ②, D-019 ④). */
   onlyProblems: boolean;
 }
 
@@ -35,7 +33,9 @@ interface Props {
 export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
   const bodyId = useId();
   const failed = r.status === 'FAILED';
-  const rows = onlyProblems ? r.replacements.filter(isProblemReplacement) : r.replacements;
+  // REQ-512: 예전 이력에는 configurations가 없을 수 있다.
+  const configurations = r.configurations ?? [];
+  const rows = onlyProblems ? configurations.filter(isProblemConfiguration) : configurations;
   return (
     <Card className="relative overflow-hidden">
       {failed && <span aria-hidden="true" data-failed-band className="absolute inset-y-0 left-0 w-[3px] bg-danger-fg" />}
@@ -61,7 +61,7 @@ export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
         </div>
         {!expanded && (
           <p className="text-xs text-ink-secondary">
-            치환 {r.replacements.length}건 · 문제 {problemCount(r)}건 · 매핑되지 않은 키 {r.unmappedKeys.length}개
+            구성 값 {configurations.length}개 · 문제 {problemCount(r)}건
           </p>
         )}
         {expanded && (
@@ -81,53 +81,33 @@ export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
                 </p>
               </div>
             )}
-            <div>
-              <h5 className="mb-1.5 text-xs font-semibold text-ink-secondary">치환 항목</h5>
-              {r.replacements.length === 0 && !onlyProblems ? (
-                <p className="text-sm text-ink-secondary">치환 항목 없음</p>
+            <div className="min-w-0">
+              <h5 className="mb-1.5 text-xs font-semibold text-ink-secondary">구성 값</h5>
+              {configurations.length === 0 && !onlyProblems ? (
+                <p className="text-sm text-ink-secondary">구성 값 없음</p>
               ) : rows.length === 0 ? (
                 <p className="text-sm text-ink-secondary">문제 항목 없음</p>
               ) : (
-                <Table className="min-w-[640px]">
+                <Table className="table-fixed">
                   <thead>
                     <Tr>
-                      <Th>대상 유형</Th>
                       <Th>키</Th>
+                      <Th>값</Th>
                       <Th>상태</Th>
-                      <Th>변경 전</Th>
-                      <Th>변경 후</Th>
-                      <Th numeric>횟수</Th>
                     </Tr>
                   </thead>
                   <tbody>
                     {rows.map((x, i) => (
                       <Tr key={i}>
-                        <Td>{x.targetType}</Td>
                         <Td className="font-mono text-[13px]">{x.key}</Td>
+                        <Td className="font-mono text-[13px] break-all">{orDash(x.value)}</Td>
                         <Td>
-                          <StatusBadge kind="replacementStatus" value={x.status} />
+                          <StatusBadge kind="configurationStatus" value={x.status} />
                         </Td>
-                        <Td className="font-mono text-[13px]">{x.status === 'SENSITIVE_SKIPPED' ? hidden : orDash(x.before)}</Td>
-                        <Td className="font-mono text-[13px]">{x.status === 'SENSITIVE_SKIPPED' ? hidden : orDash(x.after)}</Td>
-                        <Td numeric>{x.occurrences}</Td>
                       </Tr>
                     ))}
                   </tbody>
                 </Table>
-              )}
-            </div>
-            <div>
-              <h5 className="mb-1.5 text-xs font-semibold text-ink-secondary">매핑되지 않은 키</h5>
-              {r.unmappedKeys.length === 0 ? (
-                <p className="text-sm text-ink-secondary">매핑되지 않은 키 없음</p>
-              ) : (
-                <ul className="flex flex-wrap gap-1.5">
-                  {r.unmappedKeys.map((u, i) => (
-                    <li key={i} className="rounded-sm bg-neutral-bg px-2 py-0.5 font-mono text-xs text-neutral-fg break-all">
-                      {u.targetType} / {u.key}
-                    </li>
-                  ))}
-                </ul>
               )}
             </div>
           </div>

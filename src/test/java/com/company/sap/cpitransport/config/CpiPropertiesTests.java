@@ -100,9 +100,12 @@ class CpiPropertiesTests {
     }
 
     @Test
-    @DisplayName("REQ-006 AC-4: mapping path defaults to empty")
-    void req006_ac4_emptyMappingDefault() {
-        context(Map.of()).run(ctx -> assertThat(ctx.getBean(TransportProperties.class).mappingFile()).isEmpty());
+    @DisplayName("REQ-505: the mapping-file setting no longer exists and a leftover value is ignored")
+    void req505_mappingSettingRemoved() {
+        assertThat(java.util.Arrays.stream(TransportProperties.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName)).doesNotContain("mappingFile");
+        context(Map.of(), "cpi.transport.mapping-file=" + tempDir.resolve("missing-mapping.yml"))
+                .run(ctx -> assertThat(ctx).hasNotFailed().hasSingleBean(TransportProperties.class));
     }
 
     @Test
@@ -150,7 +153,6 @@ class CpiPropertiesTests {
                 "cpi.transport.deploy.poll-interval=2s", "cpi.transport.deploy.timeout=20s",
                 "cpi.transport.sensitive-key-patterns=password,token").run(ctx -> {
             var properties = ctx.getBean(TransportProperties.class);
-            assertThat(properties.mappingFile()).isEqualTo(mapping.toString());
             assertThat(properties.history().file()).isEqualTo(history);
             assertThat(properties.retry().maxAttempts()).isEqualTo(5);
             assertThat(properties.retry().initialBackoff()).isEqualTo(Duration.ofMillis(250));

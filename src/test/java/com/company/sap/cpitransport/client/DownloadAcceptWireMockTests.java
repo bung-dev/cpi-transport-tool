@@ -16,9 +16,7 @@ import com.company.sap.cpitransport.model.TenantRef;
 import com.company.sap.cpitransport.model.TransportRequest;
 import com.company.sap.cpitransport.model.TransportResponse;
 import com.company.sap.cpitransport.service.DeployService;
-import com.company.sap.cpitransport.service.ExternalParameterReplacer;
-import com.company.sap.cpitransport.service.IflwReplacer;
-import com.company.sap.cpitransport.service.MappingFileLoader;
+import com.company.sap.cpitransport.service.*;
 import com.company.sap.cpitransport.service.SensitiveKeyMatcher;
 import com.company.sap.cpitransport.service.TransportService;
 import com.company.sap.cpitransport.stub.LocalCpiStubs;
@@ -59,7 +57,7 @@ class DownloadAcceptWireMockTests {
         var properties = new CpiProperties(
                 new CpiProperties.Connection(base, base + "/dev/token", "dummy-dev-client", "dummy-dev-secret"),
                 new CpiProperties.Connection(base, base + "/prd/token", "dummy-prd-client", "dummy-prd-secret"));
-        var transport = new TransportProperties("", new TransportProperties.History(temporary.resolve("history.jsonl")),
+        var transport = new TransportProperties(new TransportProperties.History(temporary.resolve("history.jsonl")),
                 new TransportProperties.Retry(1, Duration.ZERO),
                 new TransportProperties.Deploy(Duration.ofSeconds(5), Duration.ofSeconds(300)), List.of());
         Sleeper sleeper = duration -> { throw new AssertionError("Unexpected wait"); };
@@ -220,8 +218,7 @@ class DownloadAcceptWireMockTests {
         Flow(LocalCpiStubs stubs, Path directory) throws Exception {
             var json = new JsonMapper();
             var clock = new FixedClock();
-            var settings = new TransportProperties("examples/mapping-example.json",
-                    new TransportProperties.History(directory.resolve("flow-history.jsonl")),
+            var settings = new TransportProperties(new TransportProperties.History(directory.resolve("flow-history.jsonl")),
                     new TransportProperties.Retry(1, Duration.ZERO),
                     new TransportProperties.Deploy(Duration.ofSeconds(1), Duration.ofSeconds(5)),
                     List.of("password", "secret", "apikey"));
@@ -241,8 +238,8 @@ class DownloadAcceptWireMockTests {
             var http = new CpiHttpExecutor(tenants, tokens, csrf, settings, clock::advance);
             var client = new CpiApiClient(http, json);
             var sensitive = new SensitiveKeyMatcher(settings);
-            service = new TransportService(client, new IflwReplacer(sensitive), new ExternalParameterReplacer(client, sensitive),
-                    new DeployService(client, settings, clock, clock::advance), new MappingFileLoader(settings), clock);
+            service = new TransportService(client, new ConfigurationCopier(client, sensitive),
+                    new DeployService(client, settings, clock, clock::advance), clock);
         }
 
         private static JsonNode body(JsonMapper json, String name, String env, String base) {

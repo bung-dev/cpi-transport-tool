@@ -44,10 +44,8 @@ class CpiFailureBoundaryTests {
         when(guard.missingKeys("DEV")).thenReturn(List.of());
         when(api.getPackage("DEV", "Pkg")).thenReturn(Optional.of(new CpiPackage("Pkg", "Package", "1")));
         var packages = new PackageQueryService(guard, api);
-        var mappings = mock(MappingFileLoader.class);
-        when(mappings.load()).thenReturn(List.of());
-        var transport = new TransportService(api, mock(IflwReplacer.class), mock(ExternalParameterReplacer.class),
-                mock(DeployService.class), mappings, Clock.systemUTC());
+        var transport = new TransportService(api, mock(ConfigurationCopier.class),
+                mock(DeployService.class), Clock.systemUTC());
         var request = new TransportRequest("Pkg", List.of("Artifact"), true, false);
         ThrowingCallable operation;
         switch (query) {

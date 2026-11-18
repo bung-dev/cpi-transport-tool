@@ -53,8 +53,7 @@ class DeployErrorDetailWireMockTests {
     @BeforeEach void start() throws Exception {
         stubs = new LocalCpiStubs(directory.resolve("bundles"));
         stubs.start(0, 0);
-        settings = new TransportProperties("examples/mapping-example.json",
-                new TransportProperties.History(directory.resolve("history.jsonl")),
+        settings = new TransportProperties(new TransportProperties.History(directory.resolve("history.jsonl")),
                 new TransportProperties.Retry(3, Duration.ZERO),
                 new TransportProperties.Deploy(Duration.ofSeconds(1), Duration.ofSeconds(4)),
                 List.of("password", "secret", "token"));
@@ -72,8 +71,8 @@ class DeployErrorDetailWireMockTests {
     }
     private TransportService transport(CpiApiClient client) {
         var sensitive = new SensitiveKeyMatcher(settings);
-        return new TransportService(client, new IflwReplacer(sensitive), new ExternalParameterReplacer(client, sensitive),
-                new DeployService(client, settings, clock, clock::advance), new MappingFileLoader(settings), clock);
+        return new TransportService(client, new ConfigurationCopier(client, sensitive),
+                new DeployService(client, settings, clock, clock::advance), clock);
     }
     private TransportResponse run(String id, boolean dryRun, boolean deploy) {
         return service.execute(new TransportRequest("PkgFaultDemo", List.of(id), dryRun, deploy));
@@ -258,12 +257,9 @@ class DeployErrorDetailWireMockTests {
         String body = String.join(" ", secrets) + "\nAuthorization: unknown-auth\nSet-Cookie: unknown-cookie\nX-CSRF-Token: unknown-csrf\n"
                 + "Bearer unknown-bearer Basic unknown-basic eyJabc.def.ghi\nZZ-TENANT zz-tenant zz-auth\n\tkeep\n"
                 + "test-dummy-map-dev test-dummy-map-prd";
-        var replacer = new ExternalParameterReplacer(api, new SensitiveKeyMatcher(settings));
-        var mappings = List.of(new MappingEntry("another-artifact", TargetType.HEADER, "Password", "test-dummy-map-dev", "test-dummy-map-prd"),
-                new MappingEntry(ERROR_ID, TargetType.PROPERTY, "plain", "leave-dev", "leave-prd"));
         String value = DeployErrorDetail.mask(body.getBytes(StandardCharsets.UTF_8), secrets,
                 "https://zz-tenant.it-cpi001.cfapps.eu10.hana.example.localhost", "https://zz-auth.auth.example.localhost/oauth/token",
-                replacer.sensitiveValues(mappings));
+                List.of("test-dummy-map-dev", "test-dummy-map-prd"));
         for (String secret : secrets) assertThat(value).doesNotContain(secret);
         assertThat(value).doesNotContain("unknown-auth", "unknown-cookie", "unknown-csrf", "unknown-bearer", "unknown-basic", "eyJabc.def.ghi",
                 "ZZ-TENANT", "zz-tenant", "zz-auth", "test-dummy-map-dev", "test-dummy-map-prd");
@@ -275,13 +271,16 @@ class DeployErrorDetailWireMockTests {
                     .isEqualTo("localhost 127 1 ::1 singlehost two");
     }
 
-    @Test @DisplayName("REQ-309 AC-4 / REQ-309 AC-10: transport masks sensitive mappings belonging to other artifacts")
-    void req309_ac4_allLoadedMappings() {
-        detail(200, "test-dummy-other-dev test-dummy-other-prd");
-        var response = service.execute(new TransportRequest("PkgFaultDemo", List.of(ERROR_ID), false, true),
-                api.listArtifacts("DEV", "PkgFaultDemo"), List.of(new MappingEntry("other-artifact", TargetType.HEADER,
-                        "Password", "test-dummy-other-dev", "test-dummy-other-prd")));
-        assertThat(response.results().getFirst().error().detail()).isEqualTo("*** ***");
+    @Test @DisplayName("REQ-505 / REQ-309 AC-4: deploy error detail masks sensitive source configuration values copied in this transport, not plain ones")
+    void req505_copiedSensitiveValuesMasked() {
+        stubs.dev().stubFor(get(urlEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='" + ERROR_ID + "',Version='active')/Configurations"))
+                .atPriority(0).willReturn(okJson("{\"d\":{\"results\":["
+                        + "{\"ParameterKey\":\"ClientPassword\",\"ParameterValue\":\"test-dummy-copied-secret\",\"DataType\":\"xsd:string\"},"
+                        + "{\"ParameterKey\":\"Endpoint\",\"ParameterValue\":\"test-dummy-plain-endpoint\",\"DataType\":\"xsd:string\"}]}}")));
+        detail(200, "test-dummy-copied-secret test-dummy-plain-endpoint");
+        var result = run(ERROR_ID, false, true).results().getFirst();
+        assertThat(result.configurations()).extracting(ConfigurationItem::status).containsOnly(ConfigurationStatus.COPIED);
+        assertThat(result.error().detail()).isEqualTo("*** test-dummy-plain-endpoint");
         once();
     }
 
@@ -299,8 +298,8 @@ class DeployErrorDetailWireMockTests {
         var history = new TransportHistoryStore(settings, json);
         history.append(response);
         var original = response.results().getFirst();
-        var legacyResult = new ArtifactResult(original.artifactId(), null, original.action(), original.replacements(),
-                original.unmappedKeys(), original.deployStatus(), new ArtifactError(original.error().code(), original.error().message()));
+        var legacyResult = new ArtifactResult(original.artifactId(), null, original.action(), original.configurations(),
+                original.deployStatus(), new ArtifactError(original.error().code(), original.error().message()));
         var legacyResponse = new TransportResponse(response.transportId(), response.packageId(), response.dryRun(), response.deploy(),
                 response.startedAt(), response.finishedAt(), response.summary(), List.of(legacyResult));
         Files.writeString(settings.history().file(), json.writeValueAsString(legacyResponse) + "\n", StandardOpenOption.APPEND);

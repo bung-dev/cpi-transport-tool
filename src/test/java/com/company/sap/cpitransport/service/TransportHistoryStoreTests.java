@@ -20,7 +20,7 @@ class TransportHistoryStoreTests {
     private final JsonMapper json = JsonMapper.builder().build();
     private Path file() { return temporary.resolve("nested/history.jsonl"); }
     private TransportHistoryStore store() {
-        return new TransportHistoryStore(new TransportProperties("", new TransportProperties.History(file()),
+        return new TransportHistoryStore(new TransportProperties(new TransportProperties.History(file()),
                 null, null, List.of("password")), json);
     }
     private TransportResponse response(int index) {
@@ -91,34 +91,46 @@ class TransportHistoryStoreTests {
     }
 
     @Test
-    @DisplayName("REQ-012 AC-3: existing replacer masking persists unchanged without sensitive values in logs")
-    void req012_ac3_masked(CapturedOutput output) throws Exception {
-        var settings = new TransportProperties("", new TransportProperties.History(file()), null, null, List.of("password"));
-        var matcher = new SensitiveKeyMatcher(settings);
-        assertThat(matcher.isSensitive("Password")).isTrue();
-        var bytes = new java.io.ByteArrayOutputStream();
-        try (var zip = new java.util.zip.ZipOutputStream(bytes)) {
-            zip.putNextEntry(new java.util.zip.ZipEntry("main.iflw"));
-            String xml = Files.readString(Path.of("src/test/resources/iflw/content-modifiers.iflw"))
-                    .replace("***", "dummy-dev-secret");
-            zip.write(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            zip.closeEntry();
-        }
-        var processed = new IflwReplacer(matcher).process(bytes.toByteArray(), List.of(
-                new MappingEntry("A", TargetType.HEADER, "Password", "dummy-dev-secret", "dummy-prd-secret")), true);
-        var replacement = processed.replacements().getFirst();
-        assertThat(replacement.status()).isEqualTo(ReplacementStatus.SENSITIVE_SKIPPED);
-        assertThat(replacement.before()).isEqualTo("***");
-        assertThat(replacement.after()).isEqualTo("***");
-        var artifact = new ArtifactResult("A", null, TransportAction.NONE, List.of(replacement),
-                List.of(new UnmappedKey(TargetType.HEADER, "Password")), DeployStatus.NOT_REQUESTED, null);
+    @DisplayName("REQ-504: configurations persist in the response format with sensitive values in plain text and no value in logs")
+    void req504_configurationsPersist(CapturedOutput output) throws Exception {
+        var artifact = new ArtifactResult("A", null, TransportAction.CREATED, List.of(
+                new ConfigurationItem("ClientPassword", "dummy-dev-pass-history", "xsd:string", ConfigurationStatus.COPIED),
+                new ConfigurationItem("Endpoint", "http://dev.localhost/history", "xsd:string", ConfigurationStatus.FAILED)),
+                DeployStatus.NOT_REQUESTED, null);
         var base = response(0);
-        var masked = new TransportResponse(base.transportId(), base.packageId(), true, false,
+        var saved = new TransportResponse(base.transportId(), base.packageId(), false, false,
                 base.startedAt(), base.finishedAt(), new TransportSummary(1, 1, 0), List.of(artifact));
-        store().append(masked);
-        assertThat(store().findAll()).containsExactly(masked);
-        assertThat(json.readTree(Files.readAllLines(file()).getFirst())).isEqualTo(json.valueToTree(masked));
-        assertThat(Files.readString(file())).contains("***").doesNotContain("dummy-dev-secret", "dummy-prd-secret");
-        assertThat(output.getAll()).doesNotContain("dummy-dev-secret", "dummy-prd-secret");
+        store().append(saved);
+        assertThat(store().findAll()).containsExactly(saved);
+        var line = json.readTree(Files.readAllLines(file()).getFirst());
+        assertThat(line).isEqualTo(json.valueToTree(saved));
+        assertThat(line.at("/results/0").propertyNames())
+                .containsExactlyInAnyOrder("artifactId", "status", "action", "configurations", "deployStatus", "error");
+        assertThat(line.at("/results/0/configurations/0").propertyNames())
+                .containsExactlyInAnyOrder("key", "value", "dataType", "status");
+        assertThat(line.at("/results/0/configurations/0/value").asString()).isEqualTo("dummy-dev-pass-history");
+        assertThat(output.getAll()).doesNotContain("dummy-dev-pass-history", "http://dev.localhost/history");
+    }
+
+    @Test
+    @DisplayName("REQ-504: a legacy line with replacements and unmappedKeys is returned with empty configurations and the file is left unchanged")
+    void req504_legacyLine() throws Exception {
+        Files.createDirectories(file().getParent());
+        String legacy = "{\"transportId\":\"legacy-1\",\"packageId\":\"Pkg\",\"dryRun\":false,\"deploy\":false,"
+                + "\"startedAt\":\"2026-09-29T00:00:00Z\",\"finishedAt\":\"2026-09-29T00:00:01Z\","
+                + "\"summary\":{\"total\":1,\"succeeded\":1,\"failed\":0},\"results\":[{\"artifactId\":\"A\",\"status\":\"SUCCESS\","
+                + "\"action\":\"UPDATED\",\"replacements\":[{\"targetType\":\"HEADER\",\"key\":\"K\",\"status\":\"APPLIED\","
+                + "\"before\":\"dev\",\"after\":\"prd\",\"occurrences\":1}],\"unmappedKeys\":[{\"targetType\":\"PROPERTY\",\"key\":\"U\"}],"
+                + "\"deployStatus\":\"NOT_REQUESTED\",\"error\":null}],\"sourceTenant\":{\"id\":\"DEV\",\"name\":\"DEV\"},"
+                + "\"targetTenant\":{\"id\":\"PRD\",\"name\":\"PRD\"}}\n";
+        Files.writeString(file(), legacy);
+        store().append(response(5));
+        var all = store().findAll();
+        assertThat(all).extracting(TransportResponse::transportId).containsExactly("id-5", "legacy-1");
+        var old = all.get(1).results().getFirst();
+        assertThat(old.artifactId()).isEqualTo("A");
+        assertThat(old.action()).isEqualTo(TransportAction.UPDATED);
+        assertThat(old.configurations()).isEmpty();
+        assertThat(Files.readAllLines(file()).getFirst() + "\n").isEqualTo(legacy);
     }
 }

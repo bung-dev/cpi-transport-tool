@@ -25,7 +25,7 @@ const status = (readOnly: boolean): TenantStatusResponse => ({ readOnly, tenants
 const respond = (body: TransportRequest): TransportResponse => ({
   transportId: body.dryRun ? 't-dry' : 't-real', packageId: body.packageId, dryRun: Boolean(body.dryRun), deploy: Boolean(body.deploy),
   startedAt: '2026-11-16T01:00:00Z', finishedAt: '2026-11-16T01:00:01Z', summary: { total: 1, succeeded: 1, failed: 0 },
-  results: [{ artifactId: 'IF_Order_Sync', status: 'SUCCESS', action: 'NONE', deployStatus: 'NOT_REQUESTED', error: null, replacements: [], unmappedKeys: [] }],
+  results: [{ artifactId: 'IF_Order_Sync', status: 'SUCCESS', action: 'NONE', deployStatus: 'NOT_REQUESTED', error: null, configurations: [] }],
 });
 const T_PKG = tpl({ id: 'tp-1', name: '개발에서 운영', sourceTenantId: 'DEV', targetTenantId: 'PRD', packageId: 'PkgTransportDemo' });
 

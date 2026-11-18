@@ -4,11 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ArtifactResult, TransportResponse } from '../../api/types';
 import { TransportResult } from './TransportResult';
 
-// S3 REQ-424: 결과 머리(경로·템플릿 이름), "치환 문제 N건"·"실패 아티팩트 M개", 왼쪽 탐색 목록 → 오른쪽 상세 카드.
+// S3 REQ-424·REQ-511: 결과 머리(경로·템플릿 이름), "구성 값 문제 N건"·"실패 아티팩트 M개", 왼쪽 탐색 목록 → 오른쪽 상세 카드.
 afterEach(() => vi.restoreAllMocks());
 
 const art = (artifactId: string, over: Partial<ArtifactResult> = {}): ArtifactResult => ({
-  artifactId, status: 'SUCCESS', action: 'NONE', deployStatus: 'SKIPPED_DRY_RUN', error: null, replacements: [], unmappedKeys: [], ...over,
+  artifactId, status: 'SUCCESS', action: 'NONE', deployStatus: 'SKIPPED_DRY_RUN', error: null, configurations: [], ...over,
 });
 
 const RESULT: TransportResponse = {
@@ -23,8 +23,8 @@ const RESULT: TransportResponse = {
   finishedAt: '2026-11-16T01:00:05Z',
   summary: { total: 3, succeeded: 2, failed: 1 },
   results: [
-    art('A_Clean', { replacements: [{ targetType: 'header', key: 'K', status: 'PLANNED', before: 'a', after: 'b', occurrences: 1 }] }),
-    art('B_Mismatch', { replacements: [{ targetType: 'header', key: 'M', status: 'VALUE_MISMATCH', before: 'x', after: 'y', occurrences: 1 }] }),
+    art('A_Clean', { configurations: [{ key: 'K', value: 'a', dataType: 'xsd:string', status: 'PLANNED' }] }),
+    art('B_Mismatch', { configurations: [{ key: 'M', value: 'x', dataType: 'xsd:string', status: 'FAILED' }] }),
     art('C_Failed', { status: 'FAILED', error: { code: 'UPLOAD_FAILED', message: 'boom' } }),
   ],
 };
@@ -48,9 +48,9 @@ describe('결과 머리 (REQ-424)', () => {
     expect(within(region()).queryByText(/^템플릿 /)).toBeNull();
   });
 
-  it('REQ-424: "치환 문제 N건"은 치환 문제만 세고 "실패 아티팩트 M개"는 따로 보인다', () => {
+  it('REQ-424, REQ-511: "구성 값 문제 N건"은 구성 값 FAILED만 세고 "실패 아티팩트 M개"는 따로 보인다', () => {
     render(<TransportResult result={RESULT} />);
-    expect(within(region()).getByText('치환 문제 1건')).toBeInTheDocument();
+    expect(within(region()).getByText('구성 값 문제 1건')).toBeInTheDocument();
     expect(within(region()).getByText('실패 아티팩트 1개')).toBeInTheDocument();
     expect(within(region()).queryByText(/^문제 항목 \d+건$/)).toBeNull();
   });
@@ -101,18 +101,36 @@ describe('탐색 목록과 상세 카드 (REQ-424)', () => {
 });
 
 describe('민감 값과 알 수 없는 상태 (REQ-424 실패)', () => {
-  it('REQ-424: SENSITIVE_SKIPPED 치환은 서버가 값을 보내도 변경 전·후 값을 보이지 않는다', () => {
+  it('REQ-510: 민감 키의 구성 값도 서버가 보낸 값 그대로 보인다(ADR-003 대체)', () => {
     const sensitive: TransportResponse = {
       ...RESULT,
-      results: [art('S_Secret', { replacements: [
-        { targetType: 'externalParam', key: 'Password', status: 'SENSITIVE_SKIPPED', before: 'old-secret-value', after: 'new-secret-value', occurrences: 1 },
+      results: [art('S_Secret', { configurations: [
+        { key: 'Password', value: 'plain-secret-value', dataType: 'xsd:string', status: 'COPIED' },
       ] })],
     };
-    const { container } = render(<TransportResult result={sensitive} />);
+    render(<TransportResult result={sensitive} />);
     expect(toggle('S_Secret')).toHaveAttribute('aria-expanded', 'true');
     expect(within(region()).getByText('Password')).toBeInTheDocument();
-    expect(container.textContent).not.toContain('old-secret-value');
-    expect(container.textContent).not.toContain('new-secret-value');
+    expect(within(region()).getByText('plain-secret-value')).toBeInTheDocument();
+    expect(within(region()).getByText('복사됨').className).toContain('bg-success-bg');
+  });
+
+  it('REQ-510: 탐색 목록의 짧은 상태 글자는 "구성 값 n개" 또는 "구성 값 없음"이다', () => {
+    const list: TransportResponse = {
+      ...RESULT,
+      results: [
+        art('N_Two', { configurations: [
+          { key: 'A', value: 'a', dataType: 'xsd:string', status: 'PLANNED' },
+          { key: 'B', value: 'b', dataType: 'xsd:string', status: 'SKIPPED_EMPTY' },
+        ] }),
+        art('N_None'),
+      ],
+    };
+    render(<TransportResult result={list} />);
+    const [two, none] = jumpItems();
+    expect(two).toHaveTextContent('구성 값 2개');
+    expect(none).toHaveTextContent('구성 값 없음');
+    expect(jumpList().textContent).not.toMatch(/치환/);
   });
 
   it('REQ-424: 알 수 없는 상태 값은 중립 배지로 글자 그대로 보인다', () => {

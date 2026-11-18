@@ -44,7 +44,7 @@ class InvalidIdWireMockTests {
         source.stubFor(post(urlEqualTo("/token")).willReturn(okJson(
                 "{\"access_token\":\"test-dummy-shape-token\",\"expires_in\":3600}")));
         var properties = new CpiProperties(connection(source), connection(target));
-        var settings = new TransportProperties("", new TransportProperties.History(directory.resolve("history.jsonl")),
+        var settings = new TransportProperties(new TransportProperties.History(directory.resolve("history.jsonl")),
                 new TransportProperties.Retry(1, Duration.ZERO),
                 new TransportProperties.Deploy(Duration.ofSeconds(1), Duration.ofSeconds(3)), List.of());
         var clock = Clock.systemUTC();
@@ -52,8 +52,8 @@ class InvalidIdWireMockTests {
         var tokens = new OAuthTokenProvider(properties, settings, clock, sleeper);
         var api = new CpiApiClient(new CpiHttpExecutor(properties, tokens, new CsrfTokenStore(), settings, sleeper), json);
         var sensitive = new SensitiveKeyMatcher(settings);
-        var service = new TransportService(api, new IflwReplacer(sensitive), new ExternalParameterReplacer(api, sensitive),
-                new DeployService(api, settings, clock, sleeper), new MappingFileLoader(settings), clock);
+        var service = new TransportService(api, new ConfigurationCopier(api, sensitive),
+                new DeployService(api, settings, clock, sleeper), clock);
         var guard = new EnvironmentGuard(properties);
         mvc = MockMvcBuilders.standaloneSetup(new PackageController(new PackageQueryService(guard, api)),
                 new TransportController(service, guard, new TransportHistoryStore(settings, json), new ReadOnlyProperties(false)))

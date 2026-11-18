@@ -5,30 +5,16 @@ export interface ArtifactSummary {
   version: string;
 }
 
-export type TargetType = 'externalParam' | 'header' | 'property';
-export type ReplacementStatus =
-  | 'APPLIED'
-  | 'PLANNED'
-  | 'VALUE_MISMATCH'
-  | 'KEY_NOT_FOUND'
-  | 'SENSITIVE_SKIPPED'
-  | 'FAILED';
+export type ConfigurationStatus = 'PLANNED' | 'COPIED' | 'SKIPPED_EMPTY' | 'FAILED';
 export type ArtifactStatus = 'SUCCESS' | 'FAILED';
 export type TransportAction = 'CREATED' | 'UPDATED' | 'NONE';
 export type DeployStatus = 'STARTED' | 'ERROR' | 'TIMEOUT' | 'NOT_REQUESTED' | 'SKIPPED_DRY_RUN';
 
-export interface Replacement {
-  targetType: TargetType;
+export interface ConfigurationItem {
   key: string;
-  status: ReplacementStatus;
-  before: string | null;
-  after: string | null;
-  occurrences: number;
-}
-
-export interface UnmappedKey {
-  targetType: TargetType;
-  key: string;
+  value: string | null;
+  dataType: string | null;
+  status: ConfigurationStatus;
 }
 
 export interface ArtifactError {
@@ -42,8 +28,7 @@ export interface ArtifactResult {
   artifactId: string;
   status: ArtifactStatus;
   action: TransportAction;
-  replacements: Replacement[];
-  unmappedKeys: UnmappedKey[];
+  configurations: ConfigurationItem[];
   deployStatus: DeployStatus;
   error: ArtifactError | null;
 }
