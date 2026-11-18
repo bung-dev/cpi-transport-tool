@@ -4,7 +4,7 @@
 // PkgCreateFail은 실패(500)한다. PkgSapStandard는 SAP 제공(Mode READ_ONLY)이라 목록에 없다.
 import { expect, test, type Page } from '@playwright/test';
 import { after, R, shot, stubReset } from '../../lib/qa';
-import { confirmDialog, foreignHosts, openTab, openTransport, packageIds, pickPackage, realFromResult, resultRegion, runPreview, stepBtn, waitTransport, watch } from '../../lib/ui';
+import { confirmDialog, foreignHosts, openTab, openTransport, packageIds, pickPackage, pkgChecks, realFromResult, resultRegion, runPreview, stepBtn, waitTransport, watch } from '../../lib/ui';
 
 test.use({ actionTimeout: 20000 });
 
@@ -119,6 +119,50 @@ test('QA-REQ624-2: 만들기 실패 패키지는 "생성 실패"와 "패키지 �
   rec.overflow375 = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   await shot(page, 'QA-REQ624-2-375');
   expect(rec.overflow375, '375px 가로 넘침 없음').toBeLessThanOrEqual(0);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  expect(w.errors).toEqual([]);
+  expect(foreignHosts(w)).toEqual([]);
+});
+
+test('QA-REQ624-3: 검색으로 보이는 패키지만 전체 선택하고 검색을 지워도 선택이 유지되며, 확인창은 패키지마다 대상 상태를 보인다(데스크톱·375px)', async ({ page, request }) => {
+  test.setTimeout(240000);
+  const rec = R('QA-REQ624-3');
+  const w = watch(page);
+  await stubReset(request);
+  for (const [label, vp] of [['desktop', { width: 1280, height: 900 }], ['375', { width: 375, height: 812 }]] as const) {
+    await page.setViewportSize(vp);
+    await openTransport(page);
+    const search = page.getByLabel('패키지 검색');
+    const selectAll = page.getByRole('button', { name: '전체 선택', exact: true });
+    await search.fill('zzzz-none');
+    await expect(selectAll, '검색 결과 0개면 전체 선택 비활성').toBeDisabled();
+    await search.fill('Demo');
+    await selectAll.click();
+    await search.fill('');
+    await expect(page.getByText('3개 선택', { exact: true })).toBeVisible();
+    const checked = await pkgChecks(page).evaluateAll((es) => es.filter((e: any) => e.checked).map((e: any) => (e.labels?.[0]?.textContent || '').trim()));
+    rec[`checked-${label}`] = checked;
+    expect(checked.map((n) => (n.match(/(Pkg[A-Za-z]+)/) || [, n])[1])).toEqual(['PkgTransportDemo', 'PkgFaultDemo', 'PkgCreateFail']);
+    await expect(stepBtn(page, '패키지')).toContainText('외 2개');
+    await page.getByRole('button', { name: '다음', exact: true }).click();
+    for (const id of ['PkgTransportDemo', 'PkgFaultDemo', 'PkgCreateFail'])
+      await expect(section(page, id).getByRole('grid', { name: '이관할 아티팩트' })).toBeVisible();
+    const preview = await runPreview(page);
+    expect(preview.status).toBe(200);
+    await realFromResult(page).click();
+    const dialog = confirmDialog(page);
+    const run = dialog.getByRole('button', { name: '실행', exact: true });
+    await expect(run).toBeEnabled();
+    const items = dialog.getByRole('list', { name: '대상 패키지' });
+    await expect(items.getByRole('listitem', { name: /PkgTransportDemo/ })).toContainText('있음');
+    await expect(items.getByRole('listitem', { name: /PkgFaultDemo/ })).toContainText('있음');
+    await expect(items.getByRole('listitem', { name: /PkgCreateFail/ })).toContainText('대상에 없음 → 새로 만듦');
+    await expect(dialog.getByRole('switch')).not.toBeChecked();
+    rec[`overflow-${label}`] = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(rec[`overflow-${label}`], `${label} 가로 넘침 없음`).toBeLessThanOrEqual(0);
+    await shot(page, `QA-REQ624-3-confirm-${label}`);
+    await dialog.getByRole('button', { name: '취소', exact: true }).click();
+  }
   await page.setViewportSize({ width: 1280, height: 900 });
   expect(w.errors).toEqual([]);
   expect(foreignHosts(w)).toEqual([]);
