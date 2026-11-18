@@ -98,14 +98,14 @@ class TransportHistoryStoreTests {
                 new ConfigurationItem("Endpoint", "http://dev.localhost/history", "xsd:string", ConfigurationStatus.FAILED)),
                 DeployStatus.NOT_REQUESTED, null);
         var base = response(0);
-        var saved = new TransportResponse(base.transportId(), base.packageId(), false, false,
+        var saved = new TransportResponse(base.transportId(), "패키지", false, false,
                 base.startedAt(), base.finishedAt(), new TransportSummary(1, 1, 0), List.of(artifact));
         store().append(saved);
         assertThat(store().findAll()).containsExactly(saved);
         var line = json.readTree(Files.readAllLines(file()).getFirst());
         assertThat(line).isEqualTo(json.valueToTree(saved));
         assertThat(line.at("/results/0").propertyNames())
-                .containsExactlyInAnyOrder("artifactId", "status", "action", "configurations", "deployStatus", "error");
+                .containsExactlyInAnyOrder("packageId", "artifactId", "status", "action", "configurations", "deployStatus", "error");
         assertThat(line.at("/results/0/configurations/0").propertyNames())
                 .containsExactlyInAnyOrder("key", "value", "dataType", "status");
         assertThat(line.at("/results/0/configurations/0/value").asString()).isEqualTo("dummy-dev-pass-history");
