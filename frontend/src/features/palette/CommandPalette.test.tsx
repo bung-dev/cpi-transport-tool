@@ -19,7 +19,7 @@ const TENANTS: TenantsResponse = {
   ],
 };
 const STATUS: TenantStatusResponse = { readOnly: false, tenants: TENANTS.tenants.map((t) => ({ ...t, check: 'OK' as const })) };
-const TEMPLATES = [tpl({ id: 'tp-1', name: 'Qas to Prd', sourceTenantId: 'QAS', targetTenantId: 'PRD', packageId: 'PkgTransportDemo' })];
+const TEMPLATES = [tpl({ id: 'tp-1', name: 'Qas to Prd', sourceTenantId: 'QAS', targetTenantId: 'PRD' })];
 
 function setup(hash = '', extra: Parameters<typeof mockApi>[0] = {}) {
   const fn = mockApi(
@@ -212,7 +212,7 @@ describe('REQ-411 키보드와 실행', () => {
     expect(await findArtifactGrid()).toBeInTheDocument();
   });
 
-  it('REQ-411: 템플릿 항목은 그 템플릿의 경로와 패키지로 새 이관 화면을 연다', async () => {
+  it('REQ-411·REQ-610: 템플릿 항목은 그 템플릿의 경로로 새 이관 화면을 열고 패키지는 비어 있다', async () => {
     setup();
     await ready();
     await openWithKeys();
@@ -221,7 +221,8 @@ describe('REQ-411 키보드와 실행', () => {
     expect(window.location.hash).toBe('#/transport');
     expect(await within(routeGroup()).findByRole('button', { name: '원본 QAS 연결됨' })).toBeInTheDocument();
     expect(within(routeGroup()).getByRole('button', { name: '대상 PRD 연결됨' })).toBeInTheDocument();
-    expect(await screen.findByRole('radio', { name: /Transport Demo/ })).toBeChecked();
+    const radios = await screen.findAllByRole('radio', { name: /Demo/ });
+    expect(radios.every((r) => !(r as HTMLInputElement).checked)).toBe(true);
   });
 
   it('REQ-411: 테넌트 항목으로 대상을 바꾼다. 반대쪽과 같은 테넌트는 비활성이고 이유를 적는다', async () => {

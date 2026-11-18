@@ -27,7 +27,7 @@ const respond = (body: TransportRequest): TransportResponse => ({
   startedAt: '2026-11-16T01:00:00Z', finishedAt: '2026-11-16T01:00:01Z', summary: { total: 1, succeeded: 1, failed: 0 },
   results: [{ artifactId: 'IF_Order_Sync', status: 'SUCCESS', action: 'NONE', deployStatus: 'NOT_REQUESTED', error: null, configurations: [] }],
 });
-const T_PKG = tpl({ id: 'tp-1', name: '개발에서 운영', sourceTenantId: 'DEV', targetTenantId: 'PRD', packageId: 'PkgTransportDemo' });
+const T_PKG = tpl({ id: 'tp-1', name: '개발에서 운영', sourceTenantId: 'DEV', targetTenantId: 'PRD' });
 
 type Routes = Parameters<typeof mockApi>[0];
 function setup(opts: { status?: Routes[string]; post?: Routes[string]; templates?: TemplateFixture[] } = {}) {
@@ -112,6 +112,7 @@ describe('REQ-423 미리보기', () => {
     const fn = setup({ templates: [T_PKG] });
     const card = await screen.findByRole('listitem', { name: /개발에서 운영/ });
     await userEvent.click(within(card).getByRole('button', { name: '이 템플릿으로 시작' }));
+    await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
     await userEvent.click(await screen.findByRole('button', { name: '전체 아티팩트로 미리보기' }));
     await userEvent.click(within(await screen.findByRole('region', { name: '이관 결과' })).getByRole('button', { name: '이 구성으로 실제 이관' }));
     await userEvent.click(within(confirmDialog()).getByRole('button', { name: '실행' }));
@@ -299,6 +300,7 @@ describe('REQ-423 요청 오류 (ADR-016)', () => {
     });
     const card = await screen.findByRole('listitem', { name: /개발에서 운영/ });
     await userEvent.click(within(card).getByRole('button', { name: '이 템플릿으로 시작' }));
+    await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
     await userEvent.click(await screen.findByRole('button', { name: '전체 아티팩트로 미리보기' }));
     expect((await screen.findAllByText('템플릿이 바뀌었거나 삭제되었습니다')).length).toBeGreaterThanOrEqual(1);
     await userEvent.click(screen.getByRole('button', { name: '템플릿 없이 다시 실행' }));

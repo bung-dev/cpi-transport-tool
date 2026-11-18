@@ -32,7 +32,6 @@ export interface TemplateFixture {
   name: string;
   sourceTenantId: string;
   targetTenantId: string;
-  packageId: string | null;
   createdAt: string;
   updatedAt: string;
   usable: boolean;
@@ -41,7 +40,6 @@ export interface TemplateFixture {
 export const tpl = (over: Partial<TemplateFixture> & Pick<TemplateFixture, 'id' | 'name'>): TemplateFixture => ({
   sourceTenantId: 'DEV',
   targetTenantId: 'PRD',
-  packageId: null,
   createdAt: '2026-11-10T01:00:00Z',
   updatedAt: '2026-11-10T01:00:00Z',
   usable: true,
