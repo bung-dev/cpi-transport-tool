@@ -21,8 +21,8 @@ const TENANTS: TenantsResponse = {
   ],
 };
 const STATUS: TenantStatusResponse = { readOnly: false, tenants: TENANTS.tenants.map((t) => ({ ...t, check: 'OK' as const })) };
-const T_DQ = tpl({ id: 'tp-dq', name: '개발에서 품질', sourceTenantId: 'DEV', targetTenantId: 'QAS', packageId: null });
-const T_QP = tpl({ id: 'tp-qp', name: '품질에서 운영', sourceTenantId: 'QAS', targetTenantId: 'PRD', packageId: 'PkgTransportDemo' });
+const T_DQ = tpl({ id: 'tp-dq', name: '개발에서 품질', sourceTenantId: 'DEV', targetTenantId: 'QAS' });
+const T_QP = tpl({ id: 'tp-qp', name: '품질에서 운영', sourceTenantId: 'QAS', targetTenantId: 'PRD' });
 const node = (id: string, name: string, origin: 'env' | 'registered') => ({ id, name, origin });
 // 응답의 nodes 순서는 일부러 흐름 순서와 다르게 둔다(화면이 템플릿 흐름 순서로 다시 놓는다).
 const NODES = [node('PRD', '운영', 'env'), node('DEV', '개발', 'env'), node('QAS', '품질', 'registered'), node('LAB', '실험', 'registered')];

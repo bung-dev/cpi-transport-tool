@@ -24,9 +24,9 @@ const result = (body: TransportRequest): TransportResponse => ({
   transportId: body.dryRun ? 't-dry' : 't-real', packageId: body.packageId, dryRun: Boolean(body.dryRun), deploy: Boolean(body.deploy),
   startedAt: '2026-11-16T01:00:00Z', finishedAt: '2026-11-16T01:00:01Z', summary: { total: 0, succeeded: 0, failed: 0 }, results: [],
 });
-const T_PKG = tpl({ id: 'tp-1', name: '개발에서 운영', sourceTenantId: 'DEV', targetTenantId: 'PRD', packageId: 'PkgTransportDemo' });
-const T_QAS = tpl({ id: 'tp-2', name: '품질에서 운영', sourceTenantId: 'QAS', targetTenantId: 'PRD', packageId: null });
-const T_GONE = tpl({ id: 'tp-3', name: '없는 패키지', sourceTenantId: 'DEV', targetTenantId: 'PRD', packageId: 'PkgRemoved' });
+// 20261118 S2 REQ-610: 템플릿은 경로만 담는다(패키지 없음).
+const T_PKG = tpl({ id: 'tp-1', name: '개발에서 운영', sourceTenantId: 'DEV', targetTenantId: 'PRD' });
+const T_QAS = tpl({ id: 'tp-2', name: '품질에서 운영', sourceTenantId: 'QAS', targetTenantId: 'PRD' });
 const T_BROKEN = tpl({ id: 'tp-4', name: '삭제된 원본', sourceTenantId: 'OLD', targetTenantId: 'PRD', usable: false, unusableReason: 'SOURCE_TENANT_MISSING' });
 
 function setup(opts: { templates?: TemplateFixture[]; tenants?: TenantsResponse; extra?: Parameters<typeof mockApi>[0] } = {}) {
@@ -73,12 +73,12 @@ describe('REQ-420 단계 줄과 첫 단계', () => {
     expect(screen.getByRole('main').textContent).not.toMatch(/DEV\s*→\s*PRD/);
   });
 
-  it('REQ-420: 첫 단계는 사용 가능한 템플릿(이름·경로·패키지)과 "템플릿 없이 진행"이고 사용 불가 템플릿은 이유와 함께 비활성이다', async () => {
+  it('REQ-420·REQ-610: 첫 단계는 사용 가능한 템플릿(이름·경로, 패키지 표시 없음)과 "템플릿 없이 진행"이고 사용 불가 템플릿은 이유와 함께 비활성이다', async () => {
     setup({ templates: [T_PKG, T_QAS, T_BROKEN] });
     const card = await findTemplateCard('개발에서 운영');
     expect(card).toHaveTextContent('개발 → 운영');
-    expect(card).toHaveTextContent('PkgTransportDemo');
-    expect(templateCard('품질에서 운영')).toHaveTextContent('실행 때 선택');
+    expect(templateCard('품질에서 운영')).toHaveTextContent('품질 → 운영');
+    expect(screen.queryByText('실행 때 선택')).toBeNull();
     expect(within(card).getByRole('button', { name: '이 템플릿으로 시작' })).toBeEnabled();
     const broken = templateCard('삭제된 원본');
     expect(within(broken).getByRole('button', { name: '이 템플릿으로 시작' })).toBeDisabled();
@@ -114,6 +114,7 @@ describe('REQ-420 단계 줄과 첫 단계', () => {
     await userEvent.click(within(await findTemplateCard('개발에서 운영')).getByRole('button', { name: '이 템플릿으로 시작' }));
     expect(currentStep()).toBe('패키지');
     expect(stepButton('템플릿')).toHaveTextContent('개발에서 운영');
+    await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
     await userEvent.click(await screen.findByRole('button', { name: '다음' }));
     await findArtifactGrid();
     expect(currentStep()).toBe('아티팩트');
@@ -163,6 +164,7 @@ describe('REQ-420 경로 선택', () => {
   it('REQ-420: 경로를 바꿔 적용하면 상단 경로가 바뀌고 패키지·아티팩트 선택과 이전 결과가 비워지며 템플릿 연결이 풀린다(templateId를 보내지 않음)', async () => {
     const fn = setup({ templates: [T_PKG] });
     await userEvent.click(within(await findTemplateCard('개발에서 운영')).getByRole('button', { name: '이 템플릿으로 시작' }));
+    await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
     await userEvent.click(await screen.findByRole('button', { name: '전체 아티팩트로 미리보기' }));
     await screen.findByRole('region', { name: '이관 결과' });
     expect(postBodies(fn)[0]).toMatchObject({ templateId: 'tp-1' });
@@ -214,12 +216,14 @@ describe('REQ-420 경로 선택', () => {
 });
 
 describe('REQ-420 템플릿으로 시작', () => {
-  it('REQ-420·421: 패키지가 있는 템플릿으로 시작하면 템플릿 경로가 적용되고 패키지 단계에서 그 패키지가 선택된 채 보이며 미리보기에 templateId를 보낸다', async () => {
+  it('REQ-420·421·610: 템플릿으로 시작하면 템플릿 경로가 적용되고 패키지는 비어 있으며, 패키지를 고르면 미리보기에 templateId를 보낸다', async () => {
     const fn = setup({ templates: [T_QAS, T_PKG] });
     await userEvent.click(within(await findTemplateCard('개발에서 운영')).getByRole('button', { name: '이 템플릿으로 시작' }));
     expect(currentStep()).toBe('패키지');
-    expect(await screen.findByRole('radio', { name: /Transport Demo/ })).toBeChecked();
+    const radios = await screen.findAllByRole('radio');
+    expect(radios.every((r) => !(r as HTMLInputElement).checked)).toBe(true);
     expect(routeBar()).toHaveTextContent('개발 → 운영');
+    await userEvent.click(screen.getByRole('radio', { name: /Transport Demo/ }));
     await userEvent.click(screen.getByRole('button', { name: '전체 아티팩트로 미리보기' }));
     await screen.findByRole('region', { name: '이관 결과' });
     expect(postBodies(fn)).toEqual([
@@ -237,17 +241,7 @@ describe('REQ-420 템플릿으로 시작', () => {
     expect(screen.getByRole('button', { name: '다음' })).toBeDisabled();
   });
 
-  it('REQ-421 실패: 템플릿의 패키지가 원본에 없으면 그 사실을 알리고 선택을 비운다', async () => {
-    setup({ templates: [T_GONE] });
-    await userEvent.click(within(await findTemplateCard('없는 패키지')).getByRole('button', { name: '이 템플릿으로 시작' }));
-    const notice = await screen.findByText(/원본에서 찾을 수 없습니다/);
-    expect(notice).toHaveTextContent('PkgRemoved');
-    expect(screen.getAllByRole('radio').every((r) => !(r as HTMLInputElement).checked)).toBe(true);
-    expect(screen.getByRole('button', { name: '다음' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '전체 아티팩트로 미리보기' })).toBeDisabled();
-  });
-
-  it('REQ-403·420: 템플릿으로 시작한 뒤 다른 패키지를 골라도 경로를 바꾸지 않았으면 templateId를 보낸다', async () => {
+  it('REQ-403·420: 템플릿으로 시작한 뒤 어떤 패키지를 골라도 경로를 바꾸지 않았으면 templateId를 보낸다', async () => {
     const fn = setup({ templates: [T_PKG] });
     await userEvent.click(within(await findTemplateCard('개발에서 운영')).getByRole('button', { name: '이 템플릿으로 시작' }));
     await userEvent.click(await screen.findByRole('radio', { name: /Fault Demo/ }));
