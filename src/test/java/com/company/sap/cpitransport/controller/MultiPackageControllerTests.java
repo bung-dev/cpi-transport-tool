@@ -92,7 +92,7 @@ class MultiPackageControllerTests {
     private ResultActions transport(String body) throws Exception {
         return mvc.perform(post("/transport").contentType("application/json").content(body));
     }
-    private JsonNode ok(String body) throws Exception {
+    private JsonNode accepted(String body) throws Exception {
         return json.readTree(transport(body).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     }
     private ResultActions targetStatus(String query) throws Exception {
@@ -132,7 +132,7 @@ class MultiPackageControllerTests {
     @Test
     @DisplayName("REQ-601: 100 artifact IDs in one package of several pass validation")
     void req601_boundary() throws Exception {
-        var root = ok(json.writeValueAsString(Map.of("dryRun", true, "packages", List.of(
+        var root = accepted(json.writeValueAsString(Map.of("dryRun", true, "packages", List.of(
                 Map.of("packageId", "P1", "artifactIds", IntStream.range(0, 100).mapToObj(i -> "A" + i).toList()),
                 Map.of("packageId", "P2")))));
         assertThat(root.at("/summary/total").asInt()).isEqualTo(101);
@@ -141,7 +141,7 @@ class MultiPackageControllerTests {
     @Test
     @DisplayName("REQ-601, REQ-602: the legacy packageId body is handled as one package and the response has packages instead of packageId")
     void req601_legacyBody() throws Exception {
-        var root = ok("{\"packageId\":\"P1\",\"artifactIds\":[\"A\"],\"dryRun\":true}");
+        var root = accepted("{\"packageId\":\"P1\",\"artifactIds\":[\"A\"],\"dryRun\":true}");
         assertThat(root.has("packageId")).isFalse();
         assertThat(root.path("packages")).isEqualTo(json.readTree(
                 "[{\"packageId\":\"P1\",\"packageName\":\"Package One\",\"targetPackage\":\"NOT_CHECKED\"}]"));
@@ -153,7 +153,7 @@ class MultiPackageControllerTests {
     @Test
     @DisplayName("REQ-601: preview of several packages sends no target request")
     void req601_previewNoTarget() throws Exception {
-        var root = ok("{\"dryRun\":true,\"packages\":[{\"packageId\":\"P2\"},{\"packageId\":\"P1\"}],\"createPackages\":[\"P2\"]}");
+        var root = accepted("{\"dryRun\":true,\"packages\":[{\"packageId\":\"P2\"},{\"packageId\":\"P1\"}],\"createPackages\":[\"P2\"]}");
         assertThat(root.at("/results/0/packageId").asString()).isEqualTo("P2");
         assertThat(root.at("/results/1/packageId").asString()).isEqualTo("P1");
         assertThat(prd.getAllServeEvents()).isEmpty();
@@ -181,7 +181,7 @@ class MultiPackageControllerTests {
     @Test
     @DisplayName("REQ-601, REQ-602: one transport of two packages appends one history line in the response format")
     void req602_history() throws Exception {
-        var root = ok("{\"packages\":[{\"packageId\":\"P1\"},{\"packageId\":\"P2\"}],\"createPackages\":[\"P2\"]}");
+        var root = accepted("{\"packages\":[{\"packageId\":\"P1\"},{\"packageId\":\"P2\"}],\"createPackages\":[\"P2\"]}");
         assertThat(root.has("packageId")).isFalse();
         assertThat(root.path("packages")).isEqualTo(json.readTree(
                 "[{\"packageId\":\"P1\",\"packageName\":\"Package One\",\"targetPackage\":\"EXISTING\"},"

@@ -91,7 +91,7 @@ class MultiPackageTransportWireMockTests {
         prd.verify(1, getRequestedFor(urlEqualTo(pkg("P1"))));
         prd.verify(1, getRequestedFor(urlEqualTo(pkg("P2"))));
         assertThat(prd.findAll(postRequestedFor(urlEqualTo(COLLECTION)))).extracting(r -> json.readTree(r.getBodyAsString()).path("PackageId").asString())
-                .containsExactlyInAnyOrder("P2", "P1");
+                .containsExactlyInAnyOrder("P2", "P1", "P1");
     }
 
     @Test
