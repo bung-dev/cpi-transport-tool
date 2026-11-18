@@ -172,6 +172,12 @@ class TemplateAuditDashboardApiTests {
     /** 새 형식(묶음) 이력 줄: packages[]와 결과마다 packageId. 패키지마다 {아티팩트 수, 실패 수}. */
     static String bundleLine(String id, boolean dryRun, String src, String tgt, Instant startedAt,
                              LinkedHashMap<String, int[]> perPackage) {
+        return bundleLine(id, dryRun, src, tgt, startedAt, perPackage, Map.of());
+    }
+
+    /** targetStatus에 없는 패키지는 dryRun이면 NOT_CHECKED, 아니면 EXISTING. */
+    static String bundleLine(String id, boolean dryRun, String src, String tgt, Instant startedAt,
+                             LinkedHashMap<String, int[]> perPackage, Map<String, String> targetStatus) {
         var node = JSON.createObjectNode();
         node.put("transportId", id).put("dryRun", dryRun).put("deploy", false)
                 .put("startedAt", startedAt.toString()).put("finishedAt", startedAt.toString());
@@ -180,7 +186,7 @@ class TemplateAuditDashboardApiTests {
         int total = 0, failed = 0;
         for (var e : perPackage.entrySet()) {
             packages.addObject().put("packageId", e.getKey()).put("packageName", e.getKey() + " name")
-                    .put("targetPackage", dryRun ? "NOT_CHECKED" : "EXISTING");
+                    .put("targetPackage", targetStatus.getOrDefault(e.getKey(), dryRun ? "NOT_CHECKED" : "EXISTING"));
             for (int i = 0; i < e.getValue()[0]; i++) {
                 boolean bad = i < e.getValue()[1];
                 var r = results.addObject().put("packageId", e.getKey()).put("artifactId", e.getKey() + "_A" + i)
@@ -819,6 +825,37 @@ class TemplateAuditDashboardApiTests {
         assertThat(item.get("arrivedTransportId").asString()).isEqualTo("bundle-1");
         assertThat(item.get("artifactCount").asInt()).isEqualTo(2);
         assertThat(queue.get("LegacyOk").get("artifactCount").asInt()).isEqualTo(2);
+    }
+
+    @Test @DisplayName("REQ-612: 아티팩트 결과 0개 패키지도 실패 0개면 도착(예전 total 0 줄 포함), 대상 패키지가 없음·생성 실패·확인 실패면 도착 아님")
+    void req612_emptyPackageQueue() throws Exception {
+        String a = tenant("Empty A"), b = tenant("Empty B"), c = tenant("Empty C");
+        template("Empty AB", a, b, null);
+        String next = template("Empty BC", b, c, null);
+        Instant t0 = CLOCK.instant().minus(Duration.ofDays(2));
+        var bundle = new LinkedHashMap<String, int[]>();
+        bundle.put("EExisting", new int[]{0, 0});
+        bundle.put("ECreated", new int[]{0, 0});
+        bundle.put("ENotFound", new int[]{0, 0});
+        bundle.put("ECreateFailed", new int[]{0, 0});
+        bundle.put("ECheckFailed", new int[]{0, 0});
+        bundle.put("EWithArtifacts", new int[]{1, 0});
+        Files.write(historyFile(), List.of(
+                bundleLine("empty-1", false, a, b, t0.plus(Duration.ofHours(1)), bundle, Map.of(
+                        "ECreated", "CREATED", "ENotFound", "NOT_FOUND",
+                        "ECreateFailed", "CREATE_FAILED", "ECheckFailed", "CHECK_FAILED")),
+                historyLine("legacy-empty", "LegacyEmpty", false, a, "Empty A", b, "Empty B", t0.plus(Duration.ofHours(1)), 0, 0)),
+                StandardCharsets.UTF_8);
+
+        var queue = new HashMap<String, JsonNode>();
+        for (JsonNode q : ok(request("GET", "/dashboard?templateId=" + next, null), 200).get("queue"))
+            queue.put(q.get("packageId").asString(), q);
+        assertThat(queue.keySet()).containsExactlyInAnyOrder("EExisting", "ECreated", "EWithArtifacts", "LegacyEmpty");
+        assertThat(queue.get("EExisting").get("artifactCount").asInt()).isEqualTo(0);
+        assertThat(queue.get("ECreated").get("arrivedTransportId").asString()).isEqualTo("empty-1");
+        assertThat(queue.get("LegacyEmpty").get("artifactCount").asInt()).isEqualTo(0);
+        assertThat(queue.get("LegacyEmpty").get("arrivedTransportId").asString()).isEqualTo("legacy-empty");
+        assertThat(queue.get("EWithArtifacts").get("artifactCount").asInt()).isEqualTo(1);
     }
 
     @Test @DisplayName("REQ-405: today는 서버 시간대 기준 오늘의 미리보기·실제 이관 수와 성공·실패 수, 이력이 없으면 0")
