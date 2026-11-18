@@ -38,6 +38,17 @@ public class CpiApiClient {
                 .map(this::packageValue);
     }
 
+    public void createPackage(String environment, CpiPackage source) {
+        identifier(source.id());
+        var body = new java.util.LinkedHashMap<String, String>();
+        body.put("Id", source.id());
+        body.put("Name", source.name());
+        body.put("ShortText", source.shortText());
+        body.put("Description", source.description());
+        body.put("Version", source.version());
+        write(environment, HttpMethod.POST, "/IntegrationPackages", body);
+    }
+
     public List<CpiArtifact> listArtifacts(String environment, String packageId) {
         // Preserve the HTTP 404 so callers can distinguish a missing package from an empty list.
         return list(environment, "/IntegrationPackages('" + identifier(packageId)
@@ -238,7 +249,8 @@ public class CpiApiClient {
     }
 
     private CpiPackage packageValue(JsonNode node) {
-        return new CpiPackage(field(node, "Id"), field(node, "Name"), field(node, "Version"));
+        return new CpiPackage(field(node, "Id"), field(node, "Name"), field(node, "Version"),
+                optionalField(node, "ShortText"), optionalField(node, "Description"), optionalField(node, "Mode"));
     }
 
     private Map<String, String> configurationBody(String value, String dataType) {
@@ -252,6 +264,11 @@ public class CpiApiClient {
         var value = node.path("ParameterValue");
         if (value.isMissingNode() || value.isNull()) return null;
         return field(node, "ParameterValue");
+    }
+
+    private String optionalField(JsonNode node, String key) {
+        var value = node.path(key);
+        return value.isMissingNode() || value.isNull() ? null : field(node, key);
     }
 
     private String field(JsonNode node, String key) {

@@ -43,17 +43,27 @@ public class TransportController {
 
     @PostMapping("/transport")
     public TransportResponse transport(@RequestBody JsonNode body) {
-        if (!body.isObject() || !validId(body.get("packageId"))) invalid();
-        var ids = new ArrayList<String>();
-        var selected = body.get("artifactIds");
-        if (selected != null) {
-            if (!selected.isArray() || selected.size() > 100) invalid();
-            for (var id : selected) {
-                if (!validId(id)) invalid();
-                ids.add(id.asString());
+        if (!body.isObject()) invalid();
+        var packages = new ArrayList<PackageSelection>();
+        if (body.has("packages")) {
+            var selected = body.get("packages");
+            if (body.has("packageId") || !selected.isArray() || selected.isEmpty()) invalid();
+            for (var entry : selected) packages.add(selection(entry));
+        } else {
+            packages.add(selection(body));
+        }
+        var packageIds = new java.util.HashSet<String>();
+        for (var selected : packages) if (!packageIds.add(selected.packageId())) invalid();
+        boolean dryRun = flag(body, "dryRun");
+        var createPackages = new ArrayList<String>();
+        if (body.has("createPackages")) {
+            var create = body.get("createPackages");
+            if (!create.isArray()) invalid();
+            for (var id : create) {
+                if (!validId(id) || !packageIds.contains(id.asString())) invalid();
+                createPackages.add(id.asString());
             }
         }
-        boolean dryRun = flag(body, "dryRun");
         boolean deploy = flag(body, "deploy");
         String sourceId = tenantId(body, "sourceTenantId", "DEV");
         String targetId = tenantId(body, "targetTenantId", "PRD");
@@ -70,7 +80,7 @@ public class TransportController {
         var missing = new ArrayList<>(guard.missingKeys(sourceId));
         if (!dryRun) missing.addAll(guard.missingKeys(targetId));
         if (!missing.isEmpty()) throw new EnvironmentNotConfiguredException(missing);
-        var response = service.preflightAndExecute(new TransportRequest(body.get("packageId").asString(), ids, dryRun, deploy, source, target));
+        var response = service.preflightAndExecute(new TransportRequest(packages, createPackages, dryRun, deploy, source, target));
         if (template != null) response = response.withTemplate(template);
         history.append(response);
         return response;
@@ -79,6 +89,20 @@ public class TransportController {
     @GetMapping("/transport/history")
     public java.util.List<TransportResponse> history() {
         return history.findAll();
+    }
+
+    private static PackageSelection selection(JsonNode body) {
+        if (!body.isObject() || !validId(body.get("packageId"))) invalid();
+        var ids = new ArrayList<String>();
+        var selected = body.get("artifactIds");
+        if (selected != null && !selected.isNull()) {
+            if (!selected.isArray() || selected.size() > 100) invalid();
+            for (var id : selected) {
+                if (!validId(id)) invalid();
+                ids.add(id.asString());
+            }
+        }
+        return new PackageSelection(body.get("packageId").asString(), ids);
     }
 
     private static String tenantId(JsonNode body, String key, String fallback) {

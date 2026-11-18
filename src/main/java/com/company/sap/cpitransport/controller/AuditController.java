@@ -34,7 +34,8 @@ public class AuditController {
                         + ": succeeded " + (t.summary() == null ? 0 : t.summary().succeeded())
                         + ", failed " + (t.summary() == null ? 0 : t.summary().failed());
                 entries.add(new AuditEntry(t.transportId(), t.startedAt(), "transport",
-                        t.dryRun() ? "preview" : "transport", t.transportId(), t.packageId(), detail));
+                        t.dryRun() ? "preview" : "transport", t.transportId(), t.packages().stream().map(p -> p.packageId())
+                                .collect(java.util.stream.Collectors.joining(", ")), detail));
             }
         }
         entries.sort(Comparator.comparing(AuditEntry::time).reversed());

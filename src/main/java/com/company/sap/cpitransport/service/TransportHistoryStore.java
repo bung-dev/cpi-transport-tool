@@ -67,7 +67,19 @@ public class TransportHistoryStore {
                 number++;
                 if (line.isBlank()) continue;
                 try {
-                    var response = json.readValue(line, TransportResponse.class);
+                    var node = json.readTree(line);
+                    if (node.isObject() && !node.has("packages") && node.has("packageId")) {
+                        var legacy = (tools.jackson.databind.node.ObjectNode) node;
+                        String packageId = legacy.path("packageId").asString();
+                        legacy.remove("packageId");
+                        legacy.putArray("packages").addObject().put("packageId", packageId)
+                                .putNull("packageName").putNull("targetPackage");
+                        for (var result : legacy.path("results")) {
+                            if (!result.hasNonNull("packageId"))
+                                ((tools.jackson.databind.node.ObjectNode) result).put("packageId", packageId);
+                        }
+                    }
+                    var response = json.treeToValue(node, TransportResponse.class);
                     if (response == null || response.startedAt() == null) throw new IllegalArgumentException();
                     results.add(response);
                 } catch (RuntimeException failure) {

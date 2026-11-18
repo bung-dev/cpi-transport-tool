@@ -26,6 +26,7 @@ public class PackageQueryService {
         requireTenant(tenantId);
         try {
             return client.listPackages(tenantId).stream()
+                    .filter(p -> p.mode() == null || "EDIT_ALLOWED".equals(p.mode()))
                     .map(p -> new ArtifactSummary(p.id(), p.name(), p.version())).toList();
         } catch (CpiCallException failure) {
             // AI-NOTE: Spring logs handler arguments/exceptions at TRACE/DEBUG. Upstream summaries
@@ -53,6 +54,21 @@ public class PackageQueryService {
                 throw new ApiException(Code.PACKAGE_NOT_FOUND);
             }
             // AI-NOTE: keep upstream response bodies out of Spring exception logs (REQ-305 AC-3).
+            throw new ApiException(Code.CPI_UNAVAILABLE);
+        }
+    }
+
+    public record TargetStatus(String packageId, boolean exists) {}
+
+    public List<TargetStatus> targetStatus(String tenantId, List<String> packageIds) {
+        requireTenant(tenantId);
+        var statuses = new java.util.ArrayList<TargetStatus>();
+        try {
+            for (String id : packageIds) {
+                statuses.add(new TargetStatus(id, client.getPackage(tenantId, id).isPresent()));
+            }
+            return List.copyOf(statuses);
+        } catch (CpiCallException failure) {
             throw new ApiException(Code.CPI_UNAVAILABLE);
         }
     }
