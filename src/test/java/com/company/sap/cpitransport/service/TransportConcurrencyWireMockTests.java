@@ -372,6 +372,34 @@ class TransportConcurrencyWireMockTests {
         }
     }
 
+    @ParameterizedTest(name = "{displayName} [dryRun={0}]")
+    @ValueSource(booleans = {false, true})
+    @DisplayName("REQ-704 (review R1): the printed step line itself carries transportId, packageId and artifactId, not only MDC")
+    void req704_logLineFields(boolean dryRun) {
+        concurrency.set(new ConcurrencySettings(4, 4));
+        var logger = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(TransportService.class);
+        var appender = new ListAppender<ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+        TransportResponse response;
+        try {
+            response = run(dryRun);
+        } finally {
+            logger.detachAppender(appender);
+        }
+        var steps = appender.list.stream().map(ILoggingEvent::getFormattedMessage)
+                .filter(m -> m.contains(" artifactId=") && m.contains(" step=")).toList();
+        for (String id : all()) {
+            var mine = steps.stream().filter(m -> m.contains("artifactId=" + id + " ")).toList();
+            assertThat(mine).as(id).hasSizeGreaterThanOrEqualTo(6);
+            String pkg = id.startsWith("A") ? "P1" : "P2";
+            assertThat(mine).as(id).allSatisfy(m -> assertThat(m)
+                    .contains("transportId=" + response.transportId())
+                    .contains("packageId=" + pkg + " ")
+                    .contains("artifactId=" + id + " "));
+        }
+    }
+
     @Test
     @DisplayName("REQ-705: a running transport keeps the concurrency read when it started")
     void req705_settingsFixedAtStart() {
