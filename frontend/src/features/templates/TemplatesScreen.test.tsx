@@ -6,7 +6,7 @@ import { json, mockApi, PACKAGES } from '../../test/mockFetch';
 import { TENANT_STATUS_OK } from '../../test/tenantFixtures';
 import { baseRoutes, renderAt, routeGroup, tpl, type TemplateFixture } from '../../test/appRoutes';
 
-// REQ-413 템플릿 화면
+// REQ-413 템플릿 화면, 20261118 S2 REQ-610 템플릿은 경로만(패키지 입력·표시 없음)
 afterEach(() => vi.unstubAllGlobals());
 
 const TENANTS: TenantsResponse = {
@@ -19,8 +19,8 @@ const TENANTS: TenantsResponse = {
 };
 const STATUS = { ...TENANT_STATUS_OK, tenants: TENANTS.tenants.map((t) => ({ ...t, check: 'OK' as const })) };
 const BASE = [
-  tpl({ id: 'tp-1', name: '개발에서 운영', sourceTenantId: 'DEV', targetTenantId: 'PRD', packageId: 'PkgTransportDemo' }),
-  tpl({ id: 'tp-2', name: '품질 경로', sourceTenantId: 'QAS', targetTenantId: 'PRD', packageId: null }),
+  tpl({ id: 'tp-1', name: '개발에서 운영', sourceTenantId: 'DEV', targetTenantId: 'PRD' }),
+  tpl({ id: 'tp-2', name: '품질 경로', sourceTenantId: 'QAS', targetTenantId: 'PRD' }),
   tpl({ id: 'tp-3', name: '삭제된 원본', sourceTenantId: 'OLD', targetTenantId: 'PRD', usable: false, unusableReason: 'SOURCE_TENANT_MISSING' }),
   tpl({ id: 'tp-4', name: '삭제된 대상', sourceTenantId: 'DEV', targetTenantId: 'GONE', usable: false, unusableReason: 'TARGET_TENANT_MISSING' }),
 ];
@@ -32,12 +32,12 @@ function setup(opts: { templates?: TemplateFixture[]; tenants?: TenantsResponse;
     const body = init?.body ? JSON.parse(init.body as string) : undefined;
     bodies.push({ method, url, body });
     if (method === 'POST') {
-      const created = tpl({ id: 'tp-new', ...body, packageId: body.packageId ?? null });
+      const created = tpl({ id: 'tp-new', ...body });
       list = [...list, created];
       return json(created, 201);
     }
     if (method === 'PUT') {
-      list = list.map((t) => (`/templates/${t.id}` === url ? { ...t, ...body, packageId: body.packageId ?? null } : t));
+      list = list.map((t) => (`/templates/${t.id}` === url ? { ...t, ...body } : t));
       return json(list.find((t) => `/templates/${t.id}` === url));
     }
     list = list.filter((t) => `/templates/${t.id}` !== url);
@@ -67,15 +67,14 @@ const findRow = (name: string) => screen.findByRole('row', { name: new RegExp(na
 const drawer = (name: '템플릿 만들기' | '템플릿 수정') => screen.getByRole('dialog', { name });
 
 describe('REQ-413 목록', () => {
-  it('REQ-413: 목록은 이름·경로·패키지·사용 가능 여부이고 패키지가 없으면 "실행 때 선택"이다', async () => {
+  it('REQ-413·REQ-610: 목록은 이름·경로·사용 가능 여부이고 패키지 열·문구가 없다', async () => {
     setup();
     const first = await findRow('개발에서 운영');
-    expect(screen.getAllByRole('columnheader').map((h) => h.textContent?.trim()).slice(0, 4)).toEqual(['이름', '경로', '패키지', '상태']);
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent?.trim())).toEqual(['이름', '경로', '상태', '작업']);
     expect(first).toHaveTextContent('DEV → PRD');
-    expect(first).toHaveTextContent('PkgTransportDemo');
     expect(first).toHaveTextContent('사용 가능');
     expect(row('품질 경로')).toHaveTextContent('QAS → PRD');
-    expect(row('품질 경로')).toHaveTextContent('실행 때 선택');
+    expect(screen.queryByText('실행 때 선택')).toBeNull();
     expect(screen.getByRole('button', { name: '템플릿 만들기' })).toBeEnabled();
   });
 
@@ -111,8 +110,8 @@ describe('REQ-413 목록', () => {
 });
 
 describe('REQ-413 만들기·수정·삭제', () => {
-  it('REQ-413: 만들기 서랍에서 이름·원본·대상·패키지를 골라 저장하면 POST 하고 목록에 반영된다', async () => {
-    const { bodies } = setup();
+  it('REQ-413·REQ-610: 만들기 서랍은 이름·원본·대상만 받고 저장하면 경로만 POST 하고 목록에 반영된다(패키지 조회 없음)', async () => {
+    const { fn, bodies } = setup();
     await findRow('개발에서 운영');
     await userEvent.click(screen.getByRole('button', { name: '템플릿 만들기' }));
     const d = drawer('템플릿 만들기');
@@ -120,28 +119,14 @@ describe('REQ-413 만들기·수정·삭제', () => {
     await userEvent.type(within(d).getByLabelText('이름'), '새 경로');
     await userEvent.selectOptions(within(d).getByRole('combobox', { name: '원본' }), 'QAS');
     await userEvent.selectOptions(within(d).getByRole('combobox', { name: '대상' }), 'DEV');
-    const pkg = within(d).getByRole('combobox', { name: '패키지' });
-    await waitFor(() => expect(within(pkg).getByRole('option', { name: /Transport Demo/ })).toBeInTheDocument());
-    expect(within(pkg).getByRole('option', { name: '실행 때 선택' })).toBeInTheDocument();
-    await userEvent.selectOptions(pkg, 'PkgFaultDemo');
+    expect(within(d).getAllByRole('combobox')).toHaveLength(2);
+    expect(within(d).queryByRole('combobox', { name: '패키지' })).toBeNull();
+    expect(within(d).queryByText(/패키지/)).toBeNull();
     await userEvent.click(within(d).getByRole('button', { name: '저장' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '템플릿 만들기' })).toBeNull());
-    expect(bodies).toEqual([{ method: 'POST', url: '/templates', body: { name: '새 경로', sourceTenantId: 'QAS', targetTenantId: 'DEV', packageId: 'PkgFaultDemo' } }]);
+    expect(bodies).toEqual([{ method: 'POST', url: '/templates', body: { name: '새 경로', sourceTenantId: 'QAS', targetTenantId: 'DEV' } }]);
     expect(await findRow('새 경로')).toHaveTextContent('QAS → DEV');
-  });
-
-  it('REQ-413: 패키지를 "실행 때 선택"으로 두면 packageId 없이(또는 null로) 보낸다', async () => {
-    const { bodies } = setup();
-    await findRow('개발에서 운영');
-    await userEvent.click(screen.getByRole('button', { name: '템플릿 만들기' }));
-    const d = drawer('템플릿 만들기');
-    await userEvent.type(within(d).getByLabelText('이름'), '패키지 없음');
-    await userEvent.selectOptions(within(d).getByRole('combobox', { name: '원본' }), 'DEV');
-    await userEvent.selectOptions(within(d).getByRole('combobox', { name: '대상' }), 'QAS');
-    await userEvent.click(within(d).getByRole('button', { name: '저장' }));
-    await waitFor(() => expect(bodies).toHaveLength(1));
-    expect(bodies[0].body.packageId ?? null).toBeNull();
-    expect(bodies[0].body).toMatchObject({ name: '패키지 없음', sourceTenantId: 'DEV', targetTenantId: 'QAS' });
+    expect(fn.mock.calls.some(([url]) => String(url).startsWith('/packages'))).toBe(false);
   });
 
   it('REQ-413 실패: 원본과 대상이 같으면 서랍 안에 경고를 보이고 저장할 수 없다', async () => {
@@ -178,12 +163,12 @@ describe('REQ-413 만들기·수정·삭제', () => {
     expect(within(d).getByLabelText('이름')).toHaveValue('개발에서 운영');
     expect(within(d).getByRole('combobox', { name: '원본' })).toHaveValue('DEV');
     expect(within(d).getByRole('combobox', { name: '대상' })).toHaveValue('PRD');
-    await waitFor(() => expect(within(d).getByRole('combobox', { name: '패키지' })).toHaveValue('PkgTransportDemo'));
+    expect(within(d).queryByRole('combobox', { name: '패키지' })).toBeNull();
     await userEvent.clear(within(d).getByLabelText('이름'));
     await userEvent.type(within(d).getByLabelText('이름'), '이름 바꿈');
     await userEvent.click(within(d).getByRole('button', { name: '저장' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '템플릿 수정' })).toBeNull());
-    expect(bodies[0]).toMatchObject({ method: 'PUT', url: '/templates/tp-1', body: { name: '이름 바꿈', sourceTenantId: 'DEV', targetTenantId: 'PRD', packageId: 'PkgTransportDemo' } });
+    expect(bodies[0]).toEqual({ method: 'PUT', url: '/templates/tp-1', body: { name: '이름 바꿈', sourceTenantId: 'DEV', targetTenantId: 'PRD' } });
     expect(await findRow('이름 바꿈')).toBeInTheDocument();
   });
 
@@ -200,12 +185,14 @@ describe('REQ-413 만들기·수정·삭제', () => {
     expect(bodies).toEqual([{ method: 'DELETE', url: '/templates/tp-1', body: undefined }]);
   });
 
-  it('REQ-413: "이 템플릿으로 이관"은 템플릿의 경로와 패키지로 새 이관 화면을 연다', async () => {
+  it('REQ-413·REQ-610: "이 템플릿으로 이관"은 템플릿의 경로만 채운 새 이관 화면을 열고 패키지는 비어 있다', async () => {
     setup({ extra: { 'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json([]) } });
     await userEvent.click(within(await findRow('개발에서 운영')).getByRole('button', { name: '이 템플릿으로 이관' }));
     expect(window.location.hash).toBe('#/transport');
     expect(within(routeGroup()).getByRole('button', { name: /^원본 DEV/ })).toBeInTheDocument();
     expect(within(routeGroup()).getByRole('button', { name: /^대상 PRD/ })).toBeInTheDocument();
-    expect(await screen.findByRole('radio', { name: /Transport Demo/ })).toBeChecked();
+    const radios = await screen.findAllByRole('checkbox', { name: /Demo/ });
+    expect(radios.every((r) => !(r as HTMLInputElement).checked)).toBe(true);
+    expect(screen.getByRole('button', { name: '다음' })).toBeDisabled();
   });
 });

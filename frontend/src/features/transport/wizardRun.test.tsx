@@ -1,8 +1,8 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { TenantsResponse, TenantStatusResponse, TransportRequest, TransportResponse } from '../../api/types';
-import { ARTIFACTS, PACKAGES, json, mockApi } from '../../test/mockFetch';
+import type { TenantsResponse, TenantStatusResponse, TransportRequest } from '../../api/types';
+import { ARTIFACTS, PACKAGES, json, mockApi, respondTo } from '../../test/mockFetch';
 import { baseRoutes, renderAt, routeGroup, tpl, type TemplateFixture } from '../../test/appRoutes';
 import { artifactRow, currentStep, postBodies, stepButton, toArtifacts } from '../../test/wizard';
 
@@ -22,12 +22,9 @@ const TENANTS: TenantsResponse = {
   ],
 };
 const status = (readOnly: boolean): TenantStatusResponse => ({ readOnly, tenants: TENANTS.tenants.map((t) => ({ ...t, check: 'OK' as const })) });
-const respond = (body: TransportRequest): TransportResponse => ({
-  transportId: body.dryRun ? 't-dry' : 't-real', packageId: body.packageId, dryRun: Boolean(body.dryRun), deploy: Boolean(body.deploy),
-  startedAt: '2026-11-16T01:00:00Z', finishedAt: '2026-11-16T01:00:01Z', summary: { total: 1, succeeded: 1, failed: 0 },
-  results: [{ artifactId: 'IF_Order_Sync', status: 'SUCCESS', action: 'NONE', deployStatus: 'NOT_REQUESTED', error: null, configurations: [] }],
-});
-const T_PKG = tpl({ id: 'tp-1', name: '개발에서 운영', sourceTenantId: 'DEV', targetTenantId: 'PRD', packageId: 'PkgTransportDemo' });
+const respond = (body: Pick<TransportRequest, 'packages' | 'dryRun' | 'deploy'>) => respondTo(body);
+const ONE = { packages: [{ packageId: 'PkgTransportDemo' }] };
+const T_PKG = tpl({ id: 'tp-1', name: '개발에서 운영', sourceTenantId: 'DEV', targetTenantId: 'PRD' });
 
 type Routes = Parameters<typeof mockApi>[0];
 function setup(opts: { status?: Routes[string]; post?: Routes[string]; templates?: TemplateFixture[] } = {}) {
@@ -38,20 +35,28 @@ function setup(opts: { status?: Routes[string]; post?: Routes[string]; templates
       'GET /templates': () => json(opts.templates ?? []),
       'GET /packages?tenantId=DEV': () => json(PACKAGES),
       'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json(ARTIFACTS),
+      // 20261118 S3 REQ-622: 실제 이관 확인창이 대상 패키지 존재를 읽는다
+      'GET /packages/target-status?tenantId=PRD&packageIds=PkgTransportDemo': () => json([{ packageId: 'PkgTransportDemo', exists: true }]),
       'POST /transport': opts.post ?? ((init) => json(respond(JSON.parse(init?.body as string)))),
     }),
   );
   renderAt('#/transport');
   return fn;
 }
-/** 아티팩트 하나(IF_Customer_Push)를 고르고 미리보기를 실행해 결과 단계까지 간다. */
+/** 아티팩트 하나(IF_Customer_Push)만 남기고(처음엔 모두 선택) 미리보기를 실행해 결과 단계까지 간다. */
 async function previewOne() {
   await toArtifacts();
-  await userEvent.click(artifactRow('IF_Customer_Push'));
+  await userEvent.click(artifactRow('IF_Order_Sync'));
   await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
   return screen.findByRole('region', { name: '이관 결과' });
 }
 const confirmDialog = () => screen.getByRole('dialog', { name: '실제 이관 확인' });
+/** 확인창이 대상 패키지 확인을 마쳐 "실행"이 켜지기를 기다린다(REQ-622). */
+async function runButton() {
+  const run = within(confirmDialog()).getByRole('button', { name: '실행' });
+  await waitFor(() => expect(run).toBeEnabled());
+  return run;
+}
 
 describe('REQ-430 / REQ-423 대상 연결 확인 실패(사람 결정 2026-11-16)', () => {
   it.each(['TOKEN_FAILED', 'API_FORBIDDEN', 'UNREACHABLE', 'ERROR'] as const)('대상 연결 확인이 %s면 미리보기는 되고, 실제 이관 버튼 두 곳은 이유와 함께 비활성이다', async (check) => {
@@ -88,7 +93,7 @@ describe('REQ-423 미리보기', () => {
     const region = await previewOne();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(postBodies(fn)).toEqual([
-      { packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
+      { packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'] }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
     ]);
     expect(currentStep()).toBe('미리보기');
     expect(within(region).getByText('이관 ID').nextElementSibling).toHaveTextContent('t-dry');
@@ -104,7 +109,7 @@ describe('REQ-423 미리보기', () => {
     expect(postBodies(fn)).toHaveLength(1);
     expect(await screen.findByText('이관 실행 중')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '미리보기 실행' })).toBeDisabled();
-    pending.release(json(respond({ packageId: 'PkgTransportDemo', dryRun: true, deploy: false })));
+    pending.release(json(respond({ ...ONE, dryRun: true, deploy: false })));
     expect(await screen.findByRole('region', { name: '이관 결과' })).toBeInTheDocument();
   });
 
@@ -112,19 +117,20 @@ describe('REQ-423 미리보기', () => {
     const fn = setup({ templates: [T_PKG] });
     const card = await screen.findByRole('listitem', { name: /개발에서 운영/ });
     await userEvent.click(within(card).getByRole('button', { name: '이 템플릿으로 시작' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: /Transport Demo/ }));
     await userEvent.click(await screen.findByRole('button', { name: '전체 아티팩트로 미리보기' }));
     await userEvent.click(within(await screen.findByRole('region', { name: '이관 결과' })).getByRole('button', { name: '이 구성으로 실제 이관' }));
-    await userEvent.click(within(confirmDialog()).getByRole('button', { name: '실행' }));
+    await userEvent.click(await runButton());
     await waitFor(() => expect(postBodies(fn)).toHaveLength(2));
     expect(postBodies(fn)).toEqual([
-      { packageId: 'PkgTransportDemo', dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
-      { packageId: 'PkgTransportDemo', dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
+      { ...ONE, dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
+      { ...ONE, dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
     ]);
   });
 });
 
 describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
-  it('REQ-423: 결과의 "이 구성으로 실제 이관"은 확인창(경로·패키지·아티팩트 수·되돌릴 수 없음·배포 꺼짐)을 열고 아직 보내지 않는다', async () => {
+  it('REQ-423·622: 결과의 "이 구성으로 실제 이관"은 확인창(경로·패키지와 대상 상태·아티팩트 수·되돌릴 수 없음·배포 꺼짐)을 열고 아직 보내지 않는다', async () => {
     const fn = setup();
     const region = await previewOne();
     const opener = within(region).getByRole('button', { name: '이 구성으로 실제 이관' });
@@ -132,7 +138,10 @@ describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
     const dialog = confirmDialog();
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(dialog).toHaveTextContent('개발 → 운영');
-    expect(dialog).toHaveTextContent('PkgTransportDemo');
+    const pkg = await within(dialog).findByRole('listitem', { name: /PkgTransportDemo/ });
+    await waitFor(() => expect(pkg).toHaveTextContent('있음'));
+    expect(pkg).not.toHaveTextContent('새로 만듦');
+    expect(dialog).not.toHaveTextContent('대상에 새로 만듭니다');
     expect(within(dialog).getByText('아티팩트 수').nextElementSibling).toHaveTextContent('1');
     expect(dialog).toHaveTextContent('되돌릴 수 없습니다');
     expect(within(dialog).getByRole('switch', { name: '배포' })).not.toBeChecked();
@@ -144,10 +153,11 @@ describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
     const fn = setup();
     const region = await previewOne();
     await userEvent.click(within(region).getByRole('button', { name: '이 구성으로 실제 이관' }));
-    await userEvent.click(within(confirmDialog()).getByRole('button', { name: '실행' }));
+    await userEvent.click(await runButton());
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '실제 이관 확인' })).toBeNull());
+    // 대상에 있는 패키지뿐이면 createPackages 키를 보내지 않는다
     expect(postBodies(fn)[1]).toEqual({
-      packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'], dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD',
+      packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'] }], dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD',
     });
     const real = await screen.findByRole('region', { name: '이관 결과' });
     await waitFor(() => expect(within(real).getByText('이관 ID').nextElementSibling).toHaveTextContent('t-real'));
@@ -163,9 +173,9 @@ describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
     await userEvent.click(screen.getByRole('button', { name: '운영로 이관' }));
     const dialog = confirmDialog();
     await userEvent.click(within(dialog).getByRole('switch', { name: '배포' }));
-    await userEvent.click(within(dialog).getByRole('button', { name: '실행' }));
+    await userEvent.click(await runButton());
     await waitFor(() => expect(postBodies(fn)).toHaveLength(2));
-    expect(postBodies(fn)[1]).toMatchObject({ dryRun: false, deploy: true, artifactIds: ['IF_Customer_Push'] });
+    expect(postBodies(fn)[1]).toMatchObject({ dryRun: false, deploy: true, packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'] }] });
   });
 
   it('REQ-423: "취소"와 Esc는 보내지 않고 닫으며 연 버튼으로 포커스가 돌아간다. 다시 열면 배포는 다시 꺼짐이다', async () => {
@@ -198,7 +208,7 @@ describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
     });
     const region = await previewOne();
     await userEvent.click(within(region).getByRole('button', { name: '이 구성으로 실제 이관' }));
-    const run = within(confirmDialog()).getByRole('button', { name: '실행' });
+    const run = await runButton();
     fireEvent.click(run); fireEvent.click(run); fireEvent.click(run);
     expect(postBodies(fn)).toHaveLength(2);
     await waitFor(() => expect(within(confirmDialog()).getByRole('button', { name: '실행' })).toBeDisabled());
@@ -206,7 +216,7 @@ describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
     expect(within(confirmDialog()).getByText('이관 실행 중')).toBeInTheDocument();
     fireEvent.keyDown(confirmDialog(), { key: 'Escape' });
     expect(confirmDialog()).toBeInTheDocument();
-    pending!.release(json(respond({ packageId: 'PkgTransportDemo', dryRun: false, deploy: false })));
+    pending!.release(json(respond({ ...ONE, dryRun: false, deploy: false })));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '실제 이관 확인' })).toBeNull());
   });
 });
@@ -280,7 +290,7 @@ describe('REQ-423 요청 오류 (ADR-016)', () => {
     setup({ post: (init) => (JSON.parse(init?.body as string).dryRun ? json(respond(JSON.parse(init?.body as string))) : json({ error: 'READ_ONLY_MODE', message }, 409)) });
     const region = await previewOne();
     await userEvent.click(within(region).getByRole('button', { name: '이 구성으로 실제 이관' }));
-    await userEvent.click(within(confirmDialog()).getByRole('button', { name: '실행' }));
+    await userEvent.click(await runButton());
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('읽기 전용 모드에서는 실제 이관을 할 수 없습니다');
     expect(alert).toHaveTextContent(message);
@@ -299,6 +309,7 @@ describe('REQ-423 요청 오류 (ADR-016)', () => {
     });
     const card = await screen.findByRole('listitem', { name: /개발에서 운영/ });
     await userEvent.click(within(card).getByRole('button', { name: '이 템플릿으로 시작' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: /Transport Demo/ }));
     await userEvent.click(await screen.findByRole('button', { name: '전체 아티팩트로 미리보기' }));
     expect((await screen.findAllByText('템플릿이 바뀌었거나 삭제되었습니다')).length).toBeGreaterThanOrEqual(1);
     await userEvent.click(screen.getByRole('button', { name: '템플릿 없이 다시 실행' }));
@@ -306,7 +317,7 @@ describe('REQ-423 요청 오류 (ADR-016)', () => {
     const bodies = postBodies(fn);
     expect(bodies).toHaveLength(2);
     expect(bodies[0]).toMatchObject({ templateId: 'tp-1', dryRun: true });
-    expect(bodies[1]).toEqual({ packageId: 'PkgTransportDemo', dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
+    expect(bodies[1]).toEqual({ ...ONE, dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
     expect(stepButton('템플릿')).not.toHaveTextContent('개발에서 운영');
   });
 });

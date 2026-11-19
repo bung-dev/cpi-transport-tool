@@ -26,54 +26,121 @@ public class TransportService {
         this.clock = clock;
     }
 
+    private record SourcePackage(PackageSelection selection, CpiPackage metadata, List<CpiArtifact> artifacts) {}
+    private record TargetPackage(TargetPackageStatus status, ArtifactError error) {}
+
     public TransportResponse execute(TransportRequest request) {
-        return execute(request, api.listArtifacts(request.source().id(), request.packageId()));
+        var sources = new ArrayList<SourcePackage>();
+        for (var selected : request.packages()) {
+            sources.add(new SourcePackage(selected, new CpiPackage(selected.packageId(), null, null),
+                    api.listArtifacts(request.source().id(), selected.packageId())));
+        }
+        return execute(request, sources, false);
     }
 
     // Request validation and environment checks are performed by the controller.
     public TransportResponse preflightAndExecute(TransportRequest request) {
-        List<CpiArtifact> artifacts;
+        var sources = new ArrayList<SourcePackage>();
         try {
-            if (api.getPackage(request.source().id(), request.packageId()).isEmpty()) {
-                throw new ErrorResponse.ApiException(ErrorResponse.Code.PACKAGE_NOT_FOUND);
+            var metadata = new ArrayList<CpiPackage>();
+            for (var selected : request.packages()) {
+                metadata.add(api.getPackage(request.source().id(), selected.packageId())
+                        .orElseThrow(() -> new ErrorResponse.ApiException(ErrorResponse.Code.PACKAGE_NOT_FOUND)));
             }
-            artifacts = api.listArtifacts(request.source().id(), request.packageId());
+            for (int i = 0; i < request.packages().size(); i++) {
+                var selected = request.packages().get(i);
+                sources.add(new SourcePackage(selected, metadata.get(i),
+                        api.listArtifacts(request.source().id(), selected.packageId())));
+            }
         } catch (CpiCallException failure) {
             // A token-endpoint 404 is an authentication failure, not a missing package.
-            if (Integer.valueOf(404).equals(failure.httpStatus())
-                    && !failure.isTokenStageFailure()) {
+            if (Integer.valueOf(404).equals(failure.httpStatus()) && !failure.isTokenStageFailure()) {
                 throw new ErrorResponse.ApiException(ErrorResponse.Code.PACKAGE_NOT_FOUND);
             }
-            // AI-NOTE: discard upstream summaries and causes before Spring logs this failure (REQ-305 AC-3).
             throw new ErrorResponse.ApiException(ErrorResponse.Code.CPI_UNAVAILABLE);
         }
-        return execute(request, artifacts);
+        return execute(request, sources, true);
     }
 
     public TransportResponse execute(TransportRequest request, List<CpiArtifact> artifacts) {
+        if (request.packages().size() != 1) throw new IllegalArgumentException("One package required for supplied artifacts");
+        var selected = request.packages().getFirst();
+        return execute(request, List.of(new SourcePackage(selected,
+                new CpiPackage(selected.packageId(), null, null), artifacts)), false);
+    }
+
+    private TransportResponse execute(TransportRequest request, List<SourcePackage> sources, boolean preflight) {
         String transportId = UUID.randomUUID().toString();
         var started = clock.instant();
-        var ids = request.artifactIds() == null || request.artifactIds().isEmpty()
-                ? artifacts.stream().map(CpiArtifact::id).toList() : request.artifactIds();
         var results = new ArrayList<ArtifactResult>();
-        for (String id : ids) {
-            var previousContext = MDC.getCopyOfContextMap();
-            try {
-                MDC.put("transportId", transportId);
-                MDC.put("artifactId", id);
-                results.add(process(transportId, request, id, artifacts));
-            } finally {
-                if (previousContext == null) MDC.clear();
-                else MDC.setContextMap(previousContext);
+        var packages = new ArrayList<TransportPackage>();
+        for (var source : sources) {
+            String packageId = source.selection().packageId();
+            var target = prepareTarget(transportId, request, source.metadata());
+            packages.add(new TransportPackage(packageId, source.metadata().name(), target.status()));
+            var selectedIds = source.selection().artifactIds();
+            var ids = selectedIds == null || selectedIds.isEmpty()
+                    ? source.artifacts().stream().map(CpiArtifact::id).toList() : selectedIds;
+            for (String id : ids) {
+                var previousContext = MDC.getCopyOfContextMap();
+                try {
+                    MDC.put("transportId", transportId);
+                    MDC.put("packageId", packageId);
+                    MDC.put("artifactId", id);
+                    // Preflighted requests fail the entire package before starting its artifacts.
+                    // The supplied-artifact entry point retains source-stage failure precedence.
+                    if (preflight && target.error() != null) {
+                        event(transportId, id, Stage.TARGET, "started");
+                        event(transportId, id, Stage.TARGET, "failed");
+                        results.add(new ArtifactResult(packageId, id, null, TransportAction.NONE,
+                                List.of(), DeployStatus.NOT_REQUESTED, target.error()));
+                    } else {
+                        results.add(process(transportId, request, packageId, id, source.artifacts(), target.error())
+                                .withPackageId(packageId));
+                    }
+                } finally {
+                    if (previousContext == null) MDC.clear();
+                    else MDC.setContextMap(previousContext);
+                }
             }
         }
         int succeeded = (int) results.stream().filter(r -> r.status() == ArtifactStatus.SUCCESS).count();
-        return new TransportResponse(transportId, request.packageId(), request.dryRun(), request.deploy(),
-                started, clock.instant(), new TransportSummary(results.size(), succeeded, results.size() - succeeded), results, request.source(), request.target());
+        return new TransportResponse(transportId, packages, request.dryRun(), request.deploy(),
+                started, clock.instant(), new TransportSummary(results.size(), succeeded, results.size() - succeeded),
+                results, request.source(), request.target(), null);
     }
 
-    private ArtifactResult process(String transportId, TransportRequest request, String id,
-                                   List<CpiArtifact> artifacts) {
+    private TargetPackage prepareTarget(String transportId, TransportRequest request, CpiPackage source) {
+        if (request.dryRun()) return new TargetPackage(TargetPackageStatus.NOT_CHECKED, null);
+        try {
+            if (api.getPackage(request.target().id(), source.id()).isPresent())
+                return new TargetPackage(TargetPackageStatus.EXISTING, null);
+        } catch (RuntimeException failure) {
+            return new TargetPackage(TargetPackageStatus.CHECK_FAILED, targetError("TARGET_CHECK_FAILED", failure));
+        }
+        if (!request.createPackages().contains(source.id())) {
+            return new TargetPackage(TargetPackageStatus.NOT_FOUND,
+                    new ArtifactError("PACKAGE_NOT_FOUND_IN_TARGET", "TARGET: HTTP 404; CPI package not found"));
+        }
+        log.info("transportId={} packageId={} step=PACKAGE_CREATE phase=START result=PENDING", transportId, source.id());
+        try {
+            api.createPackage(request.target().id(), source);
+            log.info("transportId={} packageId={} step=PACKAGE_CREATE phase=END result=OK", transportId, source.id());
+            return new TargetPackage(TargetPackageStatus.CREATED, null);
+        } catch (RuntimeException failure) {
+            log.info("transportId={} packageId={} step=PACKAGE_CREATE phase=END result=FAILED", transportId, source.id());
+            return new TargetPackage(TargetPackageStatus.CREATE_FAILED, targetError("PACKAGE_CREATE_FAILED", failure));
+        }
+    }
+
+    private ArtifactError targetError(String code, RuntimeException failure) {
+        String detail = failure instanceof CpiCallException call
+                ? "HTTP " + call.httpStatus() + "; CPI call failed" : "CPI processing failed";
+        return new ArtifactError(code, "TARGET: " + detail);
+    }
+
+    private ArtifactResult process(String transportId, TransportRequest request, String packageId, String id,
+                                   List<CpiArtifact> artifacts, ArtifactError packageError) {
         Stage stage = Stage.LOOKUP;
         TransportAction action = TransportAction.NONE;
         DeployStatus deployStatus = request.dryRun() && request.deploy()
@@ -99,14 +166,14 @@ public class TransportService {
                     skipped(transportId, id, Stage.UPLOAD, "SKIPPED_DRY_RUN");
                 } else {
                     stage = next(transportId, id, stage, Stage.TARGET);
-                    if (api.getPackage(request.target().id(), request.packageId()).isEmpty()) {
-                        error = new ArtifactError("PACKAGE_NOT_FOUND_IN_TARGET", "TARGET: HTTP 404; CPI package not found");
+                    if (packageError != null) {
+                        error = packageError;
                     } else {
                         exists = api.artifactExists(request.target().id(), id);
                         stage = next(transportId, id, stage, Stage.UPLOAD);
                         String content = Base64.getEncoder().encodeToString(zip);
                         if (exists) api.updateArtifact(request.target().id(), id, artifact.get().name(), content);
-                        else api.createArtifact(request.target().id(), artifact.get().name(), id, request.packageId(), content);
+                        else api.createArtifact(request.target().id(), artifact.get().name(), id, packageId, content);
                         action = exists ? TransportAction.UPDATED : TransportAction.CREATED;
                         stage = next(transportId, id, stage, Stage.CONFIGURATION_UPDATE);
                         var copied = configurations.copy(request.target().id(), id, source);

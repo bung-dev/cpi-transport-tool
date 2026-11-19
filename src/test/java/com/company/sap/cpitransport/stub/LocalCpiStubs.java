@@ -82,6 +82,17 @@ public final class LocalCpiStubs {
     private static Map<String, String> metadata(String id, String name, String version) {
         return Map.of("Id", id, "Name", name, "Version", version);
     }
+    private static final Set<String> NOT_IN_PRD = Set.of("PkgNotInPrd", "PkgCreateFail");
+    private static Map<String, String> packageMetadata(String id, String name, String mode) {
+        var value = new LinkedHashMap<String, String>();
+        value.put("Id", id);
+        value.put("Name", name);
+        value.put("ShortText", name + " short text");
+        value.put("Description", name + " description");
+        value.put("Version", "1.0.0");
+        if (mode != null) value.put("Mode", mode);
+        return value;
+    }
     private static String data(Object value) { return JSON.writeValueAsString(Map.of("d", value)); }
     private static String results(Object value) { return data(Map.of("results", value)); }
     private static void getJson(WireMockServer server, String path, String body) {
@@ -93,20 +104,31 @@ public final class LocalCpiStubs {
         server.stubFor(next.inScenario(scenario).whenScenarioStateIs("done").willReturn(success));
     }
     private void seed() throws IOException {
-        var packages = List.of(metadata("PkgTransportDemo", "Transport Demo", "1.0.0"),
-                metadata("PkgFaultDemo", "Fault Demo", "1.0.0"), metadata("PkgNotInPrd", "Not In PRD", "1.0.0"));
-        getJson(dev, ROOT + "IntegrationPackages", results(packages));
-        // PRD도 패키지 목록을 돌려준다(PkgNotInPrd 제외). 연결 확인(IntegrationPackages?$top=1)이 OK가 되어야
+        var packages = List.of(packageMetadata("PkgTransportDemo", "Transport Demo", "EDIT_ALLOWED"),
+                packageMetadata("PkgFaultDemo", "Fault Demo", null), packageMetadata("PkgNotInPrd", "Not In PRD", null),
+                packageMetadata("PkgCreateFail", "Create Fail Demo", null));
+        // REQ-605, REQ-606: SAP 제공(구성 전용) 패키지는 Mode가 편집 불가라 목록에서 숨는다. ID로 직접 읽으면 보인다.
+        var sapPackage = packageMetadata("PkgSapStandard", "SAP Standard Content", "READ_ONLY");
+        var devList = new ArrayList<>(packages);
+        devList.add(sapPackage);
+        getJson(dev, ROOT + "IntegrationPackages", results(devList));
+        getJson(dev, ROOT + "IntegrationPackages('PkgSapStandard')", data(sapPackage));
+        getJson(dev, ROOT + "IntegrationPackages('PkgSapStandard')/IntegrationDesigntimeArtifacts", results(List.of()));
+        // PRD도 패키지 목록을 돌려준다(대상에 없는 PkgNotInPrd·PkgCreateFail 제외). 연결 확인(IntegrationPackages?$top=1)이 OK가 되어야
         // 대상 연결 확인 실패 때 실제 이관을 막는 규칙(REQ-430·423, 2026-11-16 사람 결정) 아래에서 화면 실제 이관을 검증할 수 있다.
-        getJson(prd, ROOT + "IntegrationPackages", results(packages.stream().filter(p -> !p.get("Id").equals("PkgNotInPrd")).toList()));
+        getJson(prd, ROOT + "IntegrationPackages", results(packages.stream().filter(p -> !NOT_IN_PRD.contains(p.get("Id"))).toList()));
+        // REQ-606: 승인하면 PkgNotInPrd는 만들어지고(201), PkgCreateFail은 만들기가 실패한다(500).
+        prd.stubFor(post(urlPathEqualTo(ROOT + "IntegrationPackages")).atPriority(8).willReturn(created()));
+        prd.stubFor(post(urlPathEqualTo(ROOT + "IntegrationPackages"))
+                .withRequestBody(matchingJsonPath("$.Id", equalTo("PkgCreateFail"))).willReturn(serverError()));
         Files.createDirectories(zipDirectory);
         for (var pkg : packages) {
             String id = pkg.get("Id");
             String path = ROOT + "IntegrationPackages('" + id + "')";
             getJson(dev, path, data(pkg));
-            if (!id.equals("PkgNotInPrd")) getJson(prd, path, data(pkg));
+            if (!NOT_IN_PRD.contains(id)) getJson(prd, path, data(pkg));
             List<String> ids = id.equals("PkgTransportDemo") ? List.of("IF_Order_Sync", "IF_Customer_Push")
-                    : id.equals("PkgFaultDemo") ? FAULTS : List.of("IF_Orphan");
+                    : id.equals("PkgFaultDemo") ? FAULTS : id.equals("PkgCreateFail") ? List.of("IF_CreateFail") : List.of("IF_Orphan");
             getJson(dev, path + "/IntegrationDesigntimeArtifacts", results(ids.stream().map(a -> metadata(a,
                     a.equals("IF_Order_Sync") ? "Order Sync" : a.equals("IF_Customer_Push") ? "Customer Push" : a,
                     a.equals("IF_Order_Sync") ? "1.0.3" : a.equals("IF_Customer_Push") ? "2.1.0" : "1.0.0")).toList()));

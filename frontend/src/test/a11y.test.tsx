@@ -22,7 +22,7 @@ const art = (artifactId: string, over: Partial<ArtifactResult>): ArtifactResult 
 });
 const RESULT: TransportResponse = {
   transportId: 't-a11y',
-  packageId: 'PkgTransportDemo',
+  packages: [{ packageId: 'PkgTransportDemo', packageName: 'Transport Demo', targetPackage: 'NOT_CHECKED' }],
   dryRun: true,
   deploy: false,
   startedAt: '2026-09-29T07:05:05Z',
@@ -45,6 +45,7 @@ function setupApp(historyError = false) {
       'GET /templates': () => json([]),
     'GET /packages?tenantId=DEV': () => json(PACKAGES),
     'GET /packages/PkgTransportDemo/artifacts?tenantId=DEV': () => json(ARTIFACTS),
+    'GET /packages/target-status?tenantId=PRD&packageIds=PkgTransportDemo': () => json([{ packageId: 'PkgTransportDemo', exists: true }]),
     'GET /transport/history': () =>
       historyError && ++historyCalls === 1 ? json({ error: 'CPI_UNAVAILABLE', message: 'down' }, 502) : json([RESULT]),
     'POST /transport': (init) => json({ ...RESULT, dryRun: JSON.parse(init?.body as string).dryRun }),
@@ -71,7 +72,7 @@ async function tabOrder(user: User): Promise<HTMLElement[]> {
 async function openResultState(user: User = userEvent.setup()) {
   setupApp();
   await user.click(await screen.findByRole('button', { name: '템플릿 없이 진행' }));
-  await user.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
+  await user.click(await screen.findByRole('checkbox', { name: /Transport Demo/ }));
   await user.click(screen.getByRole('button', { name: '다음' }));
   await screen.findByRole('grid', { name: '이관할 아티팩트' });
   await user.click(artifactRow('IF_Order_Sync'));
@@ -118,7 +119,7 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
     const inGrid = order.filter((el) => artifactGrid().contains(el));
     expect(inGrid).toHaveLength(1);
     expect(inGrid[0]).toHaveAttribute('aria-selected');
-    for (const name of ['전체 선택', '선택 해제', '이전', '미리보기 실행']) expect(order, name).toContain(screen.getByRole('button', { name }));
+    for (const name of ['모두 선택', '모두 해제', '전체 선택', '선택 해제', '이전', '미리보기 실행']) expect(order, name).toContain(screen.getByRole('button', { name }));
   });
 
   it('REQ-108 AC-2: Enter/Space(라디오 그룹은 화살표 키)로 조작된다', async () => {
@@ -190,6 +191,8 @@ describe('키보드 접근 (REQ-108 AC-2)', () => {
     within(dialog).getByRole('switch', { name: '배포' }).focus();
     await user.keyboard(' ');
     expect(within(dialog).getByRole('switch', { name: '배포' })).toBeChecked();
+    // 대상 패키지 확인(REQ-622)이 끝나야 "실행"이 켜진다
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: '실행' })).toBeEnabled());
     const order = await tabOrder(user);
     expect(order).toContain(within(dialog).getByRole('button', { name: '취소' }));
     expect(order).toContain(within(dialog).getByRole('button', { name: '실행' }));
@@ -234,10 +237,10 @@ describe('접근 가능한 이름과 색 외 구분 (REQ-108 AC-3)', () => {
     expect(within(failedCard).getByText('상태')).toBeInTheDocument();
   });
 
-  it('REQ-108 AC-3 / REQ-422: 선택된 아티팩트 행은 aria-selected와 보이는 선택 표시([data-check-mark])가 있고, 선택된 패키지 행에는 선택된 라디오가 있다', async () => {
+  it('REQ-108 AC-3 / REQ-422·620: 선택된 아티팩트 행은 aria-selected와 보이는 선택 표시([data-check-mark])가 있고, 선택된 패키지 행에는 체크된 체크박스가 있다', async () => {
     setupApp();
     await toArtifacts();
-    await userEvent.click(artifactRow('IF_Order_Sync'));
+    await userEvent.click(artifactRow('IF_Customer_Push'));
     expect(artifactRow('IF_Order_Sync')).toHaveAttribute('aria-selected', 'true');
     expect(artifactRow('IF_Order_Sync').querySelector('[data-check-mark]')).not.toBeNull();
     expect(artifactRow('IF_Customer_Push')).toHaveAttribute('aria-selected', 'false');

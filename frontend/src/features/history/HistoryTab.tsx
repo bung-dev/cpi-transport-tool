@@ -1,3 +1,4 @@
+import { packageSummary } from '../../lib/packageSummary';
 import { useEffect, useRef, useState } from 'react';
 import { getHistory, getTemplates } from '../../api/client';
 import type { TransportResponse } from '../../api/types';
@@ -148,7 +149,7 @@ export function HistoryTab() {
                     <Td className="min-w-28">{templateLabel(h, liveTemplateIds)}</Td>
                     <Td className="min-w-28">{h.sourceTenant?.name ?? '-'}</Td>
                     <Td className="min-w-28">{h.targetTenant?.name ?? '-'}</Td>
-                    <Td className="min-w-28 font-mono text-[13px]">{h.packageId}</Td>
+                    <Td className="min-w-28 font-mono text-[13px]">{packageSummary(h.packages)}</Td>
                     <Td className="whitespace-nowrap">{h.dryRun ? <Badge tone="neutral">미리보기</Badge> : <Badge tone="accent">실제 이관</Badge>}</Td>
                     <Td className="whitespace-nowrap">
                       <span className="inline-flex items-center gap-2">

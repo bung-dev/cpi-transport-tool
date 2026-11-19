@@ -25,6 +25,7 @@ export interface ArtifactError {
 }
 
 export interface ArtifactResult {
+  packageId?: string;
   artifactId: string;
   status: ArtifactStatus;
   action: TransportAction;
@@ -39,13 +40,21 @@ export interface TransportSummary {
   failed: number;
 }
 
+export type TargetPackageStatus = 'NOT_CHECKED' | 'EXISTING' | 'CREATED' | 'CREATE_FAILED' | 'NOT_FOUND' | 'CHECK_FAILED';
+
+export interface TransportPackage {
+  packageId: string;
+  packageName: string | null;
+  targetPackage: TargetPackageStatus | null;
+}
+
 export interface TransportResponse {
   sourceTenant?: TenantRef;
   targetTenant?: TenantRef;
   /** 템플릿으로 실행한 경우 실행 당시의 템플릿 id·이름. 템플릿 없이 실행했으면 필드가 없다(REQ-424·425). */
   template?: { id: string; name: string };
   transportId: string;
-  packageId: string;
+  packages: TransportPackage[];
   dryRun: boolean;
   deploy: boolean;
   startedAt: string;
@@ -57,8 +66,8 @@ export interface TransportResponse {
 export interface TransportRequest {
   sourceTenantId?: string;
   targetTenantId?: string;
-  packageId: string;
-  artifactIds?: string[];
+  packages: { packageId: string; artifactIds?: string[] }[];
+  createPackages?: string[];
   dryRun?: boolean;
   deploy?: boolean;
   /** 템플릿으로 시작했고 경로를 바꾸지 않았을 때만 보낸다(REQ-423). */
@@ -74,7 +83,7 @@ export interface TenantStatusItem { id: string; name: string; source: TenantSour
 export interface TenantStatusResponse { readOnly: boolean; tenants: TenantStatusItem[] }
 export interface TenantRef { id: string; name: string }
 
-export interface TemplateInput { name: string; sourceTenantId: string; targetTenantId: string; packageId?: string | null }
+export interface TemplateInput { name: string; sourceTenantId: string; targetTenantId: string }
 export interface TransportTemplate extends TemplateInput {
   id: string; createdAt: string; updatedAt: string; usable: boolean;
   unusableReason?: 'SOURCE_TENANT_MISSING' | 'TARGET_TENANT_MISSING';

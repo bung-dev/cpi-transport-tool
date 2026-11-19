@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { describe, expect, it } from 'vitest';
 import type { ArtifactError, ArtifactResult, DeployStatus, TransportResponse } from '../../api/types';
+import { packagesOf } from '../../test/mockFetch';
 import { TransportResult } from './TransportResult';
 
 function result(statuses: DeployStatus[], overrides: Partial<TransportResponse> = {}): TransportResponse {
@@ -12,7 +13,7 @@ function result(statuses: DeployStatus[], overrides: Partial<TransportResponse> 
     error: deployStatus === 'ERROR' ? { code: 'DEPLOY_FAILED', message: 'DEPLOY: CPI deployment ERROR' } : null,
   }));
   return {
-    transportId: 'deployment-test', packageId: 'PkgFaultDemo', dryRun: false, deploy: true,
+    transportId: 'deployment-test', packages: packagesOf('PkgFaultDemo'), dryRun: false, deploy: true,
     startedAt: '2026-10-14T00:00:00Z', finishedAt: '2026-10-14T00:01:00Z',
     summary: { total: results.length, succeeded: results.filter((r) => r.status === 'SUCCESS').length,
       failed: results.filter((r) => r.status === 'FAILED').length },

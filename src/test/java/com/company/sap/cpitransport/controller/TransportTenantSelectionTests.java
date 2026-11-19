@@ -87,6 +87,8 @@ class TransportTenantSelectionTests {
     void req308_ac1_defaultsAndDryRun() throws Exception {
         transport(Map.of()).andExpect(status().isOk()).andExpect(jsonPath("$.sourceTenant.id").value("DEV"))
                 .andExpect(jsonPath("$.targetTenant.id").value("PRD"));
+        // REQ-604: 실제 이관은 패키지마다 대상 패키지를 확인하므로 미리보기만 대상 요청 0회를 본다.
+        target.resetRequests();
         transport(Map.of("dryRun", true, "targetTenantId", targetId)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.targetTenant.name").value("Registered target"));
         assertThat(target.getAllServeEvents()).isEmpty();

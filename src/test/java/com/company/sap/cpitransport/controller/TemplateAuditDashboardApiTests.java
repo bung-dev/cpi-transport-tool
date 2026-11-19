@@ -35,6 +35,7 @@ import static org.assertj.core.api.Assertions.*;
 /**
  * 20261110-ui-refresh S1: REQ-401 템플릿, REQ-402 테넌트 삭제와 템플릿, REQ-403 이관 기록의 템플릿 연결,
  * REQ-404 감사 기록, REQ-405 대시보드 API. HTTP 블랙박스로 검증한다(CPI는 WireMock).
+ * 20261118-package-autocreate-multi S2: REQ-610 템플릿은 경로만, REQ-611 기존 템플릿 1회 삭제, REQ-612 대시보드 대기 항목.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         classes = {CpiTransportToolApplication.class, TemplateAuditDashboardApiTests.TestBeans.class})
@@ -158,47 +159,103 @@ class TemplateAuditDashboardApiTests {
         node.put("transportId", id).put("packageId", pkg).put("dryRun", dryRun).put("deploy", false)
                 .put("startedAt", startedAt.toString()).put("finishedAt", startedAt.toString());
         node.putObject("summary").put("total", total).put("succeeded", total - failed).put("failed", failed);
-        node.putArray("results");
+        var results = node.putArray("results");
+        for (int i = 0; i < total; i++) {
+            var r = results.addObject().put("artifactId", pkg + "_A" + i).put("status", i < failed ? "FAILED" : "SUCCESS");
+            if (i < failed) r.putObject("error").put("code", "UPLOAD_FAILED").put("message", "TARGET: HTTP 500; CPI call failed");
+        }
         node.putObject("sourceTenant").put("id", src).put("name", srcName);
         node.putObject("targetTenant").put("id", tgt).put("name", tgtName);
         return JSON.writeValueAsString(node);
     }
 
+    /** 새 형식(묶음) 이력 줄: packages[]와 결과마다 packageId. 패키지마다 {아티팩트 수, 실패 수}. */
+    static String bundleLine(String id, boolean dryRun, String src, String tgt, Instant startedAt,
+                             LinkedHashMap<String, int[]> perPackage) {
+        return bundleLine(id, dryRun, src, tgt, startedAt, perPackage, Map.of());
+    }
+
+    /** targetStatus에 없는 패키지는 dryRun이면 NOT_CHECKED, 아니면 EXISTING. */
+    static String bundleLine(String id, boolean dryRun, String src, String tgt, Instant startedAt,
+                             LinkedHashMap<String, int[]> perPackage, Map<String, String> targetStatus) {
+        var node = JSON.createObjectNode();
+        node.put("transportId", id).put("dryRun", dryRun).put("deploy", false)
+                .put("startedAt", startedAt.toString()).put("finishedAt", startedAt.toString());
+        var packages = node.putArray("packages");
+        var results = node.putArray("results");
+        int total = 0, failed = 0;
+        for (var e : perPackage.entrySet()) {
+            packages.addObject().put("packageId", e.getKey()).put("packageName", e.getKey() + " name")
+                    .put("targetPackage", targetStatus.getOrDefault(e.getKey(), dryRun ? "NOT_CHECKED" : "EXISTING"));
+            for (int i = 0; i < e.getValue()[0]; i++) {
+                boolean bad = i < e.getValue()[1];
+                var r = results.addObject().put("packageId", e.getKey()).put("artifactId", e.getKey() + "_A" + i)
+                        .put("status", bad ? "FAILED" : "SUCCESS");
+                if (bad) r.putObject("error").put("code", "UPLOAD_FAILED").put("message", "TARGET: HTTP 500; CPI call failed");
+            }
+            total += e.getValue()[0];
+            failed += e.getValue()[1];
+        }
+        node.putObject("summary").put("total", total).put("succeeded", total - failed).put("failed", failed);
+        node.putObject("sourceTenant").put("id", src).put("name", src);
+        node.putObject("targetTenant").put("id", tgt).put("name", tgt);
+        return JSON.writeValueAsString(node);
+    }
+
     // ---- REQ-401 템플릿 저장 ----
 
-    @Test @DisplayName("REQ-401: 생성 응답 필드, 목록, 수정 시 updatedAt 갱신, 삭제 204")
+    @Test @DisplayName("REQ-401·REQ-610: 생성 응답 필드(패키지 없음), 목록, 수정 시 updatedAt 갱신, 삭제 204")
     void req401_crud() throws Exception {
         server.resetRequests();
         var created = ok(request("POST", "/templates", templateBody("CRUD template", "DEV", "PRD", "Pkg")), 201);
-        assertThat(created.propertyNames()).contains("id", "name", "sourceTenantId", "targetTenantId", "packageId",
-                "createdAt", "updatedAt", "usable");
+        assertThat(created.propertyNames()).contains("id", "name", "sourceTenantId", "targetTenantId",
+                "createdAt", "updatedAt", "usable").doesNotContain("packageId");
         assertThat(created.get("name").asString()).isEqualTo("CRUD template");
         assertThat(created.get("sourceTenantId").asString()).isEqualTo("DEV");
         assertThat(created.get("targetTenantId").asString()).isEqualTo("PRD");
-        assertThat(created.get("packageId").asString()).isEqualTo("Pkg");
         assertThat(created.get("usable").asBoolean()).isTrue();
         Instant createdAt = Instant.parse(created.get("createdAt").asString());
         Instant updatedAt = Instant.parse(created.get("updatedAt").asString());
         String id = created.get("id").asString();
 
         var noPackage = ok(request("POST", "/templates", templateBody("CRUD no package", "DEV", "PRD", null)), 201);
-        assertThat(noPackage.get("packageId").isNull()).isTrue();
+        assertThat(noPackage.has("packageId")).isFalse();
 
         assertThat(findTemplate(id)).isNotNull();
-        var updated = ok(request("PUT", "/templates/" + id, templateBody("CRUD renamed", "PRD", "DEV", null)), 200);
+        assertThat(findTemplate(id).has("packageId")).isFalse();
+        var updated = ok(request("PUT", "/templates/" + id, templateBody("CRUD renamed", "PRD", "DEV", "Pkg")), 200);
         assertThat(updated.get("name").asString()).isEqualTo("CRUD renamed");
         assertThat(updated.get("sourceTenantId").asString()).isEqualTo("PRD");
-        assertThat(updated.get("packageId").isNull()).isTrue();
+        assertThat(updated.has("packageId")).isFalse();
         assertThat(Instant.parse(updated.get("createdAt").asString())).isEqualTo(createdAt);
         assertThat(Instant.parse(updated.get("updatedAt").asString())).isAfter(updatedAt);
         var reread = findTemplate(id);
         assertThat(reread.get("name").asString()).isEqualTo("CRUD renamed");
         assertThat(reread.get("targetTenantId").asString()).isEqualTo("DEV");
+        assertThat(reread.has("packageId")).isFalse();
 
         var deleted = request("DELETE", "/templates/" + id, null);
         assertThat(deleted.statusCode()).isEqualTo(204);
         assertThat(findTemplate(id)).isNull();
         assertThat(server.getAllServeEvents()).isEmpty();
+    }
+
+    @Test @DisplayName("REQ-610: 보낸 패키지 필드는 형식과 관계없이 무시하고 저장 파일에도 남기지 않는다")
+    void req610_packageIgnored() throws Exception {
+        var values = List.<JsonNode>of(JSON.getNodeFactory().numberNode(123), JSON.createArrayNode().add("P1"),
+                JSON.getNodeFactory().stringNode(""), JSON.getNodeFactory().stringNode("Pkg"));
+        for (int i = 0; i < values.size(); i++) {
+            var value = values.get(i);
+            var body = templateBody("Ignore package " + i, "DEV", "PRD", null);
+            body.set("packageId", value);
+            var created = ok(request("POST", "/templates", body), 201);
+            assertThat(created.has("packageId")).as(value.toString()).isFalse();
+            var updated = ok(request("PUT", "/templates/" + created.get("id").asString(), body), 200);
+            assertThat(updated.has("packageId")).as(value.toString()).isFalse();
+        }
+        // 같은 이름 규칙은 그대로
+        error(request("POST", "/templates", templateBody("ignore package 3", "DEV", "PRD", "Pkg")), 409, "TEMPLATE_NAME_DUPLICATE");
+        assertThat(Files.readString(templatesFile(), StandardCharsets.UTF_8)).doesNotContain("packageId");
     }
 
     @Test @DisplayName("REQ-401: 검증 실패 400, 대소문자 무시 이름 중복 409, 없는 ID 404, 저장하지 않음")
@@ -237,8 +294,117 @@ class TemplateAuditDashboardApiTests {
             for (JsonNode t : list) if (t.get("id").asString().equals(id)) found = t;
             assertThat(found).isNotNull();
             assertThat(found.get("name").asString()).isEqualTo("Restart template v2");
-            assertThat(found.get("packageId").asString()).isEqualTo("Pkg");
+            assertThat(found.has("packageId")).isFalse();
         }
+    }
+
+    // ---- REQ-611 기존 템플릿 1회 삭제 ----
+
+    /** 이전 버전이 쓰던 저장 파일 형식: 항목마다 packageId 키(값이 null이어도 있음). */
+    static String legacyTemplates(String... namesAndPackages) {
+        var array = JSON.createArrayNode();
+        for (int i = 0; i < namesAndPackages.length; i += 2) {
+            var node = array.addObject().put("id", "legacy-" + i).put("name", namesAndPackages[i])
+                    .put("sourceTenantId", "DEV").put("targetTenantId", "PRD");
+            if (namesAndPackages[i + 1] == null) node.putNull("packageId"); else node.put("packageId", namesAndPackages[i + 1]);
+            node.put("createdAt", "2026-11-01T00:00:00Z").put("updatedAt", "2026-11-02T00:00:00Z");
+        }
+        return JSON.writeValueAsString(array);
+    }
+    static List<JsonNode> auditLines(Path file) throws Exception {
+        if (!Files.exists(file)) return List.of();
+        return Files.readAllLines(file, StandardCharsets.UTF_8).stream().filter(l -> !l.isBlank()).map(JSON::readTree).toList();
+    }
+    static List<JsonNode> upgradeDeletions(Path file) throws Exception {
+        return auditLines(file).stream().filter(l -> l.get("category").asString().equals("template")
+                && l.get("action").asString().equals("deleted")
+                && l.get("detail").asString().contains("업그레이드로 삭제")).toList();
+    }
+
+    @Test @DisplayName("REQ-611: 첫 기동에 이전 형식 템플릿이 있으면 모두 지우고 삭제마다 감사 이력(이름, 업그레이드로 삭제)을 남기며 이관 이력의 템플릿 이름은 그대로다")
+    void req611_upgradeDeletesLegacyTemplates() throws Exception {
+        Path dir = Files.createDirectories(directory.resolve("upgrade-legacy"));
+        Path templates = dir.resolve("templates.json"), audit = dir.resolve("audit.jsonl");
+        Files.writeString(templates, legacyTemplates("Legacy with package", "Pkg", "Legacy no package", null), StandardCharsets.UTF_8);
+        Path history = directory.resolve("restart-history.jsonl");
+        var linked = (ObjectNode) JSON.readTree(historyLine("upgrade-linked", "Pkg", true, "DEV", "DEV", "PRD", "PRD", CLOCK.instant(), 1, 0));
+        linked.putObject("template").put("id", "legacy-0").put("name", "Legacy with package");
+        Files.writeString(history, JSON.writeValueAsString(linked) + "\n", StandardCharsets.UTF_8);
+        try (var context = start(templates, audit)) {
+            int p = port(context);
+            assertThat(ok(request(p, "GET", "/templates", null), 200).size()).isZero();
+            var deletions = upgradeDeletions(audit);
+            assertThat(deletions).extracting(l -> l.get("objectName").asString())
+                    .containsExactlyInAnyOrder("Legacy with package", "Legacy no package");
+            assertThat(deletions).extracting(l -> l.get("objectId").asString()).containsExactlyInAnyOrder("legacy-0", "legacy-2");
+            var categoryView = ok(request(p, "GET", "/audit?category=template", null), 200);
+            assertThat(categoryView).anySatisfy(e -> assertThat(e.get("detail").asString()).contains("업그레이드로 삭제"));
+            JsonNode entry = null;
+            for (JsonNode h : ok(request(p, "GET", "/transport/history", null), 200))
+                if (h.get("transportId").asString().equals("upgrade-linked")) entry = h;
+            assertThat(entry).isNotNull();
+            assertThat(entry.get("template").get("name").asString()).isEqualTo("Legacy with package");
+        } finally {
+            Files.deleteIfExists(history);
+        }
+        assertThat(Files.readString(templates, StandardCharsets.UTF_8)).doesNotContain("packageId", "Legacy");
+    }
+
+    @Test @DisplayName("REQ-611: 한 번만 지운다. 업그레이드 뒤 새로 만든 템플릿은 재기동해도 남고 삭제 감사 이력이 늘지 않는다")
+    void req611_onlyOnce() throws Exception {
+        Path dir = Files.createDirectories(directory.resolve("upgrade-once"));
+        Path templates = dir.resolve("templates.json"), audit = dir.resolve("audit.jsonl");
+        Files.writeString(templates, legacyTemplates("Once legacy", null), StandardCharsets.UTF_8);
+        String id;
+        try (var context = start(templates, audit)) {
+            int p = port(context);
+            assertThat(ok(request(p, "GET", "/templates", null), 200).size()).isZero();
+            id = ok(request(p, "POST", "/templates", JSON.writeValueAsString(
+                    templateBody("After upgrade", "DEV", "PRD", "Pkg"))), 201).get("id").asString();
+        }
+        assertThat(upgradeDeletions(audit)).hasSize(1);
+        for (int restart = 0; restart < 2; restart++) {
+            try (var context = start(templates, audit)) {
+                var list = ok(request(port(context), "GET", "/templates", null), 200);
+                assertThat(list).singleElement().satisfies(t -> {
+                    assertThat(t.get("id").asString()).isEqualTo(id);
+                    assertThat(t.get("name").asString()).isEqualTo("After upgrade");
+                    assertThat(t.has("packageId")).isFalse();
+                });
+            }
+        }
+        assertThat(upgradeDeletions(audit)).hasSize(1);
+    }
+
+    @Test @DisplayName("REQ-611 실패: 저장 파일을 읽지 못하면 지우지 않고 앱은 기동하며 템플릿 API는 TEMPLATE_STORE_UNREADABLE이다")
+    void req611_unreadableStoreNotDeleted() throws Exception {
+        Path dir = Files.createDirectories(directory.resolve("upgrade-unreadable"));
+        Path templates = dir.resolve("templates.json"), audit = dir.resolve("audit.jsonl");
+        Files.writeString(templates, "[{\"id\":\"x\",\"packageId\":", StandardCharsets.UTF_8);
+        byte[] original = Files.readAllBytes(templates);
+        try (var context = start(templates, audit)) {
+            error(request(port(context), "GET", "/templates", null), 500, "TEMPLATE_STORE_UNREADABLE");
+        }
+        assertThat(Files.readAllBytes(templates)).isEqualTo(original);
+        assertThat(upgradeDeletions(audit)).isEmpty();
+    }
+
+    @Test @DisplayName("REQ-611 실패: 저장 파일을 쓰지 못하면 지우지 않고(파일 그대로, 삭제 감사 이력 없음) 앱은 기동한다")
+    void req611_unwritableStoreNotDeleted() throws Exception {
+        Path dir = Files.createDirectories(directory.resolve("upgrade-unwritable"));
+        Path templates = dir.resolve("templates.json"), audit = directory.resolve("upgrade-unwritable-audit.jsonl");
+        Files.writeString(templates, legacyTemplates("Unwritable legacy", "Pkg"), StandardCharsets.UTF_8);
+        byte[] original = Files.readAllBytes(templates);
+        assertThat(templates.toFile().setWritable(false)).isTrue();
+        dir.toFile().setWritable(false);
+        try (var context = start(templates, audit)) {
+            assertThat(request(port(context), "GET", "/tenants", null).statusCode()).isEqualTo(200);
+        } finally {
+            dir.toFile().setWritable(true);
+            templates.toFile().setWritable(true);
+        }
+        assertThat(Files.readAllBytes(templates)).isEqualTo(original);
+        assertThat(upgradeDeletions(audit)).isEmpty();
     }
 
     @Test @DisplayName("REQ-401·REQ-405: 형식이 깨진 저장 파일은 500 TEMPLATE_STORE_UNREADABLE이고 덮어쓰지 않는다")
@@ -548,7 +714,7 @@ class TemplateAuditDashboardApiTests {
         String a = tenant("Dash A"), b = tenant("Dash B"), c = tenant("Dash C"), z = tenant("Dash Z");
         String x1 = template("Dash X1", a, b, null);
         String x2 = template("Dash X2", b, c, null);
-        String x3 = template("Dash X3", b, c, "Only");
+        String x3 = template("Dash X3", b, c, null);
         String x4 = template("Dash X4", b, z, null);
         assertThat(request("DELETE", "/tenants/" + z, null).statusCode()).isEqualTo(204);
         var mine = Set.of(x1, x2, x3, x4);
@@ -594,8 +760,10 @@ class TemplateAuditDashboardApiTests {
             if (!mine.contains(q.get("nextTemplateId").asString())) continue;
             queue.put(q.get("packageId").asString() + "|" + q.get("nextTemplateId").asString(), q);
         }
+        // REQ-612: 템플릿에 패키지가 없으므로 같은 경로의 템플릿마다 같은 대기 항목이 생긴다(예전 이력 줄도 같은 결과).
         assertThat(queue.keySet()).containsExactlyInAnyOrder(
-                "P1|" + x2, "P5|" + x2, "P6|" + x2, "Only|" + x2, "Only|" + x3, "P8|" + x2);
+                "P1|" + x2, "P5|" + x2, "P6|" + x2, "Only|" + x2, "P8|" + x2,
+                "P1|" + x3, "P5|" + x3, "P6|" + x3, "Only|" + x3, "P8|" + x3);
         var p1 = queue.get("P1|" + x2);
         assertThat(p1.get("atTenantId").asString()).isEqualTo(b);
         assertThat(p1.get("nextTargetTenantId").asString()).isEqualTo(c);
@@ -611,13 +779,83 @@ class TemplateAuditDashboardApiTests {
             var ids = new ArrayList<String>(); e.get("templateIds").forEach(i -> ids.add(i.asString()));
             assertThat(ids).containsExactly(x3);
         });
-        assertThat(filtered.get("queue")).singleElement().satisfies(q -> {
-            assertThat(q.get("packageId").asString()).isEqualTo("Only");
-            assertThat(q.get("nextTemplateId").asString()).isEqualTo(x3);
-            assertThat(q.get("arrivedTransportId").asString()).isEqualTo("only-a");
-        });
+        var filteredQueue = new HashMap<String, JsonNode>();
+        filtered.get("queue").forEach(q -> filteredQueue.put(q.get("packageId").asString(), q));
+        assertThat(filteredQueue.keySet()).containsExactlyInAnyOrder("P1", "P5", "P6", "Only", "P8");
+        assertThat(filteredQueue.values()).allSatisfy(q -> assertThat(q.get("nextTemplateId").asString()).isEqualTo(x3));
+        assertThat(filteredQueue.get("Only").get("arrivedTransportId").asString()).isEqualTo("only-a");
 
         error(request("GET", "/dashboard?templateId=missing-template", null), 404, "TEMPLATE_NOT_FOUND");
+    }
+
+    @Test @DisplayName("REQ-612: 묶음 이관은 패키지별 결과로 대기 항목을 계산한다(실패 0개 패키지만 도착, 아티팩트 수는 그 패키지 것)")
+    void req612_bundleQueue() throws Exception {
+        String a = tenant("Bundle A"), b = tenant("Bundle B"), c = tenant("Bundle C");
+        template("Bundle AB", a, b, null);
+        String next = template("Bundle BC", b, c, null);
+        Instant t0 = CLOCK.instant().minus(Duration.ofDays(2));
+        var bundle = new LinkedHashMap<String, int[]>();
+        bundle.put("BOk", new int[]{2, 0});
+        bundle.put("BFail", new int[]{3, 1});
+        bundle.put("BCreateFailed", new int[]{1, 1});
+        var forwarded = new LinkedHashMap<String, int[]>();
+        forwarded.put("BForwarded", new int[]{1, 0});
+        var forwardedOut = new LinkedHashMap<String, int[]>();
+        forwardedOut.put("BForwarded", new int[]{1, 0});
+        forwardedOut.put("BOther", new int[]{1, 1});
+        var preview = new LinkedHashMap<String, int[]>();
+        preview.put("BPreview", new int[]{1, 0});
+        Files.write(historyFile(), List.of(
+                bundleLine("bundle-1", false, a, b, t0.plus(Duration.ofHours(1)), bundle),
+                bundleLine("bundle-2", false, a, b, t0.plus(Duration.ofHours(1)), forwarded),
+                // 다음 경로로 보낸 묶음에 실패한 다른 패키지가 있어도 BForwarded는 보낸 것으로 본다
+                bundleLine("bundle-3", false, b, c, t0.plus(Duration.ofHours(2)), forwardedOut),
+                bundleLine("bundle-4", true, a, b, t0.plus(Duration.ofHours(1)), preview),
+                historyLine("legacy-1", "LegacyOk", false, a, "Bundle A", b, "Bundle B", t0.plus(Duration.ofHours(1)), 2, 0),
+                historyLine("legacy-2", "LegacyFail", false, a, "Bundle A", b, "Bundle B", t0.plus(Duration.ofHours(1)), 2, 1)),
+                StandardCharsets.UTF_8);
+
+        var queue = new HashMap<String, JsonNode>();
+        for (JsonNode q : ok(request("GET", "/dashboard?templateId=" + next, null), 200).get("queue"))
+            queue.put(q.get("packageId").asString(), q);
+        assertThat(queue.keySet()).containsExactlyInAnyOrder("BOk", "LegacyOk");
+        var item = queue.get("BOk");
+        assertThat(item.get("atTenantId").asString()).isEqualTo(b);
+        assertThat(item.get("nextTargetTenantId").asString()).isEqualTo(c);
+        assertThat(item.get("arrivedTransportId").asString()).isEqualTo("bundle-1");
+        assertThat(item.get("artifactCount").asInt()).isEqualTo(2);
+        assertThat(queue.get("LegacyOk").get("artifactCount").asInt()).isEqualTo(2);
+    }
+
+    @Test @DisplayName("REQ-612: 아티팩트 결과 0개 패키지도 실패 0개면 도착(예전 total 0 줄 포함), 대상 패키지가 없음·생성 실패·확인 실패면 도착 아님")
+    void req612_emptyPackageQueue() throws Exception {
+        String a = tenant("Empty A"), b = tenant("Empty B"), c = tenant("Empty C");
+        template("Empty AB", a, b, null);
+        String next = template("Empty BC", b, c, null);
+        Instant t0 = CLOCK.instant().minus(Duration.ofDays(2));
+        var bundle = new LinkedHashMap<String, int[]>();
+        bundle.put("EExisting", new int[]{0, 0});
+        bundle.put("ECreated", new int[]{0, 0});
+        bundle.put("ENotFound", new int[]{0, 0});
+        bundle.put("ECreateFailed", new int[]{0, 0});
+        bundle.put("ECheckFailed", new int[]{0, 0});
+        bundle.put("EWithArtifacts", new int[]{1, 0});
+        Files.write(historyFile(), List.of(
+                bundleLine("empty-1", false, a, b, t0.plus(Duration.ofHours(1)), bundle, Map.of(
+                        "ECreated", "CREATED", "ENotFound", "NOT_FOUND",
+                        "ECreateFailed", "CREATE_FAILED", "ECheckFailed", "CHECK_FAILED")),
+                historyLine("legacy-empty", "LegacyEmpty", false, a, "Empty A", b, "Empty B", t0.plus(Duration.ofHours(1)), 0, 0)),
+                StandardCharsets.UTF_8);
+
+        var queue = new HashMap<String, JsonNode>();
+        for (JsonNode q : ok(request("GET", "/dashboard?templateId=" + next, null), 200).get("queue"))
+            queue.put(q.get("packageId").asString(), q);
+        assertThat(queue.keySet()).containsExactlyInAnyOrder("EExisting", "ECreated", "EWithArtifacts", "LegacyEmpty");
+        assertThat(queue.get("EExisting").get("artifactCount").asInt()).isEqualTo(0);
+        assertThat(queue.get("ECreated").get("arrivedTransportId").asString()).isEqualTo("empty-1");
+        assertThat(queue.get("LegacyEmpty").get("artifactCount").asInt()).isEqualTo(0);
+        assertThat(queue.get("LegacyEmpty").get("arrivedTransportId").asString()).isEqualTo("legacy-empty");
+        assertThat(queue.get("EWithArtifacts").get("artifactCount").asInt()).isEqualTo(1);
     }
 
     @Test @DisplayName("REQ-405: today는 서버 시간대 기준 오늘의 미리보기·실제 이관 수와 성공·실패 수, 이력이 없으면 0")

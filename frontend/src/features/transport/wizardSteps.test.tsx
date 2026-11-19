@@ -1,8 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '../../test/userEvent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { TenantsResponse, TenantStatusResponse, TransportRequest, TransportResponse } from '../../api/types';
-import { ARTIFACTS, PACKAGES, json, mockApi } from '../../test/mockFetch';
+import type { TenantsResponse, TenantStatusResponse, TransportRequest } from '../../api/types';
+import { ARTIFACTS, PACKAGES, json, mockApi, respondTo } from '../../test/mockFetch';
 import { baseRoutes, renderAt, routeGroup, tpl, type TemplateFixture } from '../../test/appRoutes';
 import {
   STEP_LABELS, currentStep, findArtifactGrid, postBodies, routeBar, startManual, stepButton, stepButtons, toArtifacts,
@@ -20,13 +20,10 @@ const TENANTS: TenantsResponse = {
   ],
 };
 const STATUS: TenantStatusResponse = { readOnly: false, tenants: TENANTS.tenants.map((t) => ({ ...t, check: 'OK' as const })) };
-const result = (body: TransportRequest): TransportResponse => ({
-  transportId: body.dryRun ? 't-dry' : 't-real', packageId: body.packageId, dryRun: Boolean(body.dryRun), deploy: Boolean(body.deploy),
-  startedAt: '2026-11-16T01:00:00Z', finishedAt: '2026-11-16T01:00:01Z', summary: { total: 0, succeeded: 0, failed: 0 }, results: [],
-});
-const T_PKG = tpl({ id: 'tp-1', name: '개발에서 운영', sourceTenantId: 'DEV', targetTenantId: 'PRD', packageId: 'PkgTransportDemo' });
-const T_QAS = tpl({ id: 'tp-2', name: '품질에서 운영', sourceTenantId: 'QAS', targetTenantId: 'PRD', packageId: null });
-const T_GONE = tpl({ id: 'tp-3', name: '없는 패키지', sourceTenantId: 'DEV', targetTenantId: 'PRD', packageId: 'PkgRemoved' });
+const result = (body: TransportRequest) => respondTo(body, { summary: { total: 0, succeeded: 0, failed: 0 }, results: [] });
+// 20261118 S2 REQ-610: 템플릿은 경로만 담는다(패키지 없음).
+const T_PKG = tpl({ id: 'tp-1', name: '개발에서 운영', sourceTenantId: 'DEV', targetTenantId: 'PRD' });
+const T_QAS = tpl({ id: 'tp-2', name: '품질에서 운영', sourceTenantId: 'QAS', targetTenantId: 'PRD' });
 const T_BROKEN = tpl({ id: 'tp-4', name: '삭제된 원본', sourceTenantId: 'OLD', targetTenantId: 'PRD', usable: false, unusableReason: 'SOURCE_TENANT_MISSING' });
 
 function setup(opts: { templates?: TemplateFixture[]; tenants?: TenantsResponse; extra?: Parameters<typeof mockApi>[0] } = {}) {
@@ -73,12 +70,12 @@ describe('REQ-420 단계 줄과 첫 단계', () => {
     expect(screen.getByRole('main').textContent).not.toMatch(/DEV\s*→\s*PRD/);
   });
 
-  it('REQ-420: 첫 단계는 사용 가능한 템플릿(이름·경로·패키지)과 "템플릿 없이 진행"이고 사용 불가 템플릿은 이유와 함께 비활성이다', async () => {
+  it('REQ-420·REQ-610: 첫 단계는 사용 가능한 템플릿(이름·경로, 패키지 표시 없음)과 "템플릿 없이 진행"이고 사용 불가 템플릿은 이유와 함께 비활성이다', async () => {
     setup({ templates: [T_PKG, T_QAS, T_BROKEN] });
     const card = await findTemplateCard('개발에서 운영');
     expect(card).toHaveTextContent('개발 → 운영');
-    expect(card).toHaveTextContent('PkgTransportDemo');
-    expect(templateCard('품질에서 운영')).toHaveTextContent('실행 때 선택');
+    expect(templateCard('품질에서 운영')).toHaveTextContent('품질 → 운영');
+    expect(screen.queryByText('실행 때 선택')).toBeNull();
     expect(within(card).getByRole('button', { name: '이 템플릿으로 시작' })).toBeEnabled();
     const broken = templateCard('삭제된 원본');
     expect(within(broken).getByRole('button', { name: '이 템플릿으로 시작' })).toBeDisabled();
@@ -114,6 +111,7 @@ describe('REQ-420 단계 줄과 첫 단계', () => {
     await userEvent.click(within(await findTemplateCard('개발에서 운영')).getByRole('button', { name: '이 템플릿으로 시작' }));
     expect(currentStep()).toBe('패키지');
     expect(stepButton('템플릿')).toHaveTextContent('개발에서 운영');
+    await userEvent.click(await screen.findByRole('checkbox', { name: /Transport Demo/ }));
     await userEvent.click(await screen.findByRole('button', { name: '다음' }));
     await findArtifactGrid();
     expect(currentStep()).toBe('아티팩트');
@@ -125,7 +123,7 @@ describe('REQ-420 단계 줄과 첫 단계', () => {
     expect(stepButton('아티팩트')).toHaveTextContent('전체');
     await userEvent.click(stepButton('패키지'));
     expect(currentStep()).toBe('패키지');
-    expect(await screen.findByRole('radio', { name: /Transport Demo/ })).toBeChecked();
+    expect(await screen.findByRole('checkbox', { name: /Transport Demo/ })).toBeChecked();
   });
 });
 
@@ -163,6 +161,7 @@ describe('REQ-420 경로 선택', () => {
   it('REQ-420: 경로를 바꿔 적용하면 상단 경로가 바뀌고 패키지·아티팩트 선택과 이전 결과가 비워지며 템플릿 연결이 풀린다(templateId를 보내지 않음)', async () => {
     const fn = setup({ templates: [T_PKG] });
     await userEvent.click(within(await findTemplateCard('개발에서 운영')).getByRole('button', { name: '이 템플릿으로 시작' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: /Transport Demo/ }));
     await userEvent.click(await screen.findByRole('button', { name: '전체 아티팩트로 미리보기' }));
     await screen.findByRole('region', { name: '이관 결과' });
     expect(postBodies(fn)[0]).toMatchObject({ templateId: 'tp-1' });
@@ -178,7 +177,7 @@ describe('REQ-420 경로 선택', () => {
     expect(stepButton('미리보기')).toBeDisabled();
     expect(currentStep()).toBe('패키지');
     expect(stepButton('템플릿')).not.toHaveTextContent('개발에서 운영');
-    const radio = await screen.findByRole('radio', { name: /Transport Demo/ });
+    const radio = await screen.findByRole('checkbox', { name: /Transport Demo/ });
     expect(radio).not.toBeChecked();
     expect(calls(fn, '/packages?tenantId=QAS')).toBeGreaterThanOrEqual(1);
     await userEvent.click(radio);
@@ -214,16 +213,18 @@ describe('REQ-420 경로 선택', () => {
 });
 
 describe('REQ-420 템플릿으로 시작', () => {
-  it('REQ-420·421: 패키지가 있는 템플릿으로 시작하면 템플릿 경로가 적용되고 패키지 단계에서 그 패키지가 선택된 채 보이며 미리보기에 templateId를 보낸다', async () => {
+  it('REQ-420·421·610: 템플릿으로 시작하면 템플릿 경로가 적용되고 패키지는 비어 있으며, 패키지를 고르면 미리보기에 templateId를 보낸다', async () => {
     const fn = setup({ templates: [T_QAS, T_PKG] });
     await userEvent.click(within(await findTemplateCard('개발에서 운영')).getByRole('button', { name: '이 템플릿으로 시작' }));
     expect(currentStep()).toBe('패키지');
-    expect(await screen.findByRole('radio', { name: /Transport Demo/ })).toBeChecked();
+    const radios = await screen.findAllByRole('checkbox');
+    expect(radios.every((r) => !(r as HTMLInputElement).checked)).toBe(true);
     expect(routeBar()).toHaveTextContent('개발 → 운영');
+    await userEvent.click(screen.getByRole('checkbox', { name: /Transport Demo/ }));
     await userEvent.click(screen.getByRole('button', { name: '전체 아티팩트로 미리보기' }));
     await screen.findByRole('region', { name: '이관 결과' });
     expect(postBodies(fn)).toEqual([
-      { packageId: 'PkgTransportDemo', dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
+      { packages: [{ packageId: 'PkgTransportDemo' }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
     ]);
   });
 
@@ -232,40 +233,30 @@ describe('REQ-420 템플릿으로 시작', () => {
     await userEvent.click(within(await findTemplateCard('품질에서 운영')).getByRole('button', { name: '이 템플릿으로 시작' }));
     expect(currentStep()).toBe('패키지');
     await waitFor(() => expect(routeBar()).toHaveTextContent('품질 → 운영'));
-    const radios = await screen.findAllByRole('radio');
+    const radios = await screen.findAllByRole('checkbox');
     expect(radios.every((r) => !(r as HTMLInputElement).checked)).toBe(true);
     expect(screen.getByRole('button', { name: '다음' })).toBeDisabled();
   });
 
-  it('REQ-421 실패: 템플릿의 패키지가 원본에 없으면 그 사실을 알리고 선택을 비운다', async () => {
-    setup({ templates: [T_GONE] });
-    await userEvent.click(within(await findTemplateCard('없는 패키지')).getByRole('button', { name: '이 템플릿으로 시작' }));
-    const notice = await screen.findByText(/원본에서 찾을 수 없습니다/);
-    expect(notice).toHaveTextContent('PkgRemoved');
-    expect(screen.getAllByRole('radio').every((r) => !(r as HTMLInputElement).checked)).toBe(true);
-    expect(screen.getByRole('button', { name: '다음' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '전체 아티팩트로 미리보기' })).toBeDisabled();
-  });
-
-  it('REQ-403·420: 템플릿으로 시작한 뒤 다른 패키지를 골라도 경로를 바꾸지 않았으면 templateId를 보낸다', async () => {
+  it('REQ-403·420: 템플릿으로 시작한 뒤 어떤 패키지를 골라도 경로를 바꾸지 않았으면 templateId를 보낸다', async () => {
     const fn = setup({ templates: [T_PKG] });
     await userEvent.click(within(await findTemplateCard('개발에서 운영')).getByRole('button', { name: '이 템플릿으로 시작' }));
-    await userEvent.click(await screen.findByRole('radio', { name: /Fault Demo/ }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: /Fault Demo/ }));
     await userEvent.click(screen.getByRole('button', { name: '전체 아티팩트로 미리보기' }));
     await screen.findByRole('region', { name: '이관 결과' });
-    expect(postBodies(fn)[0]).toMatchObject({ packageId: 'PkgFaultDemo', templateId: 'tp-1' });
+    expect(postBodies(fn)[0]).toMatchObject({ packages: [{ packageId: 'PkgFaultDemo' }], templateId: 'tp-1' });
   });
 });
 
 describe('REQ-421 패키지 단계', () => {
-  it('REQ-421: 원본의 목록(이름·ID·버전)을 라디오로 보이고 "n / m개"가 보이며 조회는 1회다', async () => {
+  it('REQ-421·620: 원본의 목록(이름·ID·버전)을 체크 목록으로 보이고 "n / m개"가 보이며 조회는 1회다', async () => {
     const fn = setup();
     await startManual();
     const list = await screen.findByRole('list', { name: '패키지 목록' });
-    const radio = within(list).getByRole('radio', { name: /Transport Demo/ });
+    const radio = within(list).getByRole('checkbox', { name: /Transport Demo/ });
     expect(radio).toHaveAccessibleName(expect.stringContaining('PkgTransportDemo'));
     expect(radio).toHaveAccessibleName(expect.stringContaining('1.0.0'));
-    expect(within(list).getAllByRole('radio')).toHaveLength(PACKAGES.length);
+    expect(within(list).getAllByRole('checkbox')).toHaveLength(PACKAGES.length);
     expect(screen.getByText(`${PACKAGES.length} / ${PACKAGES.length}개`)).toBeInTheDocument();
     expect(calls(fn, '/packages?tenantId=DEV')).toBe(1);
   });
@@ -275,14 +266,14 @@ describe('REQ-421 패키지 단계', () => {
     await startManual();
     const search = await screen.findByLabelText('패키지 검색');
     await userEvent.type(search, 'fault');
-    expect(screen.getAllByRole('radio')).toHaveLength(1);
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
     expect(screen.getByText(`1 / ${PACKAGES.length}개`)).toBeInTheDocument();
     await userEvent.clear(search);
     await userEvent.type(search, 'pkgnotin');
-    expect(screen.getByRole('radio', { name: /Not In PRD/ })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Not In PRD/ })).toBeInTheDocument();
     await userEvent.clear(search);
     await userEvent.type(search, '([[');
-    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
     expect(calls(fn, '/packages?tenantId=DEV')).toBe(1);
   });
 
@@ -294,7 +285,7 @@ describe('REQ-421 패키지 단계', () => {
     expect(screen.getByText('검색 결과가 없습니다')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '검색어 지우기' }));
     expect(search).toHaveValue('');
-    expect(screen.getAllByRole('radio')).toHaveLength(PACKAGES.length);
+    expect(screen.getAllByRole('checkbox')).toHaveLength(PACKAGES.length);
   });
 
   it('REQ-421 실패: 조회 중에는 스켈레톤(role=status "불러오는 중"), 빈 목록은 "패키지가 없습니다"다', async () => {
@@ -315,23 +306,23 @@ describe('REQ-421 패키지 단계', () => {
     expect(alert).toHaveTextContent('CPI에 연결할 수 없습니다');
     fail = false;
     await userEvent.click(within(alert).getByRole('button', { name: '다시 시도' }));
-    expect(await screen.findByRole('radio', { name: /Transport Demo/ })).toBeInTheDocument();
+    expect(await screen.findByRole('checkbox', { name: /Transport Demo/ })).toBeInTheDocument();
     expect(calls(fn, '/packages?tenantId=DEV')).toBe(2);
   });
 
   it('REQ-421: 패키지를 고르기 전에는 "다음"과 "전체 아티팩트로 미리보기"가 비활성이고, 고르면 다음 단계로 가거나 바로 미리보기를 실행할 수 있다', async () => {
     const fn = setup();
     await startManual();
-    await screen.findByRole('radio', { name: /Transport Demo/ });
+    await screen.findByRole('checkbox', { name: /Transport Demo/ });
     expect(screen.getByRole('button', { name: '다음' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '전체 아티팩트로 미리보기' })).toBeDisabled();
-    await userEvent.click(screen.getByRole('radio', { name: /Transport Demo/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /Transport Demo/ }));
     expect(screen.getByRole('button', { name: '다음' })).toBeEnabled();
     await userEvent.click(screen.getByRole('button', { name: '전체 아티팩트로 미리보기' }));
     expect(await screen.findByRole('region', { name: '이관 결과' })).toBeInTheDocument();
     expect(currentStep()).toBe('미리보기');
-    // 전체 아티팩트: artifactIds 키 없이 보낸다
-    expect(postBodies(fn)).toEqual([{ packageId: 'PkgTransportDemo', dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' }]);
+    // 전체 아티팩트: 패키지 항목에 artifactIds 키 없이 보낸다
+    expect(postBodies(fn)).toEqual([{ packages: [{ packageId: 'PkgTransportDemo' }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' }]);
   });
 
   it('REQ-421: "다음"은 아티팩트 단계로 가서 고른 패키지의 아티팩트를 1회 조회한다', async () => {
@@ -341,15 +332,15 @@ describe('REQ-421 패키지 단계', () => {
     expect(calls(fn, '/packages/PkgTransportDemo/artifacts?tenantId=DEV')).toBe(1);
   });
 
-  it('REQ-420·421: 결과 뒤에 다른 패키지를 고르면 이전 결과가 비워지고 미리보기·실제 이관 단계로 갈 수 없다', async () => {
+  it('REQ-420·421·620: 결과 뒤에 패키지를 더 고르면 이전 결과가 비워지고 미리보기·실제 이관 단계로 갈 수 없다', async () => {
     setup();
     await startManual();
-    await userEvent.click(await screen.findByRole('radio', { name: /Transport Demo/ }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: /Transport Demo/ }));
     await userEvent.click(screen.getByRole('button', { name: '전체 아티팩트로 미리보기' }));
     await screen.findByRole('region', { name: '이관 결과' });
     expect(stepButton('실제 이관')).toBeEnabled();
     await userEvent.click(stepButton('패키지'));
-    await userEvent.click(await screen.findByRole('radio', { name: /Fault Demo/ }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: /Fault Demo/ }));
     expect(stepButton('미리보기')).toBeDisabled();
     expect(stepButton('실제 이관')).toBeDisabled();
     expect(screen.queryByRole('region', { name: '이관 결과' })).toBeNull();
