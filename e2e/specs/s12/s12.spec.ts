@@ -128,25 +128,31 @@ test('REQ-412: 테넌트 삭제 확인창의 "템플릿 n개도 함께 삭제"�
   expect(left?.usable).toBe(false);
 });
 
-test('REQ-413: 템플릿 화면에서 만든 템플릿이 새로고침 뒤에도 남고 "이 템플릿으로 이관"이 경로를 채운다', async ({ page, request }) => {
+test('REQ-413·REQ-610: 템플릿 화면에서 만든 템플릿(경로만)이 새로고침 뒤에도 남고 "이 템플릿으로 이관"이 경로만 채운다', async ({ page, request }) => {
   await page.goto('/#/templates');
   await page.getByRole('button', { name: '템플릿 만들기', exact: true }).click();
   const drawer = page.getByRole('dialog', { name: '템플릿 만들기' });
   await drawer.getByRole('textbox', { name: '이름' }).fill('S12 개발에서 운영');
   await drawer.getByRole('combobox', { name: '원본' }).selectOption('DEV');
   await drawer.getByRole('combobox', { name: '대상' }).selectOption('PRD');
+  await expect(drawer.getByRole('combobox', { name: '패키지' })).toHaveCount(0);
   await drawer.getByRole('button', { name: '저장', exact: true }).click();
   await expect(drawer).toBeHidden();
   const saved = (await templates(request)).find((t) => t.name === 'S12 개발에서 운영');
   expect(saved).toBeTruthy();
+  expect(saved).not.toHaveProperty('packageId');
   createdTemplates.push(saved.id);
   await page.reload();
   const row = page.getByRole('row', { name: /S12 개발에서 운영/ });
   await expect(row).toContainText('DEV → PRD');
-  await expect(row).toContainText('실행 때 선택');
+  await expect(row).not.toContainText('실행 때 선택');
+  await expect(page.getByRole('columnheader', { name: '패키지' })).toHaveCount(0);
   await row.getByRole('button', { name: '이 템플릿으로 이관', exact: true }).click();
   await expect(page).toHaveURL(/#\/transport$/);
   await expect(page.getByRole('banner').getByRole('group', { name: '경로' })).toContainText('DEV');
+  const pkgList = page.getByRole('list', { name: '패키지 목록' });
+  await expect(pkgList.getByRole('checkbox').first()).toBeVisible();
+  await expect(pkgList.getByRole('checkbox', { checked: true })).toHaveCount(0);
 });
 
 test('REQ-414: 테넌트 변경이 감사 이력에 남고 분류 필터로 좁힌다', async ({ page, request }) => {
@@ -162,7 +168,7 @@ test('REQ-414: 테넌트 변경이 감사 이력에 남고 분류 필터로 좁�
 
 test('REQ-430: 대시보드 대기 항목의 "전달"이 그 템플릿·패키지로 채운 마법사 아티팩트 단계를 열고, 자동 실행은 없다', async ({ page, request }) => {
   // 운영(PRD)에서 개발(DEV)로 가는 템플릿 + DEV → PRD 실제 이관 성공 1건 = (PkgTransportDemo, PRD, 이 템플릿) 대기 항목
-  const t = await app(request, 'POST', '/templates', { name: 'S12 대기 운영에서 개발', sourceTenantId: 'PRD', targetTenantId: 'DEV', packageId: null });
+  const t = await app(request, 'POST', '/templates', { name: 'S12 대기 운영에서 개발', sourceTenantId: 'PRD', targetTenantId: 'DEV' });
   expect(t.status, 'POST /templates').toBe(201);
   createdTemplates.push(t.json.id);
   const real = await app(request, 'POST', '/transport', { packageId: 'PkgTransportDemo', artifactIds: ['IF_Order_Sync'], dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
@@ -187,14 +193,17 @@ test('REQ-430: 대시보드 대기 항목의 "전달"이 그 템플릿·패키�
 
 test('REQ-403·REQ-425: 템플릿으로 시작한 화면 실제 이관은 templateId를 보내고, 이력 목록·API에 그 템플릿이 남는다', async ({ page, request }) => {
   const NAME = 'S12 템플릿 실제 이관';
-  const t = await app(request, 'POST', '/templates', { name: NAME, sourceTenantId: 'DEV', targetTenantId: 'PRD', packageId: 'PkgTransportDemo' });
+  const t = await app(request, 'POST', '/templates', { name: NAME, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
   expect(t.status, 'POST /templates').toBe(201);
   createdTemplates.push(t.json.id);
   const w = watch(page);
   await page.goto('/#/transport');
   const card = page.getByRole('listitem', { name: NAME });
   await card.getByRole('button', { name: '이 템플릿으로 시작', exact: true }).click();
-  await expect(page.getByRole('list', { name: '패키지 목록' }).getByRole('radio', { name: /PkgTransportDemo/ })).toBeChecked();
+  // REQ-610: 템플릿은 경로만 채우고 패키지는 비어 있다
+  const demo = page.getByRole('list', { name: '패키지 목록' }).getByRole('checkbox', { name: /PkgTransportDemo/ });
+  await expect(demo).not.toBeChecked();
+  await demo.check();
   await page.getByRole('button', { name: '다음', exact: true }).click();
   const grid = page.getByRole('grid', { name: '이관할 아티팩트' });
   await grid.getByRole('row').filter({ has: page.getByText('IF_Order_Sync', { exact: true }) }).click();

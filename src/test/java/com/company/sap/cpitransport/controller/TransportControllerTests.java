@@ -197,13 +197,15 @@ class TransportControllerTests {
         mvc = mvc(service);
         String response = request("{\"packageId\":\"Pkg\"}").andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         var root = json.readTree(response);
-        assertThat(root.propertyNames()).containsExactlyInAnyOrder("transportId", "packageId", "dryRun", "deploy", "startedAt", "finishedAt", "summary", "results");
+        assertThat(root.propertyNames()).containsExactlyInAnyOrder("transportId", "packages", "dryRun", "deploy", "startedAt", "finishedAt", "summary", "results");
+        // REQ-602: the legacy-shaped constructor keeps one package entry and stamps packageId on each result.
+        assertThat(root.at("/packages/0/packageId").asString()).isEqualTo("Pkg");
         assertThat(root.get("summary").propertyNames()).containsExactlyInAnyOrder("total", "succeeded", "failed");
         assertThat(root.at("/summary/total").asInt()).isEqualTo(2);
         assertThat(root.at("/summary/succeeded").asInt()).isEqualTo(1);
         assertThat(root.at("/summary/failed").asInt()).isEqualTo(1);
         var result = root.at("/results/0");
-        assertThat(result.propertyNames()).containsExactlyInAnyOrder("artifactId", "status", "action", "configurations", "deployStatus", "error");
+        assertThat(result.propertyNames()).containsExactlyInAnyOrder("packageId", "artifactId", "status", "action", "configurations", "deployStatus", "error");
         assertThat(result.get("status").asString()).isEqualTo("SUCCESS");
         assertThat(result.get("error").isNull()).isTrue();
         assertThat(root.at("/results/1/status").asString()).isEqualTo("FAILED");

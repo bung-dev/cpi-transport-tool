@@ -1,3 +1,6 @@
+import { getTargetPackageStatus } from '../../api/client';
+import type { TransportPackage } from '../../api/types';
+import { useRemote } from '../../lib/useRemote';
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '../../components/ui/Button';
@@ -6,8 +9,9 @@ import { Switch } from '../../components/ui/Switch';
 
 interface Props {
   targetName?: string;
-  packageId: string;
-  /** 선택한 아티팩트 수. 0이면 패키지 전체 */
+  packages: TransportPackage[];
+  targetTenantId: string;
+  /** 미리보기 결과의 전체 아티팩트 수 */
   artifactCount: number;
   deploy: boolean;
   /** 주면 확인창 안에 배포 스위치를 둔다(마법사). 없으면 배포 값을 요약으로만 보인다. */
@@ -15,15 +19,21 @@ interface Props {
   /** "<원본 이름> → <대상 이름>" */
   routeText?: string;
   busy: boolean;
-  onConfirm: () => void;
+  onConfirm: (createPackages: string[]) => void;
   onCancel: () => void;
   /** 연 버튼이 화면에서 없어졌을 때 포커스를 보낼 요소(실행 카드의 실행 버튼) */
   fallbackFocusRef?: RefObject<HTMLElement | null>;
 }
 
 // REQ-005 AC-3, REQ-009 AC-1: 실제 이관 확인 대화상자(role=dialog, aria-modal).
-export function ConfirmDialog({ packageId, artifactCount, deploy, onDeployChange, routeText, busy, onConfirm, onCancel, fallbackFocusRef, targetName = 'PRD' }: Props) {
+export function ConfirmDialog({ packages, targetTenantId, artifactCount, deploy, onDeployChange, routeText, busy, onConfirm, onCancel, fallbackFocusRef, targetName = 'PRD' }: Props) {
   const titleId = useId();
+  const ids = packages.map(p => p.packageId);
+  const { state, retry } = useRemote(() => getTargetPackageStatus(targetTenantId, ids), JSON.stringify([targetTenantId, ids]));
+  const checked = state.status === 'ok' && ids.every(id => state.data.some(p => p.packageId === id));
+  const createPackages = checked && state.status === 'ok'
+    ? ids.filter(id => state.data.some(p => p.packageId === id && !p.exists)) : [];
+  const failed = state.status === 'error' || state.status === 'ok' && !checked;
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
@@ -74,7 +84,7 @@ export function ConfirmDialog({ packageId, artifactCount, deploy, onDeployChange
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full max-w-[440px] min-w-0 animate-dialog-pop rounded-xl bg-canvas p-6 shadow-overlay"
+        className="max-h-[90dvh] overflow-y-auto w-full max-w-[440px] min-w-0 animate-dialog-pop rounded-xl bg-canvas p-6 shadow-overlay"
       >
         <h2 id={titleId} className="mb-3 text-lg font-semibold">
           실제 이관 확인
@@ -82,12 +92,22 @@ export function ConfirmDialog({ packageId, artifactCount, deploy, onDeployChange
         <Callout tone="warning">{`${targetName}에 업로드합니다. 되돌릴 수 없습니다`}</Callout>
         <dl className="mt-3.5 grid gap-2">
           {routeText !== undefined && <SummaryRow label="경로">{routeText}</SummaryRow>}
-          <SummaryRow label="대상 패키지" valueClass="font-mono text-[13px]">
-            {packageId}
-          </SummaryRow>
-          <SummaryRow label="아티팩트 수">{artifactCount === 0 ? '전체' : artifactCount}</SummaryRow>
+          <SummaryRow label="아티팩트 수">{artifactCount}</SummaryRow>
           {!onDeployChange && <SummaryRow label="배포">{deploy ? '예' : '아니오'}</SummaryRow>}
         </dl>
+        <ul aria-label="대상 패키지" className="mt-3.5 grid min-w-0 gap-2">
+          {packages.map((p, i) => <li key={p.packageId} aria-labelledby={`${titleId}-package-${i}`} className="min-w-0 break-all">
+            <p id={`${titleId}-package-${i}`} className="font-medium break-all">
+              {p.packageName && <span>{p.packageName} </span>}<span className="font-mono break-all">{p.packageId}</span>
+            </p>
+            {checked && <p className="text-sm">{createPackages.includes(p.packageId) ? '대상에 없음 → 새로 만듦' : '있음'}</p>}
+          </li>)}
+        </ul>
+        {createPackages.length > 0 && <p className="mt-3 text-sm">{`패키지 ${createPackages.length}개를 대상에 새로 만듭니다. 이관이 실패해도 만든 패키지는 남습니다`}</p>}
+        {failed && <div role="alert" className="mt-3">
+          <p>대상 패키지를 확인하지 못했습니다</p>
+          <Button onClick={retry}>다시 시도</Button>
+        </div>}
         {onDeployChange && (
           <Switch className="mt-3.5" label="배포" description={`이관 후 ${targetName}에 배포합니다`} checked={deploy} disabled={busy}
             onChange={(e) => onDeployChange(e.target.checked)} />
@@ -97,7 +117,7 @@ export function ConfirmDialog({ packageId, artifactCount, deploy, onDeployChange
           <Button ref={cancelRef} className="w-full sm:w-auto" onClick={onCancel} disabled={busy}>
             취소
           </Button>
-          <Button variant="primary" className="w-full sm:w-auto" onClick={onConfirm} disabled={busy}>
+          <Button variant="primary" className="w-full sm:w-auto" onClick={() => { if (checked) onConfirm(createPackages); }} disabled={busy || !checked}>
             실행
           </Button>
         </div>

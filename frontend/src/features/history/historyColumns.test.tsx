@@ -26,7 +26,7 @@ function failed(artifactId: string): ArtifactResult {
 function widest(over: Partial<TransportResponse> = {}): TransportResponse {
   return {
     transportId: TRANSPORT_ID,
-    packageId: PACKAGE_ID,
+    packages: [{ packageId: PACKAGE_ID, packageName: null, targetPackage: 'EXISTING' }],
     sourceTenant: { id: 'src-1', name: SOURCE_NAME },
     targetTenant: { id: 'tgt-1', name: TARGET_NAME },
     dryRun: false,

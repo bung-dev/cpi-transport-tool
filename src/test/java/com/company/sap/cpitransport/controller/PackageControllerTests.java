@@ -172,4 +172,21 @@ class PackageControllerTests {
         assertThat(response.getStatusCode().value()).isEqualTo(404);
         assertThat(response.getBody()).isEqualTo(new ErrorResponse("PACKAGE_NOT_FOUND", "Package not found"));
     }
+    @Test
+    @DisplayName("REQ-605: packages whose Mode is present and not EDIT_ALLOWED are hidden from the list but stay reachable by ID")
+    void req605_sapProvidedHidden() throws Exception {
+        server.stubFor(com.github.tomakehurst.wiremock.client.WireMock.get(urlEqualTo(PACKAGES)).willReturn(okJson(
+                "{\"d\":{\"results\":["
+                        + "{\"Id\":\"NoMode\",\"Name\":\"No mode\",\"Version\":\"1\"},"
+                        + "{\"Id\":\"Editable\",\"Name\":\"Editable\",\"Version\":\"1\",\"Mode\":\"EDIT_ALLOWED\"},"
+                        + "{\"Id\":\"ReadOnly\",\"Name\":\"SAP read only\",\"Version\":\"1\",\"Mode\":\"READ_ONLY\"},"
+                        + "{\"Id\":\"ConfigureOnly\",\"Name\":\"SAP configure only\",\"Version\":\"1\",\"Mode\":\"CONFIGURE_ONLY\"}]}}")));
+        mvc.perform(get("/packages")).andExpect(status().isOk()).andExpect(content().json(
+                "[{\"id\":\"NoMode\",\"name\":\"No mode\",\"version\":\"1\"},"
+                        + "{\"id\":\"Editable\",\"name\":\"Editable\",\"version\":\"1\"}]")).andExpect(jsonPath("$.length()").value(2));
+        stubPackage("ReadOnly");
+        stubList(artifactsPath("ReadOnly"));
+        mvc.perform(get("/packages/{id}/artifacts", "ReadOnly")).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("Item"));
+    }
 }

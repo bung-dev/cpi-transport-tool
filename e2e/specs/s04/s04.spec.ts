@@ -48,7 +48,7 @@ test('QA-177: 400 빈 본문 - 아티팩트 FAILED 와 안내 (API 와 화면)',
   await openTransport(page);
   // S3b(REQ-423): 화면의 실제 이관은 미리보기 뒤 "이 구성으로 실제 이관" → 확인창. 미리보기는 대상에 요청하지 않아 PUT 수는 그대로다.
   const { real: ui } = await realFlow(page, { artifacts: ['IF_Order_Sync'] });
-  rec.selectedArtifacts = ui.postData?.artifactIds;
+  rec.selectedArtifacts = ui.postData?.packages?.[0]?.artifactIds;
   expect(rec.selectedArtifacts, '고른 아티팩트 IF_Order_Sync 하나').toEqual(['IF_Order_Sync']);
   rec.ui = { http: ui.status, request: ui.postData, results: brief({ status: ui.status, json: ui.body }).results };
   expect(ui.status).toBe(200);

@@ -1,3 +1,5 @@
+import { packageSummary } from '../../lib/packageSummary';
+import { StatusBadge } from '../../components/ui/StatusBadge';
 import { useId, useRef, useState, type ReactNode } from 'react';
 import type { ArtifactResult, TransportResponse } from '../../api/types';
 import { Badge } from '../../components/ui/Badge';
@@ -83,8 +85,8 @@ export function TransportResult({ result, onOpenReal }: Props) {
         <Meta label="이관 ID">
           <span className="font-mono text-[13px]">{result.transportId}</span>
         </Meta>
-        <Meta label="패키지 ID">
-          <span className="font-mono text-[13px]">{result.packageId}</span>
+        <Meta label="패키지">
+          <span className="font-mono text-[13px]">{packageSummary(result.packages)}</span>
         </Meta>
         <Meta label="시작">{formatTime(result.startedAt)}</Meta>
         <Meta label="종료">{formatTime(result.finishedAt)}</Meta>
@@ -134,27 +136,38 @@ export function TransportResult({ result, onOpenReal }: Props) {
           </ul>
         </nav>
         <div className="flex flex-col gap-3 min-w-0">
-          {result.results.map((r, i) => {
-            // 켜진 동안에는 문제 아티팩트의 카드만 남고 모두 펼쳐진 채 고정된다. 끄면 켜기 직전 상태(expanded)로 돌아간다.
-            if (onlyNow && !isProblemArtifact(r)) return null;
-            return (
-              <div
-                key={`${r.artifactId}-${i}`}
-                className="min-w-0 scroll-mt-[76px]"
-                ref={(el) => {
-                  if (el) cardRefs.current.set(i, el);
-                  else cardRefs.current.delete(i);
-                }}
-              >
-                <ArtifactCard
-                  r={r}
-                  expanded={onlyNow || (expandedNow[i] ?? false)}
-                  onToggle={() => setExpanded(expandedNow.map((v, j) => (j === i ? !v : v)))}
-                  onlyProblems={onlyNow}
-                />
-              </div>
-            );
-          })}
+          {result.packages.map((pkg, packageIndex) => (
+            <div key={pkg.packageId} role="group" aria-labelledby={`${titleId}-package-${packageIndex}`} className="flex min-w-0 flex-col gap-3">
+              <h3 id={`${titleId}-package-${packageIndex}`} className="min-w-0 break-all font-semibold">
+                {pkg.packageName && <span className="break-all">{pkg.packageName} </span>}
+                <span className="font-mono break-all">{pkg.packageId}</span>
+              </h3>
+              {!result.dryRun && pkg.targetPackage && pkg.targetPackage !== 'NOT_CHECKED' &&
+                <div><StatusBadge kind="targetPackage" value={pkg.targetPackage} /></div>}
+              {result.results.map((r, i) => {
+                if ((r.packageId ?? result.packages[0]?.packageId) !== pkg.packageId) return null;
+                // 켜진 동안에는 문제 아티팩트의 카드만 남고 모두 펼쳐진 채 고정된다. 끄면 켜기 직전 상태(expanded)로 돌아간다.
+                if (onlyNow && !isProblemArtifact(r)) return null;
+                return (
+                  <div
+                    key={`${r.artifactId}-${i}`}
+                    className="min-w-0 scroll-mt-[76px]"
+                    ref={(el) => {
+                      if (el) cardRefs.current.set(i, el);
+                      else cardRefs.current.delete(i);
+                    }}
+                  >
+                    <ArtifactCard
+                      r={r}
+                      expanded={onlyNow || (expandedNow[i] ?? false)}
+                      onToggle={() => setExpanded(expandedNow.map((v, j) => (j === i ? !v : v)))}
+                      onlyProblems={onlyNow}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </div>
     </section>

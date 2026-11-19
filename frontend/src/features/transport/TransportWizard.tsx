@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { getArtifacts, getPackages, getTemplates } from '../../api/client';
+import { getPackages, getTemplates } from '../../api/client';
 import type { ArtifactSummary, TransportTemplate } from '../../api/types';
 import { navigate } from '../../app/routes';
 import { ErrorAlert } from '../../components/ErrorAlert';
@@ -9,7 +9,8 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { SearchIcon } from '../../components/ui/icons';
 import { ListSkeleton } from '../../components/ui/ListSkeleton';
 import { PageHeader } from '../../components/ui/PageHeader';
-import { RadioControl } from '../../components/ui/Radio';
+import { CheckboxControl } from '../../components/ui/Checkbox';
+import { packageSummary } from '../../lib/packageSummary';
 import { TextInput } from '../../components/ui/TextInput';
 import { useRemote } from '../../lib/useRemote';
 import { TransportResult } from '../result/TransportResult';
@@ -48,12 +49,13 @@ export function TransportWizard({ wizard: w }: { wizard: Wizard }) {
         {w.step === 'real' && <RealStep w={w} buttonRef={realButton} />}
       </div>
       {w.routeDialog && <RouteDialog onApply={w.changeRoute} onClose={w.closeRouteDialog} />}
-      {w.confirm && !w.realDisabled && w.pkg && (
+      {w.confirm && !w.realDisabled && w.preview && w.route.target && (
         <ConfirmDialog
           targetName={w.targetName}
           routeText={w.routeText}
-          packageId={w.pkg.id}
-          artifactCount={w.artifactIds.length}
+          packages={w.preview.packages.map(p => ({ ...p, packageName: p.packageName ?? w.packages.find(selected => selected.id === p.packageId)?.name ?? null }))}
+          targetTenantId={w.route.target}
+          artifactCount={w.preview.summary.total}
           deploy={w.confirm.deploy}
           onDeployChange={w.setConfirmDeploy}
           busy={w.busy}
@@ -69,9 +71,8 @@ export function TransportWizard({ wizard: w }: { wizard: Wizard }) {
 function StepBar({ w }: { w: Wizard }) {
   const summary: Record<WizardStep, string | null> = {
     template: w.template ? w.template.name : w.templateDone ? '템플릿 없음' : null,
-    package: w.pkg && w.pendingPackage === null ? w.pkg.name : w.pkg?.id ?? null,
-    artifacts: !w.pkg || (!w.preview && w.artifactIds.length === 0) ? null
-      : w.artifactIds.length === 0 ? '전체' : `${w.artifactIds.length} / ${w.artifactTotal ?? '?'}개`,
+    package: w.packages.length ? packageSummary(w.packages.map(p => ({ packageId: p.id, packageName: p.name }))) : null,
+    artifacts: w.artifactSummary,
     preview: null,
     real: null,
   };
@@ -131,7 +132,6 @@ function TemplateStep({ w }: { w: Wizard }) {
                 <li key={t.id} aria-labelledby={nameId} className="flex min-w-0 flex-col gap-1.5 rounded-md border border-hairline p-3">
                   <p id={nameId} className="font-medium break-all">{t.name}</p>
                   <p className="text-sm break-all">{`${w.tenantName(t.sourceTenantId)} → ${w.tenantName(t.targetTenantId)}`}</p>
-                  <p className="font-mono text-[13px] text-ink-secondary break-all">{t.packageId || '실행 때 선택'}</p>
                   {!t.usable && <p className="text-sm text-danger-fg">{templateReason(t)}</p>}
                   <div className="mt-1">
                     <Button size="sm" disabled={!t.usable} onClick={() => w.applyTemplate(t)}>이 템플릿으로 시작</Button>
@@ -173,19 +173,23 @@ const ROW_BASE = 'flex min-h-10 min-w-0 cursor-pointer items-center gap-2.5 roun
 function PackageList({ w, source }: { w: Wizard; source: string }) {
   const { state, retry } = useRemote(() => getPackages(source), 'packages:' + source);
   const [query, setQuery] = useState('');
-  const { resolvePackage } = w;
-  const data = state.status === 'ok' ? state.data : null;
-  useEffect(() => { if (data && w.pendingPackage !== null) resolvePackage(data); }, [data, w.pendingPackage]);
+  useEffect(() => {
+    if (state.status === 'ok') w.setPackageOrder(state.data);
+  }, [state]);
 
   if (state.status === 'loading') return <ListSkeleton />;
   if (state.status === 'error') return <ErrorAlert error={state.error} onRetry={retry} />;
   // 정규식이 아니라 includes로 비교한다: ( [ 같은 입력도 글자 그대로 취급된다.
   const q = query.toLowerCase();
   const shown = state.data.filter(p => p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
-  const selectedId = w.pkg?.id ?? null;
+  const selectedIds = new Set(w.packages.map(p => p.id));
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      {w.missingPackage !== null && <p className="rounded-md bg-warning-bg px-3 py-2.5 text-warning-fg">{`템플릿의 패키지(${w.missingPackage})를 원본에서 찾을 수 없습니다. 패키지를 다시 고르세요`}</p>}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm">{`${w.packages.length}개 선택`}</span>
+        <Button size="sm" disabled={shown.length === 0} onClick={() => w.addPackages(shown)}>전체 선택</Button>
+        <Button size="sm" onClick={w.clearPackages}>선택 해제</Button>
+      </div>
       {state.data.length === 0 ? <EmptyState title="패키지가 없습니다" /> : (
         <div className="flex min-w-0 flex-col">
           <TextInput label="패키지 검색" hideLabel icon={<SearchIcon />} placeholder="이름 또는 ID로 검색" value={query} onChange={e => setQuery(e.target.value)} />
@@ -199,8 +203,8 @@ function PackageList({ w, source }: { w: Wizard; source: string }) {
             <ul className="flex max-h-[360px] min-w-0 flex-col gap-0.5 overflow-y-auto" aria-label="패키지 목록">
               {shown.map((p: ArtifactSummary) => (
                 <li key={p.id} className="min-w-0">
-                  <label className={`${ROW_BASE} ${selectedId === p.id ? 'bg-primary-soft' : 'hover:bg-surface-hover'}`}>
-                    <RadioControl name="package" checked={selectedId === p.id} onChange={() => w.selectPackage(p)} />
+                  <label className={`${ROW_BASE} ${selectedIds.has(p.id) ? 'bg-primary-soft' : 'hover:bg-surface-hover'}`}>
+                    <CheckboxControl checked={selectedIds.has(p.id)} onChange={() => w.selectPackage(p)} />
                     <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                       <span className="font-medium break-all">{p.name}</span>{' '}
                       <span className="font-mono text-[13px] text-ink-secondary break-all">{p.id}</span>
@@ -214,24 +218,26 @@ function PackageList({ w, source }: { w: Wizard; source: string }) {
         </div>
       )}
       <div className="flex flex-wrap justify-end gap-2">
-        <Button disabled={!w.pkg || w.previewReason !== undefined && w.previewReason !== TOO_MANY_ARTIFACTS} onClick={() => w.runPreview({ allArtifacts: true })}>
+        <Button disabled={w.allPreviewReason !== undefined} onClick={() => w.runPreview({ allArtifacts: true })}>
           전체 아티팩트로 미리보기
         </Button>
-        <Button variant="primary" disabled={!w.pkg} onClick={() => w.goStep('artifacts')}>다음</Button>
+        <Button variant="primary" disabled={!w.packages.length} onClick={() => w.goStep('artifacts')}>다음</Button>
       </div>
     </div>
   );
 }
 
 function ArtifactStep({ w }: { w: Wizard }) {
-  const { sourceTenantId } = useTenants();
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      {w.pkg && sourceTenantId
-        ? <ArtifactList key={`${sourceTenantId}:${w.pkg.id}`} w={w} source={sourceTenantId} packageId={w.pkg.id} />
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => w.selectAllArtifacts(true)}>모두 선택</Button>
+        <Button onClick={() => w.selectAllArtifacts(false)}>모두 해제</Button>
+      </div>
+      {w.packages.length ? w.packages.map(pkg => <ArtifactList key={pkg.id} w={w} pkg={pkg} />)
         : <Card title="아티팩트"><EmptyState title="패키지를 먼저 선택하세요" /></Card>}
       {w.tooMany && <p className="text-sm text-danger-fg">{`${TOO_MANY_ARTIFACTS}. 선택을 줄이세요`}</p>}
-      {w.artifactIds.length === 0 && w.pkg && <p className="text-sm text-ink-secondary">패키지의 모든 아티팩트가 대상</p>}
+      {w.noneSelected && <p className="text-sm text-ink-secondary">아티팩트를 하나 이상 선택하세요</p>}
       <div className="flex flex-wrap justify-end gap-2">
         <Button onClick={() => w.goStep('package')}>이전</Button>
         <Button variant="primary" disabled={w.previewReason !== undefined} onClick={() => w.runPreview()}>미리보기 실행</Button>
@@ -241,25 +247,23 @@ function ArtifactStep({ w }: { w: Wizard }) {
   );
 }
 
-function ArtifactList({ w, source, packageId }: { w: Wizard; source: string; packageId: string }) {
-  const { state, retry } = useRemote(() => getArtifacts(packageId, source), `artifacts:${source}:${packageId}`);
-  const { setArtifactTotal } = w;
-  const total = state.status === 'ok' ? state.data.length : null;
-  useEffect(() => { if (total !== null) setArtifactTotal(total); }, [total]);
-  if (state.status === 'loading') return <Card title="아티팩트"><ListSkeleton /></Card>;
-  if (state.status === 'error') return <Card title="아티팩트"><ErrorAlert error={state.error} onRetry={retry} /></Card>;
-  const list = state.data;
+function ArtifactList({ w, pkg }: { w: Wizard; pkg: ArtifactSummary }) {
+  const titleId = useId();
+  const state = w.artifacts[pkg.id];
+  const ready = state?.status === 'ok' ? state : null;
   return (
-    <Card
-      title="아티팩트"
-      meta={`${w.artifactIds.length}개 선택 / 전체 ${list.length}개`}
-      actions={<>
-        <Button size="sm" onClick={() => w.setArtifactIds(list.map(a => a.id))}>전체 선택</Button>
-        <Button size="sm" onClick={() => w.setArtifactIds([])}>선택 해제</Button>
+    <Card role="region" aria-labelledby={titleId}
+      title={<span id={titleId} className="break-all">{pkg.name} <span className="font-mono break-all">{pkg.id}</span></span>}
+      meta={ready ? `${ready.selected.length}개 선택 / 전체 ${ready.items.length}개` : undefined}
+      actions={ready && <>
+        <Button size="sm" onClick={() => w.setArtifactIds(pkg.id, ready.items.map(a => a.id))}>전체 선택</Button>
+        <Button size="sm" onClick={() => w.setArtifactIds(pkg.id, [])}>선택 해제</Button>
       </>}
     >
-      {list.length === 0 ? <EmptyState title="아티팩트가 없습니다" />
-        : <div className="max-h-[420px] min-w-0 overflow-y-auto"><ArtifactGrid artifacts={list} selectedIds={w.artifactIds} onChange={w.setArtifactIds} /></div>}
+      {(!state || state.status === 'loading') && <ListSkeleton />}
+      {state?.status === 'error' && <ErrorAlert error={state.error} onRetry={() => void w.loadArtifacts(pkg.id, true)} />}
+      {ready && (ready.items.length === 0 ? <EmptyState title="아티팩트가 없습니다" />
+        : <div className="max-h-[420px] min-w-0 overflow-y-auto"><ArtifactGrid artifacts={ready.items} selectedIds={ready.selected} onChange={ids => w.setArtifactIds(pkg.id, ids)} /></div>)}
     </Card>
   );
 }

@@ -108,7 +108,7 @@ class LocalStubsEndToEndTests {
         assertThat(create).hasSize(1);
         assertThat(uploaded(create.getFirst().getBodyAsString())).isEqualTo(Files.readAllBytes(temporary.resolve("dev-zips/IF_Customer_Push.zip")));
         try (var files = Files.list(temporary.resolve("dev-zips"))) {
-            assertThat(files.count()).isEqualTo(23);
+            assertThat(files.count()).isEqualTo(24);
         }
     }
     @Test
@@ -156,6 +156,65 @@ class LocalStubsEndToEndTests {
                 .withRequestBody(matchingJsonPath("$.Id", equalTo("IF_Fault_NotZip"))));
         assertThat(notZip).hasSize(1);
         assertThat(new String(uploaded(notZip.getFirst().getBodyAsString()), java.nio.charset.StandardCharsets.UTF_8)).isEqualTo("NOT-A-ZIP-FILE");
+    }
+    private static HttpResponse<String> get(int port, String path) throws Exception {
+        return HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+    }
+    @Test
+    @DisplayName("REQ-606, REQ-605: the SAP provided source package is hidden from the list but readable by ID")
+    void req606_sapPackageHidden() throws Exception {
+        var list = get(port, "/packages?tenantId=DEV");
+        assertThat(list.statusCode()).isEqualTo(200);
+        var ids = new ArrayList<String>();
+        JSON.readTree(list.body()).forEach(node -> ids.add(node.path("id").asString()));
+        assertThat(ids).containsExactly("PkgTransportDemo", "PkgFaultDemo", "PkgNotInPrd", "PkgCreateFail");
+        assertThat(get(port, "/packages/PkgSapStandard/artifacts?tenantId=DEV").statusCode()).isEqualTo(200);
+    }
+    @Test
+    @DisplayName("REQ-606, REQ-603: target-status reports existing and missing target packages")
+    void req606_targetStatus() throws Exception {
+        var response = get(port, "/packages/target-status?tenantId=PRD&packageIds=PkgTransportDemo,PkgNotInPrd,PkgCreateFail");
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(JSON.readTree(response.body())).isEqualTo(JSON.readTree("[{\"packageId\":\"PkgTransportDemo\",\"exists\":true},"
+                + "{\"packageId\":\"PkgNotInPrd\",\"exists\":false},{\"packageId\":\"PkgCreateFail\",\"exists\":false}]"));
+    }
+    @Test
+    @DisplayName("REQ-606, REQ-604: one transport of three packages creates the approved missing package, isolates the create failure and keeps the existing package working")
+    void req606_autoCreate() throws Exception {
+        var response = transport("{\"dryRun\":false,\"packages\":[{\"packageId\":\"PkgTransportDemo\"},"
+                + "{\"packageId\":\"PkgNotInPrd\"},{\"packageId\":\"PkgCreateFail\"}],"
+                + "\"createPackages\":[\"PkgNotInPrd\",\"PkgCreateFail\"]}");
+        assertThat(response.packages()).extracting(TransportPackage::packageId, TransportPackage::targetPackage).containsExactly(
+                tuple("PkgTransportDemo", TargetPackageStatus.EXISTING), tuple("PkgNotInPrd", TargetPackageStatus.CREATED),
+                tuple("PkgCreateFail", TargetPackageStatus.CREATE_FAILED));
+        var byId = byId(response);
+        assertThat(byId.get("IF_Order_Sync").status()).isEqualTo(ArtifactStatus.SUCCESS);
+        assertThat(byId.get("IF_Customer_Push").status()).isEqualTo(ArtifactStatus.SUCCESS);
+        assertThat(byId.get("IF_Orphan").status()).isEqualTo(ArtifactStatus.SUCCESS);
+        assertThat(byId.get("IF_Orphan").packageId()).isEqualTo("PkgNotInPrd");
+        var failed = byId.get("IF_CreateFail");
+        assertThat(failed.status()).isEqualTo(ArtifactStatus.FAILED);
+        assertThat(failed.error().code()).isEqualTo("PACKAGE_CREATE_FAILED");
+        assertThat(failed.error().message()).isEqualTo("TARGET: HTTP 500; CPI call failed");
+        assertThat(response.summary()).isEqualTo(new TransportSummary(4, 3, 1));
+        var created = stubs.prd().findAll(postRequestedFor(urlPathEqualTo("/api/v1/IntegrationPackages"))
+                .withRequestBody(matchingJsonPath("$.Id", equalTo("PkgNotInPrd"))));
+        assertThat(created).hasSize(1);
+        assertThat(JSON.readTree(created.getFirst().getBodyAsString())).isEqualTo(JSON.readTree(
+                "{\"Id\":\"PkgNotInPrd\",\"Name\":\"Not In PRD\",\"ShortText\":\"Not In PRD short text\","
+                        + "\"Description\":\"Not In PRD description\",\"Version\":\"1.0.0\"}"));
+        stubs.prd().verify(0, postRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts"))
+                .withRequestBody(matchingJsonPath("$.Id", equalTo("IF_CreateFail"))));
+        stubs.prd().verify(0, deleteRequestedFor(anyUrl()));
+    }
+    @Test
+    @DisplayName("REQ-606, REQ-604: without approval the package missing from PRD stays NOT_FOUND")
+    void req606_notApproved() throws Exception {
+        var response = transport("{\"dryRun\":false,\"packages\":[{\"packageId\":\"PkgNotInPrd\"}]}");
+        assertThat(response.packages()).extracting(TransportPackage::targetPackage).containsExactly(TargetPackageStatus.NOT_FOUND);
+        assertThat(response.results().getFirst().error().code()).isEqualTo("PACKAGE_NOT_FOUND_IN_TARGET");
+        stubs.prd().verify(0, postRequestedFor(urlPathEqualTo("/api/v1/IntegrationPackages")));
     }
     private static Map<String, ArtifactResult> byId(TransportResponse response) {
         var byId = new HashMap<String, ArtifactResult>();

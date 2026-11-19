@@ -300,7 +300,7 @@ class DeployErrorDetailWireMockTests {
         var original = response.results().getFirst();
         var legacyResult = new ArtifactResult(original.artifactId(), null, original.action(), original.configurations(),
                 original.deployStatus(), new ArtifactError(original.error().code(), original.error().message()));
-        var legacyResponse = new TransportResponse(response.transportId(), response.packageId(), response.dryRun(), response.deploy(),
+        var legacyResponse = new TransportResponse(response.transportId(), response.packages().getFirst().packageId(), response.dryRun(), response.deploy(),
                 response.startedAt(), response.finishedAt(), response.summary(), List.of(legacyResult));
         Files.writeString(settings.history().file(), json.writeValueAsString(legacyResponse) + "\n", StandardOpenOption.APPEND);
         String stored = Files.readString(settings.history().file());

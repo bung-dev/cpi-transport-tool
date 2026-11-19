@@ -10,7 +10,7 @@ import { navLink, renderAt } from './test/appRoutes';
 
 const HISTORY_ENTRY: TransportResponse = {
   transportId: 't-hist-1',
-  packageId: 'PkgTransportDemo',
+  packages: [{ packageId: 'PkgTransportDemo', packageName: null, targetPackage: null }],
   dryRun: true,
   deploy: false,
   startedAt: '2026-09-29T07:05:05.351940500Z',
@@ -115,7 +115,7 @@ describe('App', () => {
     expect(panel.textContent).not.toContain('DEV 테넌트의 패키지를 PRD 테넌트로 이관합니다');
     // 제목 수준을 건너뛰지 않는다
     await userEvent.click(await screen.findByRole('button', { name: '템플릿 없이 진행' }));
-    await screen.findByRole('radio', { name: /Transport Demo/ });
+    await screen.findByRole('checkbox', { name: /Transport Demo/ });
     const levels = screen.getAllByRole('heading').map((h) => Number(h.tagName.slice(1)));
     for (let i = 1; i < levels.length; i++) expect(levels[i] - levels[i - 1], `제목 ${i}`).toBeLessThanOrEqual(1);
   });
