@@ -97,7 +97,8 @@ class SecretLeakTests {
             assertThat(org.slf4j.MDC.get("transportId")).isEqualTo("caller");
             assertThat(org.slf4j.MDC.get("artifactId")).isEqualTo("caller-artifact");
             assertThat(Files.readString(temporary.resolve("application.log"))).contains(
-                    "INFO transportId=" + response.transportId() + " artifactId=missing transportId=" + response.transportId());
+                    // REQ-704 (리뷰 R1): 단계 줄 메시지는 packageId로 시작한다.
+                    "INFO transportId=" + response.transportId() + " artifactId=missing packageId=PkgTransportDemo transportId=" + response.transportId());
         } finally {
             org.slf4j.MDC.clear();
         }
