@@ -10,9 +10,9 @@
 **비권장. 지금 도구에 넣을 만한 "직접 호출용 이관 API"는 확인되지 않았다.**
 
 - `<oauth.url>/api/1.0/transportmodule/Transport`는 실제로 있는 경로다(SAP 도움말에 나옴, **확인됨**). 하지만 이 경로는 Content Agent Service(CAS)가 Cloud Integration을 **되불러(callback)** 패키지를 받아 가려고 쓰는 서비스 간 엔드포인트다. SAP는 요청·응답 형식을 공개하지 않았고, 외부 클라이언트가 직접 부르는 방법을 문서화하지 않았다(**확인 못함** → 비공개·내부용으로 봐야 함).
-- 대상 테넌트에 **가져오는(import)** 쪽은 이 경로가 아니다. cTMS가 MTAR을 대상 서브계정의 **Cloud Foundry Deploy Service**(`deploy-service.cfapps.<domain>/slprot/<org>/<space>/slp`)에 MTA로 배포하고, 이때 SpaceDeveloper 권한의 CF 기술 사용자가 필요하다(**확인됨**, 블로그 원문). 우리 도구가 가진 Process Integration Runtime 서비스 키만으로는 이 경로를 탈 수 없다.
-- 단위는 **패키지 전체**뿐이다. iFlow 단위 선택이 안 되고, 결과는 MTAR 단위 성공·실패로만 나온다.
-- 공개·지원되는 대안은 (a) CAS 자체 API(`/v1/contentResources/export`, `/v1/operations/{id}`; SAP 공식 Project Piper가 사용, **확인됨**)와 (b) 지금 쓰는 공개 OData API다. (a)도 CAS 구독·cTMS 노드/라우트·CF 배포 사용자를 갖춰야 하므로 도구 단독 구성으로는 무겁다.
+- 대상 테넌트에 **가져오는(import)** 방법은 두 가지다. (1) 2022년 블로그 방식: cTMS가 MTAR을 대상 서브계정의 **Cloud Foundry Deploy Service**(`deploy-service.cfapps.<domain>/slprot/<org>/<space>/slp`)에 MTA로 배포하고, 이때 SpaceDeveloper 권한의 CF 기술 사용자가 필요하다(**확인됨**). (2) 현재 도움말 방식: cTMS 대상 노드가 **Content Agent 엔진**을 거쳐 가져오고, 대상 서브계정에도 `CloudIntegration` Destination이 필요하다(**확인됨**). 그래서 이 경로는 가져오기에도 쓰일 가능성이 높지만(**추정**), 어느 쪽이든 직접 부를 형식은 공개돼 있지 않다. *(2026-11-19 정정: 처음에는 (1)만 있다고 적었다. [content-agent-api.md](content-agent-api.md) 2절 참고.)*
+- 이 경로를 쓰는 cTMS 흐름은 **패키지 단위**로 이관한다. Content Agent 쪽은 하위 구성요소를 고를 수 있다([content-agent-api.md](content-agent-api.md)).
+- 공개·지원되는 대안은 (a) Content Agent 공개 API(Business Accelerator Hub `contentagentapi`, 내보내기·가져오기 모두 있음, **확인됨** — 별도 문서 [content-agent-api.md](content-agent-api.md))와 (b) 지금 쓰는 공개 OData API다.
 
 ## 2. 붙여 온 자료의 주장 확인
 
@@ -22,7 +22,7 @@
 | 인증 OAuth2ClientCredentials, Process Integration Runtime 서비스 키의 Client ID/Secret, Token Service URL = `oauth → tokenurl` (mTLS면 `uaa → certurl`) | **확인됨** | 같은 페이지 |
 | 서비스 인스턴스 역할 `WorkspacePackagesRead`·`WorkspacePackagesEdit`·`WorkspacePackagesTransport` | **확인됨** | 같은 페이지 Prerequisites. (블로그 Step 7은 `WorkspacePackagesTransport`만 언급) |
 | 서비스 플랜 `api` (Process Integration Runtime, `it-rt`) | **확인됨** | 블로그 Prerequisites·Step 7, CAS 담당자 댓글("it-rt" service and "api" plan) |
-| "cTMS는 별도의 이관 API를 쓴다" | **부분적으로만 맞음** | 위 경로는 CAS가 **원본 테넌트에서 패키지를 꺼낼 때** 쓰는 콜백이다(CAS 담당자 댓글: CAS가 CPI를 되불러 패키지를 끌어와 번들을 만든다). 대상 반영은 CF Deploy Service(MTA 배포)로 이뤄진다. |
+| "cTMS는 별도의 이관 API를 쓴다" | **부분적으로만 맞음** | 위 경로는 CAS가 Cloud Integration을 되부르는 서비스 간 엔드포인트다(CAS 담당자 댓글: CAS가 CPI를 되불러 패키지를 끌어와 번들을 만든다). 대상 반영은 CF Deploy Service 또는 Content Agent 엔진을 거친다(정정, 1절). |
 
 ## 3. 엔드포인트별 정리
 
@@ -35,7 +35,7 @@
 | 메서드·요청 본문·응답 형식 | 공개 문서 없음. Business Accelerator Hub의 Cloud Integration API 목록·SAP Help·Community 어디에도 스키마가 없음 | **확인 못함** |
 | 내보내기 형식 | CAS가 결과를 MTAR로 조립한다. Cloud Integration이 이 경로로 무엇을(zip? MTAR 조각?) 돌려주는지는 모름 | MTAR 조립은 **확인됨**, 경로 응답 형식은 **확인 못함** |
 | 비동기 여부 | CI → CAS 요청은 "async transport operation"이라고 CAS 담당자가 설명. transportmodule 경로 자체가 비동기인지는 모름 | **추정** |
-| import 엔드포인트 | 이 경로에 import 기능이 있다는 공개 근거 없음. 대상 반영은 CF Deploy Service | **확인 못함** |
+| import 엔드포인트 | 대상 서브계정에도 `CloudIntegration` Destination이 필요하다고 도움말에 있어, Content Agent가 이 경로로 가져오기를 하는 것으로 보임. 형식은 비공개 | 필요 조건은 **확인됨**, 경로의 import 동작은 **추정** |
 | 구성 값·보안 파라미터 | 공개 자료에 언급 없음. MTA 배포 시 구성 값(externalized parameters)이 어떻게 처리되는지 문서 근거를 찾지 못함 | **확인 못함** |
 | 대상 패키지 자동 생성 | cTMS import 후 "CI package will be available in the CI tenant" — 패키지가 대상에 생긴다 | **확인됨**(블로그 Step 11) |
 | 배포(deploy) 여부 | 블로그의 "imported (deployed)"는 MTA를 CF 스페이스에 배포한다는 뜻이고, iFlow 런타임 배포까지 하는지는 원문에 없음 | **확인 못함** |
@@ -50,7 +50,7 @@ SAP 공식 오픈소스 Project Piper의 `integrationArtifactTransport` 단계 �
 - `GET {casHost}/v1/operations/{processId}` — `state`: `INITIAL`/`RUNNING`/`FINISHED`/`ERROR`/`ABORTED`
 - `GET {casHost}/v1/operations/{processId}/logs` — 오류 상세
 - Piper 문서: "integrationArtifactTransport step only supports Integration Package transport" → **패키지 단위만**
-- 이 API는 **내보내기 + cTMS 큐 적재**까지다. 대상 import는 cTMS(노드의 Destination → CF Deploy Service)가 한다.
+- Piper는 **내보내기 + cTMS 큐 적재**만 쓴다. Content Agent API 전체(가져오기 V2 포함)는 [content-agent-api.md](content-agent-api.md)에 정리했다.
 
 ## 4. 이 도구에 적용 가능성
 
@@ -58,8 +58,8 @@ SAP 공식 오픈소스 Project Piper의 `integrationArtifactTransport` 단계 �
 |---|---|---|---|
 | 인증 | 테넌트별 서비스 키(client credentials) | 같은 키·같은 호스트로 **요청은 보낼 수 있음**(아래 테스트). 역할 `WorkspacePackagesTransport` 추가 필요 | CAS 키 + cTMS 키 + 대상 CF 기술 사용자(SpaceDeveloper) |
 | 무엇을 보내야 하나 | 문서화됨 | **모름**(스키마 비공개) | 문서화됨(Piper 기준) |
-| 대상 반영 | iFlow별 업로드·배포 | 이 경로로 대상 import는 불가로 봄 | CF Deploy Service 경유 |
-| iFlow 단위 선택 | 됨 | 안 됨(패키지) | 안 됨(패키지) |
+| 대상 반영 | iFlow별 업로드·배포 | 형식 비공개라 직접 import 불가로 봄 | Content Agent 가져오기(Import V2) 또는 CF Deploy Service 경유 |
+| iFlow 단위 선택 | 됨 | 알 수 없음 | 하위 구성요소 선택 있음(동작 확인 못함) |
 | 결과 표시·감사 | iFlow별 결과·이력 | 알 수 없음 | 작업 상태 + 로그, cTMS 이력. iFlow별 결과는 없음 |
 | 속도 | 실측 40개 417초 중 84%가 구성 값 PUT → PUT 제거로 크게 줄 것 | 측정 불가 | 측정 자료 없음(**확인 못함**). 비동기 + MTA 배포라 빠르다는 근거도 없음 |
 | 위험 | 공개 API | 비공개 경로 변경·지원 거부 위험, 잘못된 호출의 영향 예측 불가 | 구성 요소 3개 추가, 운영 권한 범위 확대 |
@@ -67,7 +67,7 @@ SAP 공식 오픈소스 Project Piper의 `integrationArtifactTransport` 단계 �
 판단:
 
 - **transportmodule 직접 호출: 비권장.** 형식이 비공개라 구현 근거가 없고, 시행착오로 형식을 알아내는 것은 운영 테넌트에 비공개 API를 시험하는 일이 된다. import 경로도 아니다.
-- **CAS + cTMS 연동: 조건부(지금은 비권장).** 조직이 이미 cTMS 랜드스케이프를 쓰고, 패키지 단위 이관과 cTMS 이력을 감사 근거로 받아들일 때만 의미가 있다. 이 경우 도구는 "export 요청 + 상태 조회" 래퍼가 되고 iFlow 단위 선택·구성 값 처리·결과 표시 요구와 맞지 않는다.
+- **Content Agent API: 조건부(지금은 비권장).** 판단 근거는 [content-agent-api.md](content-agent-api.md) 4절에 따로 정리했다.
 - **속도 개선은 현재 진행 중인 방식(구성 값 PUT 제거, iFlow 동시 처리)이 맞는 방향이다.** 새 API로 갈아탈 근거가 없다.
 
 ## 5. "테스트" — 로컬 스텁으로 확인한 것
@@ -107,12 +107,12 @@ curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" "$OAU
    - `404`/`405` — 경로는 있으나 GET이 아니거나 하위 경로가 필요. 형식이 비공개이므로 여기서 멈춘다
    - `200` — 응답 본문을 저장소 밖에 보관해 공유(자격증명·토큰이 섞이지 않았는지 먼저 확인)
 
-5. CAS API를 검토하려면: CAS(`standard`) 인스턴스와 키가 있어야 하며, `POST /v1/contentResources/export`는 cTMS 큐에 실제 transport request를 만든다. 시험하려면 cTMS 관리자와 상의한다.
+5. Content Agent API 확인 절차는 [content-agent-api.md](content-agent-api.md) 6절에 있다.
 
 ## 7. 다음 단계 제안
 
 - 지금은 아무 것도 도입하지 않는다. 진행 중인 속도 개선 후 실측을 다시 잰다.
-- 조직이 cTMS를 이미 쓰거나 도입할 계획이면, 그때 CAS API 래퍼(패키지 단위 export + 상태 조회)를 별도 트랙으로 검토한다.
+- 속도 개선 후에도 느리면, Content Agent API를 PoC로 비교한다([content-agent-api.md](content-agent-api.md)).
 - 원하면 SAP에 지원 문의: "`/api/1.0/transportmodule/Transport`를 고객 클라이언트가 직접 호출하는 것이 지원되는가" (CAS 큐 `BC-CP-LCM-CAS`).
 
 ## 출처
