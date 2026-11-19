@@ -49,7 +49,7 @@ describe('App', () => {
   it('REQ-009 AC-1 / REQ-410: 탭 대신 주 메뉴 링크를 쓰고 현재 화면은 aria-current다', () => {
     renderAt('#/transport');
     expect(screen.queryByRole('tablist')).toBeNull();
-    expect(within(screen.getByRole('navigation', { name: '주 메뉴' })).getAllByRole('link')).toHaveLength(6);
+    expect(within(screen.getByRole('navigation', { name: '주 메뉴' })).getAllByRole('link')).toHaveLength(7);
     expect(navLink('새 이관')).toHaveAttribute('aria-current', 'page');
     expect(navLink('이관 이력')).not.toHaveAttribute('aria-current');
   });
