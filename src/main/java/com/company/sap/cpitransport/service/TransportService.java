@@ -147,6 +147,7 @@ public class TransportService {
                 ? DeployStatus.SKIPPED_DRY_RUN : DeployStatus.NOT_REQUESTED;
         List<ConfigurationItem> items = List.of();
         ArtifactError error = null;
+        String successResult = "succeeded";
         var deployFailure = DeployOutcome.DeployFailure.NONE;
         boolean exists = false;
         event(transportId, id, stage, "started");
@@ -159,31 +160,28 @@ public class TransportService {
                 byte[] zip = api.downloadArtifact(request.source().id(), id);
                 stage = next(transportId, id, stage, Stage.CONFIGURATION_READ);
                 var source = configurations.read(request.source().id(), id);
+                stage = next(transportId, id, stage, request.dryRun() ? Stage.UPLOAD : Stage.TARGET);
                 if (request.dryRun()) {
                     items = source;
-                    // Read and write share one PARAMETER_COPY START/END pair, also in preview.
-                    stage = next(transportId, id, stage, Stage.CONFIGURATION_UPDATE);
-                    skipped(transportId, id, Stage.UPLOAD, "SKIPPED_DRY_RUN");
+                } else if (packageError != null) {
+                    error = packageError;
                 } else {
-                    stage = next(transportId, id, stage, Stage.TARGET);
-                    if (packageError != null) {
-                        error = packageError;
-                    } else {
-                        exists = api.artifactExists(request.target().id(), id);
-                        stage = next(transportId, id, stage, Stage.UPLOAD);
-                        String content = Base64.getEncoder().encodeToString(zip);
-                        if (exists) api.updateArtifact(request.target().id(), id, artifact.get().name(), content);
-                        else api.createArtifact(request.target().id(), artifact.get().name(), id, packageId, content);
-                        action = exists ? TransportAction.UPDATED : TransportAction.CREATED;
-                        stage = next(transportId, id, stage, Stage.CONFIGURATION_UPDATE);
-                        var copied = configurations.copy(request.target().id(), id, source);
-                        items = copied.configurations();
-                        error = copied.error();
-                    }
+                    exists = api.artifactExists(request.target().id(), id);
+                    stage = next(transportId, id, stage, Stage.UPLOAD);
+                    String content = Base64.getEncoder().encodeToString(zip);
+                    if (exists) api.updateArtifact(request.target().id(), id, artifact.get().name(), content);
+                    else api.createArtifact(request.target().id(), artifact.get().name(), id, packageId, content);
+                    action = exists ? TransportAction.UPDATED : TransportAction.CREATED;
+                    items = source.stream()
+                            .map(item -> new ConfigurationItem(item.key(), item.value(), item.dataType(),
+                                    ConfigurationStatus.BUNDLED))
+                            .toList();
                 }
                 if (error == null) {
+                    event(transportId, id, stage, request.dryRun() ? "SKIPPED_DRY_RUN" : "succeeded");
+                    stage = Stage.DEPLOY;
+                    event(transportId, id, stage, "started");
                     if (request.deploy() && !request.dryRun()) {
-                        stage = next(transportId, id, stage, Stage.DEPLOY);
                         var outcome = deployment.deployAndWaitOutcome(request.target().id(), id);
                         deployStatus = outcome.status();
                         deployFailure = outcome.failure();
@@ -195,8 +193,7 @@ public class TransportService {
                             }
                         }
                     } else {
-                        skipped(transportId, id, Stage.DEPLOY,
-                                request.dryRun() ? "SKIPPED_DRY_RUN" : "NOT_REQUESTED");
+                        successResult = request.dryRun() ? "SKIPPED_DRY_RUN" : "NOT_REQUESTED";
                     }
                 }
             }
@@ -220,10 +217,6 @@ public class TransportService {
                     ? new ArtifactError(stage.code, "DEPLOY: CPI deployment ERROR")
                     : new ArtifactError(stage.code, stage + ": " + detail);
         }
-        // TARGET/UPLOAD can fail between the copy read and write phases. Close the open copy span.
-        if (stage == Stage.TARGET || stage == Stage.UPLOAD) {
-            event(transportId, id, Stage.CONFIGURATION_UPDATE, "failed");
-        }
         String logFields = "";
         if (stage == Stage.DEPLOY && deployStatus == DeployStatus.ERROR) {
             logFields = " deployFailure=" + deployFailure;
@@ -232,7 +225,7 @@ public class TransportService {
                 logFields += " detailHttpStatus=" + error.detailHttpStatus() + " detailLength=" + length;
             }
         }
-        event(transportId, id, stage, error == null ? "succeeded" : "failed " + error.code(), logFields);
+        event(transportId, id, stage, error == null ? successResult : "failed " + error.code(), logFields);
         return new ArtifactResult(id, null, action, items, deployStatus, error);
     }
 
@@ -247,13 +240,7 @@ public class TransportService {
     }
 
     private void event(String transportId, String id, Stage stage, String outcome, String fields) {
-        // One copy span covers source read and target writes, including intervening upload.
-        if (stage == Stage.CONFIGURATION_READ && outcome.equals("succeeded")
-                || stage == Stage.CONFIGURATION_UPDATE && outcome.equals("started")) return;
-        String step = switch (stage) {
-            case CONFIGURATION_READ, CONFIGURATION_UPDATE -> "PARAMETER_COPY";
-            default -> stage.name();
-        };
+        String step = stage == Stage.CONFIGURATION_READ ? "PARAMETER_COPY" : stage.name();
         boolean start = outcome.equals("started");
         String result = outcome.equals("succeeded") ? "OK"
                 : outcome.startsWith("failed") ? "FAILED" : outcome;
@@ -261,15 +248,10 @@ public class TransportService {
                 transportId, id, step, start ? "START" : "END", start ? "PENDING" : result, fields);
     }
 
-    private void skipped(String transportId, String id, Stage stage, String reason) {
-        event(transportId, id, stage, "started");
-        event(transportId, id, stage, reason);
-    }
-
     private enum Stage {
         LOOKUP("ARTIFACT_NOT_FOUND"), DOWNLOAD("DOWNLOAD_FAILED"),
         TARGET("TARGET_CHECK_FAILED"), UPLOAD("UPLOAD_FAILED"), CONFIGURATION_READ("CONFIGURATION_READ_FAILED"),
-        CONFIGURATION_UPDATE("CONFIGURATION_UPDATE_FAILED"), DEPLOY("DEPLOY_FAILED");
+        DEPLOY("DEPLOY_FAILED");
         private final String code;
         Stage(String code) { this.code = code; }
     }
