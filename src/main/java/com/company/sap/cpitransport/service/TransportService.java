@@ -283,8 +283,8 @@ public class TransportService {
         boolean start = outcome.equals("started");
         String result = outcome.equals("succeeded") ? "OK"
                 : outcome.startsWith("failed") ? "FAILED" : outcome;
-        log.info("transportId={} artifactId={} step={} phase={} result={}{}",
-                transportId, id, step, start ? "START" : "END", start ? "PENDING" : result, fields);
+        log.info("packageId={} transportId={} artifactId={} step={} phase={} result={}{}",
+                MDC.get("packageId"), transportId, id, step, start ? "START" : "END", start ? "PENDING" : result, fields);
     }
 
     private enum Stage {
