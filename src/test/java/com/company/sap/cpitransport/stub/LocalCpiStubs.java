@@ -141,6 +141,9 @@ public final class LocalCpiStubs {
                 .withRequestBody(matchingJsonPath("$.Id", equalTo("IF_Fault_UploadFail"))).willReturn(serverError()));
         once(prd, "csrf-retry", upload("IF_Fault_CsrfRetry"), upload("IF_Fault_CsrfRetry"),
                 aResponse().withStatus(403).withHeader("X-CSRF-Token", "Required"), created());
+        // REQ-702: 401 한 번 뒤 토큰을 다시 받아 재시도하면 성공한다.
+        once(prd, "auth-retry", upload("IF_Fault_AuthRetry"), upload("IF_Fault_AuthRetry"),
+                aResponse().withStatus(401), created());
         prd.stubFor(put(urlPathEqualTo(artifact("IF_Order_Sync"))).willReturn(ok()));
     }
     private static MappingBuilder upload(String id) {
@@ -160,13 +163,12 @@ public final class LocalCpiStubs {
             case "IF_Fault_NotZip" -> dev.stubFor(get(urlPathEqualTo(value)).willReturn(ok("NOT-A-ZIP-FILE")));
             default -> dev.stubFor(get(urlPathEqualTo(value)).willReturn(download));
         }
-        // REQ-506: 구성 값은 원본(DEV)에서만 읽는다. 읽기 500은 원본 쪽, 401 재시도는 대상 구성 값 PUT에서 난다.
+        // REQ-506, REQ-702: 구성 값은 원본(DEV)에서만 읽는다. 읽기 500은 원본 쪽. 401 재시도는 업로드 POST에서 난다(seed).
         if (id.equals("IF_Fault_ConfigRead500")) dev.stubFor(get(urlPathEqualTo(path + "/Configurations")).willReturn(serverError()));
         else getJson(dev, path + "/Configurations", results(configurations(id)));
         String links = java.util.regex.Pattern.quote(path) + "/\\$links/Configurations\\('[^']*'\\)";
         prd.stubFor(put(urlPathMatching(links)).atPriority(8).willReturn(aResponse().withStatus(202)));
-        if (id.equals("IF_Fault_AuthRetry")) once(prd, id, put(urlPathMatching(links)).atPriority(7),
-                put(urlPathMatching(links)).atPriority(7), aResponse().withStatus(401), aResponse().withStatus(202));
+        // REQ-702: 구성 값 PUT을 보내지 않으므로 ParamPutFail은 성공한다(이 매핑은 호출되지 않아야 한다).
         if (id.equals("IF_Fault_ParamPutFail")) prd.stubFor(put(urlPathEqualTo(path + "/$links/Configurations('ParamA')")).willReturn(serverError()));
         prd.stubFor(post(urlPathEqualTo(ROOT + "DeployIntegrationDesigntimeArtifact"))
                 .withQueryParam("Id", equalTo("'" + id + "'")).withQueryParam("Version", equalTo("'active'"))
@@ -182,7 +184,7 @@ public final class LocalCpiStubs {
         }
     }
     private static List<Map<String, String>> configurations(String id) {
-        // REQ-506: 민감 키(ApiToken)의 빈 값은 SKIPPED_EMPTY가 된다.
+        // REQ-701: 민감해 보이는 키(ApiToken)의 빈 값도 다른 값과 같게 다룬다.
         if (id.equals("IF_Order_Sync")) return List.of(
                 parameter("Endpoint", "http://dev-backend.localhost/orders", "xsd:string"),
                 parameter("BatchSize", "100", "xsd:integer"), parameter("ApiToken", "", "xsd:string"));
