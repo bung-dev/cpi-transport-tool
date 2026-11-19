@@ -219,6 +219,33 @@ describe('이관 결과', () => {
     expect(callout.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
   });
 
+  it('REQ-707: 실제 이관 결과의 구성 값 상태는 "iFlow와 함께 옮겨짐"(성공 색)이고 구성 값 문제는 0건이다', async () => {
+    const real: TransportResponse = {
+      ...BASE,
+      transportId: 't-real',
+      dryRun: false,
+      packages: [{ packageId: 'PkgTransportDemo', packageName: 'Transport Demo', targetPackage: 'EXISTING' }],
+      summary: { total: 1, succeeded: 1, failed: 0 },
+      results: [{
+        artifactId: 'IF_Order_Sync', status: 'SUCCESS', action: 'UPDATED', deployStatus: 'NOT_REQUESTED', error: null,
+        configurations: [
+          { key: 'Endpoint', value: 'http://dev-backend.localhost/orders', dataType: 'xsd:string', status: 'BUNDLED' },
+          { key: 'ApiToken', value: '', dataType: 'xsd:string', status: 'BUNDLED' },
+        ],
+      }],
+    };
+    render(<TransportResult result={real} />);
+    expect(screen.getByText('구성 값 문제 0건')).toBeInTheDocument();
+    await expandAll();
+    const rows = within(screen.getByRole('table')).getAllByRole('row');
+    expect(rows).toHaveLength(3);
+    for (const row of rows.slice(1)) {
+      expect(within(row).getByText('iFlow와 함께 옮겨짐').className).toContain('bg-success-bg');
+    }
+    expect(screen.queryByText('BUNDLED')).toBeNull();
+    expect(screen.queryByText('복사됨')).toBeNull();
+  });
+
   it('REQ-510: 구성 값 표 머리는 키·값·상태이고 키·값은 고정폭에 긴 값은 줄바꿈되며 null은 ink-tertiary "—"다', async () => {
     render(<TransportResult result={BASE} />);
     await expandAll();

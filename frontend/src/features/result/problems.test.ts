@@ -18,7 +18,8 @@ describe('문제 항목 판정', () => {
     ['PLANNED', false],
     ['COPIED', false],
     ['SKIPPED_EMPTY', false],
-  ])('REQ-511: 구성 값 %s의 문제 항목 여부는 %s', (status, expected) => {
+    ['BUNDLED', false],
+  ])('REQ-511, REQ-707: 구성 값 %s의 문제 항목 여부는 %s', (status, expected) => {
     expect(isProblemConfiguration(cfg(status))).toBe(expected);
   });
 
@@ -26,6 +27,7 @@ describe('문제 항목 판정', () => {
     expect(isProblemArtifact(art('FAILED', []))).toBe(true);
     expect(isProblemArtifact(art('SUCCESS', ['COPIED', 'FAILED']))).toBe(true);
     expect(isProblemArtifact(art('SUCCESS', ['COPIED', 'PLANNED', 'SKIPPED_EMPTY']))).toBe(false);
+    expect(isProblemArtifact(art('SUCCESS', ['BUNDLED', 'BUNDLED']))).toBe(false);
     expect(problemCount(art('SUCCESS', ['COPIED', 'FAILED', 'FAILED']))).toBe(2);
     expect(totalProblemCount([art('SUCCESS', ['FAILED']), art('FAILED', []), art('SUCCESS', ['FAILED', 'SKIPPED_EMPTY'])])).toBe(2);
   });
