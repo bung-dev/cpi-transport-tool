@@ -11,6 +11,7 @@ import { TenantTab } from './features/tenants/TenantTab';
 import { StatusChips } from './features/tenants/StatusChips';
 import { TemplatesScreen } from './features/templates/TemplatesScreen';
 import { AuditScreen } from './features/audit/AuditScreen';
+import { SettingsScreen } from './features/settings/SettingsScreen';
 import { CommandPalette, type Command } from './features/palette/CommandPalette';
 import { navigate, readRoute, ROUTES } from './app/routes';
 import type { TransportTemplate } from './api/types';
@@ -118,6 +119,7 @@ function AppShell() {
         {route === 'tenants' && <TenantTab initiallyCreate={create === 'tenant'} />}
         {route === 'templates' && <TemplatesScreen initiallyCreate={create === 'template'} onUse={useTemplate} />}
         {route === 'audit' && <AuditScreen />}
+        {route === 'settings' && <SettingsScreen />}
       </div>
     </main>
     {palette && <CommandPalette overlaid={palette.overlaid} previewReason={wizard.previewReason} realReason={wizard.realReason} onClose={() => setPalette(null)} onCommand={command} />}

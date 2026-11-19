@@ -14,6 +14,7 @@ export const STATUS_BADGE_TONES: Record<StatusKind, Record<string, StatusTone>> 
   },
   configurationStatus: {
     PLANNED: 'accent',
+    BUNDLED: 'success',
     COPIED: 'success',
     SKIPPED_EMPTY: 'caution',
     FAILED: 'danger',
@@ -39,6 +40,7 @@ export function badgeTone(kind: StatusKind, value: string): StatusTone {
 
 const CONFIGURATION_LABELS: Record<string, string> = {
   PLANNED: '복사 예정',
+  BUNDLED: 'iFlow와 함께 옮겨짐',
   COPIED: '복사됨',
   SKIPPED_EMPTY: '빈 값이라 건너뜀',
   FAILED: '실패',

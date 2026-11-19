@@ -1,6 +1,7 @@
 export const ROUTES = [
   ['dashboard', '대시보드'], ['transport', '새 이관'], ['templates', '템플릿'],
   ['history', '이관 이력'], ['tenants', '테넌트'], ['audit', '감사 이력'],
+  ['settings', '설정'],
 ] as const;
 export type Route = typeof ROUTES[number][0];
 export function readRoute(): Route {

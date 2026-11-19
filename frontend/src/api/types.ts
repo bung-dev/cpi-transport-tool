@@ -5,7 +5,7 @@ export interface ArtifactSummary {
   version: string;
 }
 
-export type ConfigurationStatus = 'PLANNED' | 'COPIED' | 'SKIPPED_EMPTY' | 'FAILED';
+export type ConfigurationStatus = 'PLANNED' | 'BUNDLED' | 'COPIED' | 'SKIPPED_EMPTY' | 'FAILED';
 export type ArtifactStatus = 'SUCCESS' | 'FAILED';
 export type TransportAction = 'CREATED' | 'UPDATED' | 'NONE';
 export type DeployStatus = 'STARTED' | 'ERROR' | 'TIMEOUT' | 'NOT_REQUESTED' | 'SKIPPED_DRY_RUN';
@@ -88,7 +88,12 @@ export interface TransportTemplate extends TemplateInput {
   id: string; createdAt: string; updatedAt: string; usable: boolean;
   unusableReason?: 'SOURCE_TENANT_MISSING' | 'TARGET_TENANT_MISSING';
 }
-export type AuditCategory = 'tenant' | 'template' | 'transport';
+export interface Settings {
+  previewConcurrency: number;
+  transportConcurrency: number;
+}
+
+export type AuditCategory = 'tenant' | 'template' | 'transport' | 'settings';
 export interface AuditEntry {
   id: string; time: string; category: AuditCategory;
   action: 'created' | 'updated' | 'deleted' | 'preview' | 'transport';
