@@ -130,32 +130,19 @@ test('QA-180: 생성(POST) 단계의 400 빈 본문 - 안내 없음', async ({ r
   await delMap(request, 18082, id);
 });
 
-test('QA-181: Configurations 갱신(CONFIGURATION_UPDATE) 400 빈 본문 - 안내 없음', async ({ request }) => {
+test('QA-181: 실제 이관은 Configurations PUT을 보내지 않고 잠금 안내도 없다(20261119 REQ-701, 구성 값은 iFlow와 함께 옮겨짐)', async ({ request }) => {
   const rec = R('QA-181');
-  // 기준 흐름(두 아티팩트)에서 Configurations PUT 가 일어나는 아티팩트를 먼저 찾는다. 사전 조건은 IF_Order_Sync 를 말하지만
-  // 관찰 결과 그 아티팩트에는 Configurations PUT 이 없으면 UNVERIFIABLE 이므로, PUT 이 있는 아티팩트로 같은 단계를 검증한다(기대는 그대로).
+  // 예전 QA-181은 "Configurations PUT 400 빈 본문이면 안내 없음"이었다. REQ-701로 구성 값 PUT 자체가 없어졌으므로
+  // 그 단계가 실제 이관에 없음을 확인한다(사람 승인 2026-11-19).
   await stubReset(request);
-  const base = await xport(request, { artifactIds: ['IF_Order_Sync', 'IF_Customer_Push'] });
-  const baseReqs = (await stubAll(request, 18082)).filter((q) => !q.url.startsWith('/oauth/token'));
-  rec.baselineStub18082 = baseReqs;
-  rec.baselineResult = brief(base);
-  const cfgPuts = baseReqs.filter((q) => q.method === 'PUT' && /Configurations/.test(dec(q.url)));
-  rec.configPutsInBaseline = cfgPuts.map((q) => dec(q.url));
-  rec.orderSyncHasConfigPut = cfgPuts.some((q) => /IF_Order_Sync/.test(dec(q.url)));
-  if (!cfgPuts.length) {
-    rec.unverifiable = 'Configurations PUT 가 기준 흐름 요청 기록에 어떤 아티팩트에도 없음';
-    throw new Error('UNVERIFIABLE: 기준 흐름에 Configurations PUT 요청이 없다');
-  }
-  const target = /IF_Customer_Push/.test(dec(cfgPuts[0].url)) ? 'IF_Customer_Push' : 'IF_Order_Sync';
-  rec.targetArtifact = target;
-  const id = await addMap(request, 18082, { priority: 1, request: { method: 'PUT', urlPathPattern: '.*Configurations.*' }, response: { status: 400 } });
-  await stubReset(request);
-  const r = await xport(request, { artifactIds: [target] });
+  const r = await xport(request, { artifactIds: ['IF_Order_Sync', 'IF_Customer_Push'] });
   rec.result = brief(r);
   rec.stub18082 = (await stubAll(request, 18082)).filter((q) => !q.url.startsWith('/oauth/token'));
+  expect(r.status).toBe(200);
+  expect(r.json.results.map((x: any) => x.status)).toEqual(['SUCCESS', 'SUCCESS']);
+  expect(r.json.results.flatMap((x: any) => x.configurations.map((c: any) => c.status)).every((s: string) => s === 'BUNDLED'), '구성 값은 모두 BUNDLED').toBe(true);
+  expect(rec.stub18082.filter((q: any) => q.method === 'PUT' && /Configurations/.test(dec(q.url))), 'Configurations PUT 0회').toEqual([]);
   expect(countOf(msgOf(r), NOTICE), '안내 문구 없음').toBe(0);
-  expect(rec.stub18082.some((q: any) => q.method === 'PUT' && /Configurations/.test(dec(q.url))), 'Configurations PUT 이 400 매핑에 닿음').toBe(true);
-  await delMap(request, 18082, id);
 });
 
 test('QA-182: DEPLOY 단계 400 빈 본문 - 안내 없음', async ({ request }) => {
