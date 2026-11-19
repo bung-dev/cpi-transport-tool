@@ -123,7 +123,7 @@ class RealSampleEndToEndTests {
         assertThat(target.getAllServeEvents()).isEmpty();
     }
 
-    @Test @DisplayName("REQ-306 AC-2·AC-3 / REQ-308 AC-3 / REQ-501 / REQ-502: registered target mock receives the unchanged bundle, the copied parameter and deployment")
+    @Test @DisplayName("REQ-306 AC-2·AC-3 / REQ-308 AC-3 / REQ-501 / REQ-502: registered target mock receives the unchanged bundle carrying the parameter and deployment without a configuration PUT (REQ-701)")
     void req306_ac2_createdAndDeployed() throws Exception {
         var response = transport(false);
         assertThat(response.summary().failed()).isZero();
@@ -135,7 +135,7 @@ class RealSampleEndToEndTests {
             assertThat(result.action()).isEqualTo(TransportAction.CREATED);
             assertThat(result.deployStatus()).isEqualTo(DeployStatus.STARTED);
             assertThat(result.configurations()).containsExactly(
-                    new ConfigurationItem("SampleMessage", "DEV_MESSAGE", "xsd:string", ConfigurationStatus.COPIED));
+                    new ConfigurationItem("SampleMessage", "DEV_MESSAGE", "xsd:string", ConfigurationStatus.BUNDLED));
         });
         var uploads = target.findAll(postRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts")));
         assertThat(uploads).hasSize(1);
@@ -149,10 +149,8 @@ class RealSampleEndToEndTests {
         assertThat(entries.get("META-INF/MANIFEST.MF")).isEqualTo(original.get("META-INF/MANIFEST.MF"));
         var manifest = new Manifest(new ByteArrayInputStream(entries.get("META-INF/MANIFEST.MF")));
         assertThat(manifest.getMainAttributes().getValue("Bundle-SymbolicName")).isEqualTo(RealSampleStub.ID + "; singleton:=true");
-        var updates = target.findAll(putRequestedFor(urlPathEqualTo(RealSampleStub.ARTIFACT + "/$links/Configurations('SampleMessage')")));
-        assertThat(updates).hasSize(1);
-        assertThat(JSON.readTree(updates.get(0).getBody()).path("ParameterValue").asString()).isEqualTo("DEV_MESSAGE");
-        assertThat(JSON.readTree(updates.get(0).getBody()).path("DataType").asString()).isEqualTo("xsd:string");
+        // REQ-701: the parameter travels inside the uploaded bundle; no configuration PUT is sent.
+        target.verify(0, putRequestedFor(urlPathMatching(".*/\\$links/Configurations.*")));
         target.verify(1, postRequestedFor(urlPathEqualTo("/api/v1/DeployIntegrationDesigntimeArtifact")));
         target.verify(1, getRequestedFor(urlPathEqualTo("/api/v1/IntegrationRuntimeArtifacts('CPITT_Sample_Push')")));
         target.verify(1, postRequestedFor(urlPathEqualTo("/oauth/token")));

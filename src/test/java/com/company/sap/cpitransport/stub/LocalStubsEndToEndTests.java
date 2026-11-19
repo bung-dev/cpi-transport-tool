@@ -69,7 +69,7 @@ class LocalStubsEndToEndTests {
     private static final String CUSTOMER = "/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Customer_Push',Version='active')";
 
     @Test
-    @DisplayName("REQ-506, REQ-501, REQ-502, REQ-505: localhost app uploads both fixtures unchanged and copies every source configuration value without reading the target while a leftover mapping-file setting is ignored")
+    @DisplayName("REQ-506, REQ-501, REQ-505, REQ-701: localhost app uploads both fixtures unchanged, reports every source configuration value as BUNDLED and sends no configuration request while a leftover mapping-file setting is ignored")
     void req506_realTransportCopiesConfigurations() throws Exception {
         var response = transport(false);
         assertThat(response.summary().failed()).isZero();
@@ -79,27 +79,17 @@ class LocalStubsEndToEndTests {
         assertThat(order.action()).isEqualTo(TransportAction.UPDATED);
         assertThat(customer.action()).isEqualTo(TransportAction.CREATED);
         assertThat(order.configurations()).containsExactly(
-                new ConfigurationItem("Endpoint", "http://dev-backend.localhost/orders", "xsd:string", ConfigurationStatus.COPIED),
-                new ConfigurationItem("BatchSize", "100", "xsd:integer", ConfigurationStatus.COPIED),
-                new ConfigurationItem("ApiToken", "", "xsd:string", ConfigurationStatus.SKIPPED_EMPTY));
+                new ConfigurationItem("Endpoint", "http://dev-backend.localhost/orders", "xsd:string", ConfigurationStatus.BUNDLED),
+                new ConfigurationItem("BatchSize", "100", "xsd:integer", ConfigurationStatus.BUNDLED),
+                new ConfigurationItem("ApiToken", "", "xsd:string", ConfigurationStatus.BUNDLED));
         assertThat(customer.configurations()).containsExactly(
-                new ConfigurationItem("ReceiverUrl", "http://dev-receiver.localhost/customers", "xsd:string", ConfigurationStatus.COPIED),
-                new ConfigurationItem("Timeout", "30000", "xsd:integer", ConfigurationStatus.COPIED),
-                new ConfigurationItem("ClientPassword", "dummy-dev-pass-XYZ", "xsd:string", ConfigurationStatus.COPIED),
-                new ConfigurationItem("LogLevel", "INFO", "xsd:string", ConfigurationStatus.COPIED));
-        // REQ-502: 원본 키를 모두 원본 DataType으로 PUT하고, 빈 민감 값은 쓰지 않으며, 대상 구성 값은 읽지 않는다.
-        stubs.prd().verify(1, putRequestedFor(urlPathEqualTo(ORDER + "/$links/Configurations('Endpoint')"))
-                .withRequestBody(equalToJson("{\"ParameterValue\":\"http://dev-backend.localhost/orders\",\"DataType\":\"xsd:string\"}")));
-        stubs.prd().verify(1, putRequestedFor(urlPathEqualTo(CUSTOMER + "/$links/Configurations('Timeout')"))
-                .withRequestBody(equalToJson("{\"ParameterValue\":\"30000\",\"DataType\":\"xsd:integer\"}")));
-        stubs.prd().verify(1, putRequestedFor(urlPathEqualTo(CUSTOMER + "/$links/Configurations('ClientPassword')"))
-                .withRequestBody(equalToJson("{\"ParameterValue\":\"dummy-dev-pass-XYZ\",\"DataType\":\"xsd:string\"}")));
-        stubs.prd().verify(0, putRequestedFor(urlPathEqualTo(ORDER + "/$links/Configurations('ApiToken')")));
-        stubs.prd().verify(6, putRequestedFor(urlPathMatching(".*/\\$links/Configurations.*")));
+                new ConfigurationItem("ReceiverUrl", "http://dev-receiver.localhost/customers", "xsd:string", ConfigurationStatus.BUNDLED),
+                new ConfigurationItem("Timeout", "30000", "xsd:integer", ConfigurationStatus.BUNDLED),
+                new ConfigurationItem("ClientPassword", "dummy-dev-pass-XYZ", "xsd:string", ConfigurationStatus.BUNDLED),
+                new ConfigurationItem("LogLevel", "INFO", "xsd:string", ConfigurationStatus.BUNDLED));
+        // REQ-701: 구성 값은 업로드한 번들과 함께 옮겨진다. 대상 구성 값은 쓰지도 읽지도 않는다.
+        stubs.prd().verify(0, putRequestedFor(urlPathMatching(".*/\\$links/Configurations.*")));
         stubs.prd().verify(0, getRequestedFor(urlPathMatching(".*/Configurations")));
-        // REQ-502: 원본 구성 값 순서대로 PUT한다.
-        assertThat(stubs.prd().findAll(putRequestedFor(urlPathMatching(java.util.regex.Pattern.quote(CUSTOMER) + "/\\$links/Configurations.*"))))
-                .extracting(r -> putKey(r.getUrl())).containsExactly("ReceiverUrl", "Timeout", "ClientPassword", "LogLevel");
         // REQ-501: 업로드 내용은 원본 zip과 바이트 단위로 같다.
         var update = stubs.prd().findAll(putRequestedFor(urlPathEqualTo(ORDER)));
         assertThat(update).hasSize(1);
@@ -112,7 +102,7 @@ class LocalStubsEndToEndTests {
         }
     }
     @Test
-    @DisplayName("REQ-506, REQ-503: preview reads only the source, shows PLANNED and SKIPPED_EMPTY together and sends nothing to the target")
+    @DisplayName("REQ-506, REQ-503, REQ-701: preview reads only the source, shows every value including the empty sensitive one as PLANNED and sends nothing to the target")
     void req506_previewPlansAndReadsTarget() throws Exception {
         var byId = byId(transport(true));
         var order = byId.get("IF_Order_Sync");
@@ -120,7 +110,7 @@ class LocalStubsEndToEndTests {
         assertThat(order.action()).isEqualTo(TransportAction.NONE);
         assertThat(order.configurations()).extracting(ConfigurationItem::key, ConfigurationItem::status).containsExactly(
                 tuple("Endpoint", ConfigurationStatus.PLANNED), tuple("BatchSize", ConfigurationStatus.PLANNED),
-                tuple("ApiToken", ConfigurationStatus.SKIPPED_EMPTY));
+                tuple("ApiToken", ConfigurationStatus.PLANNED));
         assertThat(customer.configurations()).extracting(ConfigurationItem::key, ConfigurationItem::status).containsExactly(
                 tuple("ReceiverUrl", ConfigurationStatus.PLANNED), tuple("Timeout", ConfigurationStatus.PLANNED),
                 tuple("ClientPassword", ConfigurationStatus.PLANNED), tuple("LogLevel", ConfigurationStatus.PLANNED));
@@ -129,15 +119,15 @@ class LocalStubsEndToEndTests {
         assertThat(stubs.prd().getAllServeEvents()).isEmpty();
     }
     @Test
-    @DisplayName("REQ-506, REQ-501, REQ-502: fault fixtures keep PUT failure, source read 500 and PUT 401 retry while unparsable bundles now upload unchanged")
+    @DisplayName("REQ-506, REQ-501, REQ-702: ParamPutFail now succeeds without configuration PUT, source read 500 stays, upload POST 401 is retried once and unparsable bundles upload unchanged")
     void req506_faultFixtures() throws Exception {
         var byId = byId(transport("{\"packageId\":\"PkgFaultDemo\",\"dryRun\":false,\"artifactIds\":"
                 + "[\"IF_Fault_ParamPutFail\",\"IF_Fault_BadXml\",\"IF_Fault_NotZip\",\"IF_Fault_ConfigRead500\",\"IF_Fault_AuthRetry\"]}"));
         var put = byId.get("IF_Fault_ParamPutFail");
-        assertThat(put.error().code()).isEqualTo("CONFIGURATION_UPDATE_FAILED");
-        assertThat(put.error().message()).contains("ParamA: HTTP 500").doesNotContain("a-dev", "b-dev");
+        assertThat(put.status()).isEqualTo(ArtifactStatus.SUCCESS);
+        assertThat(put.error()).isNull();
         assertThat(put.configurations()).extracting(ConfigurationItem::key, ConfigurationItem::status).containsExactly(
-                tuple("ParamA", ConfigurationStatus.FAILED), tuple("ParamB", ConfigurationStatus.COPIED));
+                tuple("ParamA", ConfigurationStatus.BUNDLED), tuple("ParamB", ConfigurationStatus.BUNDLED));
         assertThat(byId.get("IF_Fault_BadXml").status()).isEqualTo(ArtifactStatus.SUCCESS);
         assertThat(byId.get("IF_Fault_NotZip").status()).isEqualTo(ArtifactStatus.SUCCESS);
         var read = byId.get("IF_Fault_ConfigRead500");
@@ -148,10 +138,12 @@ class LocalStubsEndToEndTests {
                 .withRequestBody(matchingJsonPath("$.Id", equalTo("IF_Fault_ConfigRead500"))));
         var retry = byId.get("IF_Fault_AuthRetry");
         assertThat(retry.status()).isEqualTo(ArtifactStatus.SUCCESS);
-        assertThat(retry.configurations()).extracting(ConfigurationItem::status).containsExactly(ConfigurationStatus.COPIED);
-        // REQ-506: 401 재시도는 대상 구성 값 PUT에서 난다(같은 키 PUT 2회: 401 뒤 재시도 202).
-        stubs.prd().verify(2, putRequestedFor(urlPathEqualTo(
-                "/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Fault_AuthRetry',Version='active')/$links/Configurations('RetryKey')")));
+        assertThat(retry.action()).isEqualTo(TransportAction.CREATED);
+        assertThat(retry.configurations()).extracting(ConfigurationItem::status).containsExactly(ConfigurationStatus.BUNDLED);
+        // REQ-702: 401 재시도는 업로드 POST에서 난다(같은 아티팩트 POST 2회: 401 뒤 재시도 201).
+        stubs.prd().verify(2, postRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts"))
+                .withRequestBody(matchingJsonPath("$.Id", equalTo("IF_Fault_AuthRetry"))));
+        stubs.prd().verify(0, putRequestedFor(urlPathMatching(".*/\\$links/Configurations.*")));
         var notZip = stubs.prd().findAll(postRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts"))
                 .withRequestBody(matchingJsonPath("$.Id", equalTo("IF_Fault_NotZip"))));
         assertThat(notZip).hasSize(1);

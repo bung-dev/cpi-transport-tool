@@ -82,7 +82,7 @@ class TenantTransportWireMockTests {
         assertThat(response.summary().failed()).isZero();
         assertThat(response.results()).hasSize(2).allSatisfy(r -> assertThat(r.deployStatus()).isEqualTo(DeployStatus.STARTED));
         assertThat(response.results()).extracting(ArtifactResult::action).contains(TransportAction.CREATED, TransportAction.UPDATED);
-        assertThat(response.results().stream().flatMap(r -> r.configurations().stream())).anyMatch(c -> c.status() == ConfigurationStatus.COPIED);
+        assertThat(response.results().stream().flatMap(r -> r.configurations().stream())).allMatch(c -> c.status() == ConfigurationStatus.BUNDLED);
     }
 
     @Test @DisplayName("REQ-308 AC-3·AC-7: registered-only tenants route downloads, upload, parameters, deployment and runtime with separate caches")
@@ -98,13 +98,11 @@ class TenantTransportWireMockTests {
         stubs.prd().verify(1, putRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Order_Sync',Version='active')")));
         stubs.dev().verify(getRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Customer_Push',Version='active')/Configurations")));
         stubs.prd().verify(0, getRequestedFor(urlPathMatching(".*/Configurations")));
-        stubs.prd().verify(1, putRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Customer_Push',Version='active')/$links/Configurations('ReceiverUrl')"))
-                .withRequestBody(equalToJson("{\"ParameterValue\":\"http://dev-receiver.localhost/customers\",\"DataType\":\"xsd:string\"}")));
-        stubs.prd().verify(1, putRequestedFor(urlPathEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Customer_Push',Version='active')/$links/Configurations('Timeout')"))
-                .withRequestBody(equalToJson("{\"ParameterValue\":\"30000\",\"DataType\":\"xsd:integer\"}")));
+        // REQ-701: configuration values travel inside the uploaded bundle; no configuration PUT.
+        stubs.prd().verify(0, putRequestedFor(urlPathMatching(".*/\\$links/Configurations.*")));
         assertThat(response.results().stream().flatMap(r -> r.configurations().stream()))
                 .filteredOn(c -> c.key().equals("Timeout"))
-                .singleElement().isEqualTo(new ConfigurationItem("Timeout", "30000", "xsd:integer", ConfigurationStatus.COPIED));
+                .singleElement().isEqualTo(new ConfigurationItem("Timeout", "30000", "xsd:integer", ConfigurationStatus.BUNDLED));
         stubs.prd().verify(2, postRequestedFor(urlPathEqualTo("/api/v1/DeployIntegrationDesigntimeArtifact")));
         stubs.prd().verify(getRequestedFor(urlPathEqualTo("/api/v1/IntegrationRuntimeArtifacts('IF_Customer_Push')")));
         assertThat(stubs.dev().getAllServeEvents()).noneMatch(e -> e.getRequest().getMethod().getName().equals("PUT"));
