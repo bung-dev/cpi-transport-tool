@@ -69,7 +69,7 @@ describe('REQ-430 / REQ-423 대상 연결 확인 실패(사람 결정 2026-11-16
     expect(real).toHaveAccessibleDescription(expect.stringContaining('운영'));
     expect(real).toHaveAccessibleDescription(expect.stringContaining('연결 확인'));
     await userEvent.click(stepButton('실제 이관'));
-    const btn = screen.getByRole('button', { name: '운영로 이관' });
+    const btn = screen.getByRole('button', { name: '실제 이관 실행' });
     expect(btn).toBeDisabled();
     expect(btn).toHaveAccessibleDescription(expect.stringContaining('연결 확인'));
   });
@@ -165,12 +165,25 @@ describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
     expect(currentStep()).toBe('실제 이관');
   });
 
-  it('REQ-423: 실제 이관 단계의 버튼은 "<대상 이름>로 이관"이고 확인창에서 배포를 켜면 deploy: true로 보낸다', async () => {
+  it('REQ-803: 실제 이관 단계 카드는 제목 "실제 이관", 설명 "미리보기한 패키지·아티팩트를 대상 테넌트에 업로드합니다.", 버튼 "실제 이관 실행"이고 테넌트 이름·경로를 넣지 않는다', async () => {
+    setup();
+    await previewOne();
+    await userEvent.click(stepButton('실제 이관'));
+    const btn = screen.getByRole('button', { name: '실제 이관 실행' });
+    // Card: 머리 div > h3 제목. 카드 루트는 제목의 조부모다.
+    const card = screen.getByRole('heading', { level: 3, name: '실제 이관' }).parentElement!.parentElement as HTMLElement;
+    expect(card).toContainElement(btn);
+    expect(within(card).getByText('미리보기한 패키지·아티팩트를 대상 테넌트에 업로드합니다.')).toBeInTheDocument();
+    expect(card.textContent).not.toMatch(/운영|개발|→|미리보기와 같은 구성|로 이관/);
+    expect(screen.queryByRole('button', { name: /로 이관$/ })).toBeNull();
+  });
+
+  it('REQ-423, REQ-803: 실제 이관 단계의 버튼은 "실제 이관 실행"이고 확인창에서 배포를 켜면 deploy: true로 보낸다', async () => {
     const fn = setup();
     await previewOne();
     await userEvent.click(stepButton('실제 이관'));
     expect(currentStep()).toBe('실제 이관');
-    await userEvent.click(screen.getByRole('button', { name: '운영로 이관' }));
+    await userEvent.click(screen.getByRole('button', { name: '실제 이관 실행' }));
     const dialog = confirmDialog();
     await userEvent.click(within(dialog).getByRole('switch', { name: '배포' }));
     await userEvent.click(await runButton());
@@ -182,7 +195,7 @@ describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
     const fn = setup();
     await previewOne();
     await userEvent.click(stepButton('실제 이관'));
-    const opener = screen.getByRole('button', { name: '운영로 이관' });
+    const opener = screen.getByRole('button', { name: '실제 이관 실행' });
     await userEvent.click(opener);
     await userEvent.click(within(confirmDialog()).getByRole('switch', { name: '배포' }));
     await userEvent.click(within(confirmDialog()).getByRole('button', { name: '취소' }));
@@ -237,7 +250,7 @@ describe('REQ-423 읽기 전용 (ADR-018)', () => {
     await userEvent.click(fromResult);
     expect(screen.queryByRole('dialog', { name: '실제 이관 확인' })).toBeNull();
     await userEvent.click(stepButton('실제 이관'));
-    const real = screen.getByRole('button', { name: '운영로 이관' });
+    const real = screen.getByRole('button', { name: '실제 이관 실행' });
     expect(real).toBeDisabled();
     if (notice) expect(screen.getByText(notice)).toBeInTheDocument();
     await userEvent.click(real);

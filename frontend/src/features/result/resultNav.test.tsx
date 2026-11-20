@@ -5,7 +5,7 @@ import type { ArtifactResult, TransportResponse } from '../../api/types';
 import { packagesOf } from '../../test/mockFetch';
 import { TransportResult } from './TransportResult';
 
-// S3 REQ-424·REQ-511: 결과 머리(경로·템플릿 이름), "구성 값 문제 N건"·"실패 아티팩트 M개", 왼쪽 탐색 목록 → 오른쪽 상세 카드.
+// S3 REQ-424·REQ-511: 결과 머리(경로·템플릿 이름), "Externalized Parameters 문제 N건"(REQ-802)·"실패 아티팩트 M개", 왼쪽 탐색 목록 → 오른쪽 상세 카드.
 afterEach(() => vi.restoreAllMocks());
 
 const art = (artifactId: string, over: Partial<ArtifactResult> = {}): ArtifactResult => ({
@@ -49,9 +49,9 @@ describe('결과 머리 (REQ-424)', () => {
     expect(within(region()).queryByText(/^템플릿 /)).toBeNull();
   });
 
-  it('REQ-424, REQ-511: "구성 값 문제 N건"은 구성 값 FAILED만 세고 "실패 아티팩트 M개"는 따로 보인다', () => {
+  it('REQ-424, REQ-511, REQ-802: "Externalized Parameters 문제 N건"은 구성 값 FAILED만 세고 "실패 아티팩트 M개"는 따로 보인다', () => {
     render(<TransportResult result={RESULT} />);
-    expect(within(region()).getByText('구성 값 문제 1건')).toBeInTheDocument();
+    expect(within(region()).getByText('Externalized Parameters 문제 1건')).toBeInTheDocument();
     expect(within(region()).getByText('실패 아티팩트 1개')).toBeInTheDocument();
     expect(within(region()).queryByText(/^문제 항목 \d+건$/)).toBeNull();
   });
@@ -61,9 +61,7 @@ describe('탐색 목록과 상세 카드 (REQ-424)', () => {
   it('REQ-424: 왼쪽 "결과 바로가기" 목록에 아티팩트마다 항목이 하나 있고 DOM 순서상 카드보다 앞이다', () => {
     render(<TransportResult result={RESULT} />);
     const items = jumpItems();
-    expect(items.map((b) => b.textContent?.split(/\s/)[0])).toEqual(['A_Clean', 'B_Mismatch', 'C_Failed']);
-    // 항목 이름은 artifactId만이 아니라 상태 글자를 함께 가진다(카드 접기 버튼과 이름이 겹치지 않는다)
-    for (const b of items) expect(b.textContent).not.toBe(b.textContent?.split(/\s/)[0]);
+    expect(items.map((b) => b.textContent)).toEqual(['A_Clean', 'B_Mismatch', 'C_Failed']);
     expect(jumpList().compareDocumentPosition(toggle('A_Clean')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(jumpList().querySelector('svg')).toBeNull();
   });
@@ -101,6 +99,34 @@ describe('탐색 목록과 상세 카드 (REQ-424)', () => {
   });
 });
 
+describe('바로가기 목록은 아티팩트 이름만 (REQ-801)', () => {
+  it('REQ-801: 실패·문제 아티팩트도 "실패"·"문제 n건"을 붙이지 않고 이름만 보이며, 실패만 위험 글자색이다', () => {
+    render(<TransportResult result={RESULT} />);
+    const [a, b, c] = jumpItems();
+    expect([a.textContent, b.textContent, c.textContent]).toEqual(['A_Clean', 'B_Mismatch', 'C_Failed']);
+    expect(jumpList().textContent).not.toMatch(/실패|문제|구성 값|Externalized/);
+    expect(c.className).toContain('text-danger-fg');
+    expect(a.className).toContain('text-ink-secondary');
+    expect(a.className).not.toContain('text-danger-fg');
+    expect(b.className).toContain('text-ink-secondary');
+  });
+
+  it('REQ-801: "문제 항목만 보기"를 켜면 문제 아티팩트 이름만 남고, 끄면 전부 돌아온다', async () => {
+    render(<TransportResult result={RESULT} />);
+    const sw = within(region()).getByRole('switch', { name: '문제 항목만 보기' });
+    await userEvent.click(sw);
+    expect(jumpItems().map((b) => b.textContent)).toEqual(['B_Mismatch', 'C_Failed']);
+    await userEvent.click(sw);
+    expect(jumpItems().map((b) => b.textContent)).toEqual(['A_Clean', 'B_Mismatch', 'C_Failed']);
+  });
+
+  it('REQ-801: 예전 이력(configurations 없음)도 이름만 보인다', () => {
+    const legacy = { ...RESULT, results: [{ ...art('L_Old'), configurations: undefined }] } as unknown as TransportResponse;
+    render(<TransportResult result={legacy} />);
+    expect(jumpItems().map((b) => b.textContent)).toEqual(['L_Old']);
+  });
+});
+
 describe('민감 값과 알 수 없는 상태 (REQ-424 실패)', () => {
   it('REQ-510: 민감 키의 구성 값도 서버가 보낸 값 그대로 보인다(ADR-003 대체)', () => {
     const sensitive: TransportResponse = {
@@ -116,7 +142,7 @@ describe('민감 값과 알 수 없는 상태 (REQ-424 실패)', () => {
     expect(within(region()).getByText('복사됨').className).toContain('bg-success-bg');
   });
 
-  it('REQ-510: 탐색 목록의 짧은 상태 글자는 "구성 값 n개" 또는 "구성 값 없음"이다', () => {
+  it('REQ-801: 바로가기 항목의 글자는 artifactId 하나뿐이고 접근 가능한 이름은 "<artifactId> 바로가기"다(구성 값 수·없음 글자 없음)', () => {
     const list: TransportResponse = {
       ...RESULT,
       results: [
@@ -129,9 +155,13 @@ describe('민감 값과 알 수 없는 상태 (REQ-424 실패)', () => {
     };
     render(<TransportResult result={list} />);
     const [two, none] = jumpItems();
-    expect(two).toHaveTextContent('구성 값 2개');
-    expect(none).toHaveTextContent('구성 값 없음');
-    expect(jumpList().textContent).not.toMatch(/치환/);
+    expect(two.textContent).toBe('N_Two');
+    expect(none.textContent).toBe('N_None');
+    expect(within(jumpList()).getByRole('button', { name: 'N_Two 바로가기' })).toBe(two);
+    expect(within(jumpList()).getByRole('button', { name: 'N_None 바로가기' })).toBe(none);
+    // 카드 접기 버튼(이름 = artifactId)과 이름이 겹치지 않는다
+    expect(within(region()).getAllByRole('button', { name: 'N_Two' })).toHaveLength(1);
+    expect(jumpList().textContent).not.toMatch(/구성 값|Externalized|치환/);
   });
 
   it('REQ-424: 알 수 없는 상태 값은 중립 배지로 글자 그대로 보인다', () => {

@@ -103,8 +103,8 @@ describe('이관 결과', () => {
     expect(within(rows[2]).getAllByText('—')).toHaveLength(1);
     expect(within(rows[2]).getByText('빈 값이라 건너뜀').className).toContain('bg-caution-bg');
     expect(within(rows[3]).getByText('dummy-dev-pass-ui')).toBeInTheDocument();
-    expect(screen.getAllByRole('heading', { level: 5, name: '구성 값' })).toHaveLength(2);
-    expect(screen.getByText('구성 값 없음')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 5, name: 'Externalized Parameters' })).toHaveLength(2);
+    expect(screen.getByText('Externalized Parameters 없음')).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/치환|매핑되지 않은 키/);
   });
 
@@ -235,7 +235,7 @@ describe('이관 결과', () => {
       }],
     };
     render(<TransportResult result={real} />);
-    expect(screen.getByText('구성 값 문제 0건')).toBeInTheDocument();
+    expect(screen.getByText('Externalized Parameters 문제 0건')).toBeInTheDocument();
     await expandAll();
     const rows = within(screen.getByRole('table')).getAllByRole('row');
     expect(rows).toHaveLength(3);
@@ -292,7 +292,10 @@ describe('이관 결과', () => {
     render(<TransportResult result={BASE} />);
     await expandAll();
     for (const t of ['t-1', 'PkgTransportDemo', 'IF_Order_Sync', 'TargetSystem', 'DEV_ERP']) {
-      expect(screen.getByText(t).className, t).toContain('font-mono');
+      // REQ-801: 바로가기 목록 항목 글자도 artifactId 하나뿐이라 목록 밖(카드·머리)의 요소만 본다.
+      const [el, ...rest] = screen.getAllByText(t).filter((e) => !e.closest('nav'));
+      expect(rest, t).toHaveLength(0);
+      expect(el.className, t).toContain('font-mono');
     }
     for (const l of ['전체', '성공', '실패']) {
       expect((screen.getByText(l).nextElementSibling as HTMLElement).className).toContain('tabular-nums');
@@ -346,7 +349,7 @@ describe('이관 결과', () => {
     expect(expandedOf('D_Planned')).toBe('false');
     expect(screen.getByRole('heading', { level: 4, name: 'B_Problem' })).toContainElement(toggle('B_Problem'));
     // 펼친 카드만 구성 값 소제목을 보인다
-    expect(screen.getAllByRole('heading', { level: 5, name: '구성 값' })).toHaveLength(2);
+    expect(screen.getAllByRole('heading', { level: 5, name: 'Externalized Parameters' })).toHaveLength(2);
   });
 
   it('REQ-105 AC-3: 아티팩트가 1개뿐이면 문제가 없어도 펼침이다', () => {
@@ -369,17 +372,17 @@ describe('이관 결과', () => {
 
   it('REQ-105 AC-3, REQ-510: 접힌 카드에는 머리와 요약 한 줄 "구성 값 n개 · 문제 m건"만 보이고 펼치면 요약 줄이 없다', async () => {
     render(<TransportResult result={MIXED} />);
-    expect(screen.getByText('구성 값 2개 · 문제 0건')).toBeInTheDocument();
-    expect(screen.getByText('구성 값 1개 · 문제 0건')).toBeInTheDocument();
-    expect(screen.queryByText(/구성 값 2개 · 문제 1건/)).toBeNull();
+    expect(screen.getByText('Externalized Parameters 2개 · 문제 0건')).toBeInTheDocument();
+    expect(screen.getByText('Externalized Parameters 1개 · 문제 0건')).toBeInTheDocument();
+    expect(screen.queryByText(/Externalized Parameters 2개 · 문제 1건/)).toBeNull();
     // 접힌 카드 A에는 표·소제목·칩이 없다. 머리(h4, 배지)만 있다
     const cardA = toggle('A_Clean').closest('div[class*="rounded-lg"]') as HTMLElement;
     expect(cardA.querySelector('table, h5, ul')).toBeNull();
     expect(within(cardA).getByText('SUCCESS')).toBeInTheDocument();
     await userEvent.click(toggle('A_Clean'));
-    expect(screen.queryByText('구성 값 2개 · 문제 0건')).toBeNull();
+    expect(screen.queryByText('Externalized Parameters 2개 · 문제 0건')).toBeNull();
     await userEvent.click(toggle('B_Problem'));
-    expect(screen.getByText('구성 값 2개 · 문제 1건')).toBeInTheDocument();
+    expect(screen.getByText('Externalized Parameters 2개 · 문제 1건')).toBeInTheDocument();
   });
 
   it('REQ-105 AC-3: 결과 머리에 sm ghost 버튼 "모두 펼치기"·"모두 접기"가 있고 전체를 바꾼다', async () => {
@@ -404,11 +407,11 @@ describe('이관 결과', () => {
     expect(b.className).not.toMatch(/outline-(none|0|hidden)/);
   });
 
-  it('REQ-105 AC-5, REQ-511: 결과 머리에 스위치 "문제 항목만 보기"와 결과 전체의 "구성 값 문제 m건"이 있다', () => {
+  it('REQ-105 AC-5, REQ-511: 결과 머리에 스위치 "문제 항목만 보기"와 결과 전체의 "Externalized Parameters 문제 m건"이 있다', () => {
     render(<TransportResult result={MIXED} />);
     expect(onlySwitch()).not.toBeChecked();
     expect(onlySwitch()).toBeEnabled();
-    expect(screen.getByText('구성 값 문제 1건')).toBeInTheDocument();
+    expect(screen.getByText('Externalized Parameters 문제 1건')).toBeInTheDocument();
   });
 
   it('REQ-105 AC-5, REQ-511: 켜면 문제 아티팩트의 카드만 남고 모두 펼쳐지며 구성 값 표에는 FAILED 행만 보이고 문제 항목이 없는 FAILED 카드는 "문제 항목 없음"이다', async () => {
@@ -456,10 +459,10 @@ describe('이관 결과', () => {
     expect(screen.queryByText('K4')).toBeNull();
   });
 
-  it('REQ-105 AC-5, REQ-511: 문제 아티팩트가 하나도 없으면 스위치는 비활성이고 "구성 값 문제 0건"이다', () => {
+  it('REQ-105 AC-5, REQ-511: 문제 아티팩트가 하나도 없으면 스위치는 비활성이고 "Externalized Parameters 문제 0건"이다', () => {
     render(<TransportResult result={{ ...MIXED, results: [MIXED.results[0], MIXED.results[3]] }} />);
     expect(onlySwitch()).toBeDisabled();
-    expect(screen.getByText('구성 값 문제 0건')).toBeInTheDocument();
+    expect(screen.getByText('Externalized Parameters 문제 0건')).toBeInTheDocument();
   });
 
   it('REQ-105 AC-5: 새 결과가 나타나면 스위치는 꺼지고 접기·펼치기는 그 결과의 처음 상태다', async () => {
@@ -522,7 +525,7 @@ describe('이관 결과', () => {
     render(<HistoryTab />);
     await userEvent.click(await screen.findByRole('button', { name: 't-legacy' }));
     expect(screen.getByRole('heading', { name: '이관 결과' })).toBeInTheDocument();
-    expect(screen.getByText('구성 값 없음')).toBeInTheDocument();
+    expect(screen.getByText('Externalized Parameters 없음')).toBeInTheDocument();
     expect(screen.queryByRole('table')).toBeNull();
     expect(document.body.textContent).not.toMatch(/치환|매핑되지 않은 키/);
   });
@@ -531,6 +534,6 @@ describe('이관 결과', () => {
     mockApi({ 'GET /transport/history': () => json([{ ...BASE, transportId: 't-old', results: [{ ...BASE.results[1], configurations: [] }] }]) });
     render(<HistoryTab />);
     await userEvent.click(await screen.findByRole('button', { name: 't-old' }));
-    expect(screen.getByText('구성 값 없음')).toBeInTheDocument();
+    expect(screen.getByText('Externalized Parameters 없음')).toBeInTheDocument();
   });
 });
