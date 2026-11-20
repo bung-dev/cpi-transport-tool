@@ -31,12 +31,12 @@ public class TransportJobController implements TransportRequestErrors {
 
     @GetMapping("/{id}")
     public TransportRun.Snapshot get(@PathVariable String id) {
-        return jobs.require(id).snapshot();
+        return jobs.snapshot(id);
     }
 
     @PostMapping("/{id}/cancel")
     public ResponseEntity<Void> cancel(@PathVariable String id) {
-        jobs.require(id).cancel();
+        jobs.cancel(id);
         return ResponseEntity.accepted().build();
     }
 }

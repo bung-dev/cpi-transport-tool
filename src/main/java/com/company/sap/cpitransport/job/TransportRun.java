@@ -22,7 +22,14 @@ public final class TransportRun {
     public record Active(String jobId, int total, int done) {}
     public record Snapshot(String jobId, JobStatus status, boolean dryRun, boolean deploy,
             Instant startedAt, Instant finishedAt, int total, int done, TenantRef sourceTenant,
-            TenantRef targetTenant, List<TransportPackage> packages, List<Item> items, TransportResponse result) {}
+            TenantRef targetTenant, List<TransportPackage> packages, List<Item> items, TransportResponse result) {
+        TransportResponse response(JobStatus terminal, Instant end, List<ArtifactResult> completed, TemplateRef template) {
+            int successes = (int) completed.stream().filter(r -> r.status() == ArtifactStatus.SUCCESS).count();
+            var summary = new TransportSummary(completed.size(), successes, completed.size() - successes);
+            return new TransportResponse(jobId, packages, dryRun, deploy, startedAt, end, summary, completed,
+                    sourceTenant, targetTenant, template, terminal);
+        }
+    }
 
     private final String id = UUID.randomUUID().toString();
     private final Clock clock;
@@ -37,6 +44,7 @@ public final class TransportRun {
     private boolean cancelRequested;
     private int done;
     private TransportResponse result;
+    private Consumer<TransportJobStore.SavedJob> persist;
 
     public TransportRun(Clock clock, TransportRequest request, List<TransportPackage> packages,
                         List<Item> items, TemplateRef template, Consumer<TransportResponse> history) {
@@ -60,6 +68,19 @@ public final class TransportRun {
                 result == null ? null : result.finishedAt(), items.size(), done, request.source(), request.target(),
                 List.copyOf(packages), List.copyOf(items), result);
     }
+    synchronized void persistTo(Consumer<TransportJobStore.SavedJob> persist) {
+        this.persist = persist;
+        save();
+    }
+    private void save() {
+        if (persist != null) {
+            List<ArtifactResult> completed = status == JobStatus.RUNNING ? completedResults() : List.of();
+            persist.accept(new TransportJobStore.SavedJob(snapshot(), id, template, completed));
+        }
+    }
+    private List<ArtifactResult> completedResults() {
+        return Arrays.stream(results).filter(Objects::nonNull).toList();
+    }
     public synchronized void cancel() {
         if (status != JobStatus.RUNNING) throw new ErrorResponse.ApiException(ErrorResponse.Code.JOB_NOT_RUNNING);
         cancelRequested = true;
@@ -67,6 +88,7 @@ public final class TransportRun {
     public synchronized void targetPrepared(int index, TargetPackageStatus target) {
         var pkg = packages.get(index);
         packages.set(index, new TransportPackage(pkg.packageId(), pkg.packageName(), target));
+        save();
     }
     public synchronized boolean startItem(int index) {
         if (!cancelRequested) return true;
@@ -78,6 +100,7 @@ public final class TransportRun {
         // The execution log records the skipped upload, while progress shows only work performed.
         if (request.dryRun() && stage == Stage.UPLOAD) return;
         items.set(index, items.get(index).at(stage, null));
+        save();
     }
     public synchronized void completed(int index, ArtifactResult artifact) {
         results[index] = artifact;
@@ -87,6 +110,7 @@ public final class TransportRun {
     private void itemEnded() {
         done++;
         if (done == items.size()) finish();
+        else save();
     }
     // Also called after package preparation for a transport with no artifacts.
     public synchronized TransportResponse finish() {
@@ -102,11 +126,7 @@ public final class TransportRun {
         finish(JobStatus.INTERRUPTED);
     }
     private void finish(JobStatus terminal) {
-        var completed = Arrays.stream(results).filter(Objects::nonNull).toList();
-        int successes = (int) completed.stream().filter(r -> r.status() == ArtifactStatus.SUCCESS).count();
-        var summary = new TransportSummary(completed.size(), successes, completed.size() - successes);
-        result = new TransportResponse(id, packages, request.dryRun(), request.deploy(), startedAt, clock.instant(),
-                summary, completed, request.source(), request.target(), template, history == null ? null : terminal);
+        result = snapshot().response(history == null ? null : terminal, clock.instant(), completedResults(), template);
         status = terminal;
         if (history != null) {
             try {
@@ -115,5 +135,6 @@ public final class TransportRun {
                 log.warn("Could not append transport job {} to history", id);
             }
         }
+        save();
     }
 }
