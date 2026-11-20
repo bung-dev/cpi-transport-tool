@@ -45,6 +45,7 @@ export function TransportResult({ result, onOpenReal, activeJobId }: Props) {
   const problemTotal = totalProblemCount(result.results);
   const failedArtifacts = failedArtifactCount(result.results);
   const hasProblemArtifact = result.results.some(isProblemArtifact);
+  const hasResults = result.results.length > 0;
   const setAll = (value: boolean) => setExpanded(result.results.map(() => value));
   // 탐색 목록에서 고른 아티팩트의 카드 요소(인덱스 → 카드를 감싼 요소)
   const cardRefs = useRef(new Map<number, HTMLDivElement>());
@@ -119,8 +120,8 @@ export function TransportResult({ result, onOpenReal, activeJobId }: Props) {
         </div>
       </div>
       {/* 넓은 폭: 왼쪽 탐색 목록·오른쪽 상세 카드 2열. 좁은 폭: 1열로 쌓는다(REQ-424). */}
-      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <nav aria-label="결과 바로가기" className="min-w-0 self-start rounded-lg border border-hairline bg-canvas p-2">
+      <div className={`grid min-w-0 grid-cols-1 gap-4 ${hasResults ? 'lg:grid-cols-[220px_minmax(0,1fr)]' : ''}`}>
+        {hasResults && <nav aria-label="결과 바로가기" className="min-w-0 self-start rounded-lg border border-hairline bg-canvas p-2">
           <ul className="flex flex-col gap-0.5">
             {result.results.map((r, i) => {
               if (onlyNow && !isProblemArtifact(r)) return null;
@@ -138,7 +139,7 @@ export function TransportResult({ result, onOpenReal, activeJobId }: Props) {
               );
             })}
           </ul>
-        </nav>
+        </nav>}
         <div className="flex flex-col gap-3 min-w-0">
           {result.packages.map((pkg, packageIndex) => (
             <div key={pkg.packageId} role="group" aria-labelledby={`${titleId}-package-${packageIndex}`} className="flex min-w-0 flex-col gap-3">

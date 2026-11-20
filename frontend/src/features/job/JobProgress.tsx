@@ -6,8 +6,11 @@ const STAGES: Record<JobStage, string> = {
 };
 
 export function JobProgressBar({ label, done, total }: { label: string; done: number; total: number }) {
-  return <progress aria-label={label} aria-valuenow={done} aria-valuemax={total}
-    value={done} max={total || 1} className="block h-2 w-full accent-primary" />;
+  const percent = total > 0 ? done / total * 100 : 0;
+  return <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuenow={done} aria-valuemax={total}
+    className="h-2 w-full overflow-hidden rounded-full bg-hairline">
+    <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
+  </div>;
 }
 
 export function JobItems({ items, nameOf }: { items: JobItem[]; nameOf?: (item: JobItem) => string | undefined }) {
