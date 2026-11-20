@@ -271,7 +271,7 @@ class DeployErrorDetailWireMockTests {
                     .isEqualTo("localhost 127 1 ::1 singlehost two");
     }
 
-    @Test @DisplayName("REQ-505 / REQ-309 AC-4: deploy error detail masks sensitive source configuration values copied in this transport, not plain ones")
+    @Test @DisplayName("REQ-505 / REQ-309 AC-4: deploy error detail masks sensitive source configuration values bundled in this transport, not plain ones (REQ-701)")
     void req505_copiedSensitiveValuesMasked() {
         stubs.dev().stubFor(get(urlEqualTo("/api/v1/IntegrationDesigntimeArtifacts(Id='" + ERROR_ID + "',Version='active')/Configurations"))
                 .atPriority(0).willReturn(okJson("{\"d\":{\"results\":["
@@ -279,7 +279,7 @@ class DeployErrorDetailWireMockTests {
                         + "{\"ParameterKey\":\"Endpoint\",\"ParameterValue\":\"test-dummy-plain-endpoint\",\"DataType\":\"xsd:string\"}]}}")));
         detail(200, "test-dummy-copied-secret test-dummy-plain-endpoint");
         var result = run(ERROR_ID, false, true).results().getFirst();
-        assertThat(result.configurations()).extracting(ConfigurationItem::status).containsOnly(ConfigurationStatus.COPIED);
+        assertThat(result.configurations()).extracting(ConfigurationItem::status).containsOnly(ConfigurationStatus.BUNDLED);
         assertThat(result.error().detail()).isEqualTo("*** test-dummy-plain-endpoint");
         once();
     }

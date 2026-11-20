@@ -99,9 +99,9 @@ class LockHintWireMockTests {
     }
 
     @ParameterizedTest(name = "{displayName} [{index}] {0}")
-    @ValueSource(strings = {"PUT_400_TEXT_BODY", "PUT_400_JSON_BODY", "POST_CREATE_400_EMPTY", "CONFIGURATION_PUT_400_EMPTY",
+    @ValueSource(strings = {"PUT_400_TEXT_BODY", "PUT_400_JSON_BODY", "POST_CREATE_400_EMPTY",
             "DEPLOY_400_EMPTY", "PUT_409_EMPTY", "PUT_404_EMPTY", "TARGET_GET_400_EMPTY", "CSRF_FETCH_400_EMPTY"})
-    @DisplayName("REQ-315 AC-2·AC-5: no lock hint for 400 with body, create POST, Configurations PUT, DEPLOY, non-400 status or non-PUT response")
+    @DisplayName("REQ-315 AC-2·AC-5: no lock hint for 400 with body, create POST, DEPLOY, non-400 status or non-PUT response")
     void req315_ac2_noHint(String scenario) {
         String code = "UPLOAD_FAILED";
         String message = UPLOAD_400;
@@ -115,12 +115,6 @@ class LockHintWireMockTests {
             case "POST_CREATE_400_EMPTY" -> {
                 prd.stubFor(com.github.tomakehurst.wiremock.client.WireMock.get(urlEqualTo(path("A"))).willReturn(notFound()));
                 prd.stubFor(com.github.tomakehurst.wiremock.client.WireMock.post(urlEqualTo(COLLECTION)).willReturn(status400("")));
-            }
-            case "CONFIGURATION_PUT_400_EMPTY" -> {
-                prd.stubFor(com.github.tomakehurst.wiremock.client.WireMock.put(urlEqualTo(parameter("A"))).willReturn(status400("")));
-                code = "CONFIGURATION_UPDATE_FAILED";
-                message = "CONFIGURATION_UPDATE: Endpoint: HTTP 400";
-                action = TransportAction.UPDATED;
             }
             case "DEPLOY_400_EMPTY" -> {
                 prd.stubFor(com.github.tomakehurst.wiremock.client.WireMock.post(urlEqualTo(deploy("A"))).willReturn(status400("")));

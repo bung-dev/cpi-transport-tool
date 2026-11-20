@@ -13,17 +13,19 @@ const HEADINGS: Record<string, string> = {
   '#/history': '이관 이력',
   '#/tenants': '테넌트',
   '#/audit': '감사 이력',
+  '#/settings': '설정',
 };
 function screenRoutes() {
   return baseRoutes({
     'GET /packages?tenantId=DEV': () => json(PACKAGES),
     'GET /transport/history': () => json([]),
     'GET /audit?category=all': () => json([]),
+    'GET /settings': () => json({ previewConcurrency: 4, transportConcurrency: 4 }),
   });
 }
 
 describe('REQ-410 앱 셸', () => {
-  it('REQ-410: 상단에 앱 이름(h1), 경로 표시, 검색 버튼(⌘K 표기), 주 메뉴 6개가 순서대로 있고 기본 화면은 대시보드다', async () => {
+  it('REQ-410: 상단에 앱 이름(h1), 경로 표시, 검색 버튼(⌘K 표기), 주 메뉴 7개(맨 끝 설정, REQ-708)가 순서대로 있고 기본 화면은 대시보드다', async () => {
     mockApi(screenRoutes());
     renderAt('');
     const banner = screen.getByRole('banner');

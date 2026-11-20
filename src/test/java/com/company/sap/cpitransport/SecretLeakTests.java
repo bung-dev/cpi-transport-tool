@@ -97,7 +97,8 @@ class SecretLeakTests {
             assertThat(org.slf4j.MDC.get("transportId")).isEqualTo("caller");
             assertThat(org.slf4j.MDC.get("artifactId")).isEqualTo("caller-artifact");
             assertThat(Files.readString(temporary.resolve("application.log"))).contains(
-                    "INFO transportId=" + response.transportId() + " artifactId=missing transportId=" + response.transportId());
+                    // REQ-704 (리뷰 R1): 단계 줄 메시지는 packageId로 시작한다.
+                    "INFO transportId=" + response.transportId() + " artifactId=missing packageId=PkgTransportDemo transportId=" + response.transportId());
         } finally {
             org.slf4j.MDC.clear();
         }
@@ -152,6 +153,14 @@ class SecretLeakTests {
             }
         }
         assertThat(output.getOut()).doesNotContain("step=REPLACE ", "step=PARAMETER_REPLACE");
+        // REQ-701: PARAMETER_COPY는 원본 읽기만 감싼다. 쓰기가 없으므로 끝 줄이 대상 확인·업로드 시작보다 앞선다.
+        for (var artifact : response.results()) {
+            String prefix = "transportId=" + response.transportId() + " artifactId=" + artifact.artifactId();
+            int copyEnd = output.getOut().indexOf(prefix + " step=PARAMETER_COPY phase=END result=OK");
+            int uploadStart = output.getOut().indexOf(prefix + " step=UPLOAD phase=START");
+            assertThat(copyEnd).isNotNegative().isLessThan(uploadStart);
+            if (!dryRun) assertThat(copyEnd).isLessThan(output.getOut().indexOf(prefix + " step=TARGET phase=START"));
+        }
         noLeaks(output, body);
     }
 
@@ -161,7 +170,8 @@ class SecretLeakTests {
         String download = "/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Fault_Download500',Version='active')/$value";
         stubs.dev().stubFor(get(urlEqualTo(download)).atPriority(1)
                 .willReturn(aResponse().withStatus(500).withBody(String.join(" ", SECRETS))));
-        var ids = List.of("IF_Fault_Download500", "IF_Fault_UploadFail", "IF_Fault_ParamPutFail", "IF_Fault_DeployError", "IF_Fault_A");
+        // REQ-701: 구성 값 단계 실패는 이제 원본 읽기 실패(ConfigRead500)로만 난다.
+        var ids = List.of("IF_Fault_Download500", "IF_Fault_UploadFail", "IF_Fault_ConfigRead500", "IF_Fault_DeployError", "IF_Fault_A");
         String body = transport(false, "PkgFaultDemo", ids);
         var response = JSON.readValue(body, TransportResponse.class);
         assertThat(response.summary().failed()).isEqualTo(4);

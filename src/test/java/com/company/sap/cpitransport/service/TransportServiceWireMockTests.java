@@ -70,7 +70,7 @@ class TransportServiceWireMockTests {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
-    @DisplayName("REQ-501, REQ-502: create and update upload the downloaded zip byte for byte and copy the source value without reading the target")
+    @DisplayName("REQ-501, REQ-502, REQ-701: create and update upload the downloaded zip byte for byte, report source values as BUNDLED and send no configuration request to the target")
     void req501_upload(boolean existing) throws Exception {
         if (existing) prd.stubFor(get(urlEqualTo(path("A"))).willReturn(okJson("{\"d\":{\"Id\":\"A\"}}")));
         var response = run(List.of("A"), false, true);
@@ -79,7 +79,7 @@ class TransportServiceWireMockTests {
         assertThat(result.status()).isEqualTo(ArtifactStatus.SUCCESS);
         assertThat(result.deployStatus()).isEqualTo(DeployStatus.STARTED);
         assertThat(result.configurations()).containsExactly(
-                new ConfigurationItem("Endpoint", "dev", "xsd:string", ConfigurationStatus.COPIED));
+                new ConfigurationItem("Endpoint", "dev", "xsd:string", ConfigurationStatus.BUNDLED));
         var requests = existing ? prd.findAll(putRequestedFor(urlEqualTo(path("A"))))
                 : prd.findAll(postRequestedFor(urlEqualTo(COLLECTION)));
         assertThat(requests).hasSize(1);
@@ -87,9 +87,12 @@ class TransportServiceWireMockTests {
         assertThat(body.path("Name").asString()).isEqualTo("Name A");
         if (!existing) assertThat(body.path("PackageId").asString()).isEqualTo("PKG");
         assertThat(Base64.getDecoder().decode(body.path("ArtifactContent").asString())).isEqualTo(zip());
-        prd.verify(1, putRequestedFor(urlEqualTo(parameter("A")))
-                .withRequestBody(equalToJson("{\"ParameterValue\":\"dev\",\"DataType\":\"xsd:string\"}")));
-        prd.verify(0, getRequestedFor(urlMatching(".*/Configurations")));
+        // REQ-701: target requests are only the target checks, the upload and deployment; no configuration PUT.
+        prd.verify(0, anyRequestedFor(urlMatching(".*/Configurations.*")));
+        assertThat(prd.getAllServeEvents()).extracting(e -> e.getRequest().getMethod().getName() + " " + e.getRequest().getUrl())
+                .allMatch(r -> r.equals("POST /token") || r.equals("GET /api/v1/") || r.equals("GET " + PACKAGE)
+                        || r.equals("GET " + path("A")) || r.equals((existing ? "PUT " + path("A") : "POST " + COLLECTION))
+                        || r.equals("POST " + deploy("A")) || r.equals("GET " + runtime("A")));
         assertThat(UUID.fromString(response.transportId()).toString()).isEqualTo(response.transportId());
         assertThat(response.finishedAt()).isAfter(response.startedAt());
         assertThat(json.readTree(json.writeValueAsString(response)).path("startedAt").asString()).endsWith("Z");
@@ -153,13 +156,13 @@ class TransportServiceWireMockTests {
     }
 
     @Test
-    @DisplayName("REQ-013 AC-2, REQ-504: upload failure masks error body, writes no configuration and leaves configurations empty")
+    @DisplayName("REQ-013 AC-2, REQ-504, REQ-701: upload failure masks error body, writes no configuration and leaves configurations empty")
     void req013_ac2_upload() {
         prd.stubFor(post(urlEqualTo(COLLECTION)).willReturn(serverError().withBody("dummy-prd-secret Password=hidden-value")));
         var result = run(List.of("A"), false, true).results().getFirst();
         beforeUploadFailure(result, "UPLOAD_FAILED");
         assertThat(result.error().message()).contains("UPLOAD", "500", "CPI").doesNotContain("dummy-prd-secret", "hidden-value");
-        prd.verify(0, putRequestedFor(urlEqualTo(parameter("A"))));
+        prd.verify(0, putRequestedFor(urlMatching(".*/\\$links/Configurations.*")));
     }
 
     @Test
@@ -192,8 +195,8 @@ class TransportServiceWireMockTests {
     }
 
     @Test
-    @DisplayName("REQ-502, REQ-504: every source key is written in order, empty sensitive values are skipped, sensitive values stay plain and PUT failures block deploy")
-    void req502_statuses() {
+    @DisplayName("REQ-701, REQ-702, REQ-504: every source key is reported BUNDLED in source order regardless of empty value or key name, no configuration is written and deployment proceeds")
+    void req701_statuses() {
         configurations("A",
                 "{\"ParameterKey\":\"Endpoint\",\"ParameterValue\":\"dev\",\"DataType\":\"xsd:string\"}",
                 "{\"ParameterKey\":\"Next\",\"ParameterValue\":\"42\",\"DataType\":\"xsd:integer\"}",
@@ -201,32 +204,27 @@ class TransportServiceWireMockTests {
                 "{\"ParameterKey\":\"Password\",\"ParameterValue\":\"\",\"DataType\":\"xsd:string\"}",
                 "{\"ParameterKey\":\"AccessToken\",\"DataType\":\"xsd:string\"}",
                 "{\"ParameterKey\":\"Plain\",\"ParameterValue\":\"\",\"DataType\":\"xsd:string\"}");
+        // A failing configuration PUT would surface as CONFIGURATION_UPDATE_FAILED; it must never be called.
         prd.stubFor(put(urlEqualTo(parameter("A"))).willReturn(serverError().withBody("dev hidden-body")));
         var result = run(List.of("A"), false, true).results().getFirst();
-        assertThat(result.configurations()).extracting(ConfigurationItem::key, ConfigurationItem::status).containsExactly(
-                tuple("Endpoint", ConfigurationStatus.FAILED), tuple("Next", ConfigurationStatus.COPIED),
-                tuple("ClientPassword", ConfigurationStatus.COPIED), tuple("Password", ConfigurationStatus.SKIPPED_EMPTY),
-                tuple("AccessToken", ConfigurationStatus.SKIPPED_EMPTY), tuple("Plain", ConfigurationStatus.COPIED));
-        assertThat(result.configurations().get(2)).isEqualTo(
-                new ConfigurationItem("ClientPassword", "dummy-dev-pass-1", "xsd:string", ConfigurationStatus.COPIED));
-        assertThat(result.error().code()).isEqualTo("CONFIGURATION_UPDATE_FAILED");
-        assertThat(result.error().message()).contains("Endpoint: HTTP 500").doesNotContain("Next", "42", "dummy-dev-pass-1", "hidden-body");
+        assertThat(result.configurations()).containsExactly(
+                new ConfigurationItem("Endpoint", "dev", "xsd:string", ConfigurationStatus.BUNDLED),
+                new ConfigurationItem("Next", "42", "xsd:integer", ConfigurationStatus.BUNDLED),
+                new ConfigurationItem("ClientPassword", "dummy-dev-pass-1", "xsd:string", ConfigurationStatus.BUNDLED),
+                new ConfigurationItem("Password", "", "xsd:string", ConfigurationStatus.BUNDLED),
+                new ConfigurationItem("AccessToken", null, "xsd:string", ConfigurationStatus.BUNDLED),
+                new ConfigurationItem("Plain", "", "xsd:string", ConfigurationStatus.BUNDLED));
+        assertThat(result.error()).isNull();
+        assertThat(result.status()).isEqualTo(ArtifactStatus.SUCCESS);
         assertThat(result.action()).isEqualTo(TransportAction.CREATED);
-        prd.verify(1, putRequestedFor(urlEqualTo(path("A") + "/$links/Configurations('Next')"))
-                .withRequestBody(equalToJson("{\"ParameterValue\":\"42\",\"DataType\":\"xsd:integer\"}")));
-        prd.verify(1, putRequestedFor(urlEqualTo(path("A") + "/$links/Configurations('ClientPassword')"))
-                .withRequestBody(equalToJson("{\"ParameterValue\":\"dummy-dev-pass-1\",\"DataType\":\"xsd:string\"}")));
-        prd.verify(1, putRequestedFor(urlEqualTo(path("A") + "/$links/Configurations('Plain')"))
-                .withRequestBody(equalToJson("{\"ParameterValue\":\"\",\"DataType\":\"xsd:string\"}")));
-        prd.verify(0, putRequestedFor(urlEqualTo(path("A") + "/$links/Configurations('Password')")));
-        prd.verify(0, putRequestedFor(urlEqualTo(path("A") + "/$links/Configurations('AccessToken')")));
+        assertThat(result.deployStatus()).isEqualTo(DeployStatus.STARTED);
+        prd.verify(0, putRequestedFor(urlMatching(".*/\\$links/Configurations.*")));
         prd.verify(0, getRequestedFor(urlMatching(".*/Configurations")));
-        noDeploy(result);
     }
 
     @ParameterizedTest(name = "{displayName} [{index}] deploy={0}")
     @ValueSource(booleans = {false, true})
-    @DisplayName("REQ-010, REQ-503: preview plans every source key, isolates source read failures and sends no request to the target")
+    @DisplayName("REQ-010, REQ-503, REQ-701: preview plans every source key including empty sensitive values, isolates source read failures and sends no request to the target")
     void req503_preview(boolean deploy) {
         configurations("A",
                 "{\"ParameterKey\":\"Endpoint\",\"ParameterValue\":\"dev\",\"DataType\":\"xsd:string\"}",
@@ -239,7 +237,7 @@ class TransportServiceWireMockTests {
                 .allMatch(r -> r.deployStatus() == (deploy ? DeployStatus.SKIPPED_DRY_RUN : DeployStatus.NOT_REQUESTED));
         assertThat(response.results().getFirst().configurations()).containsExactly(
                 new ConfigurationItem("Endpoint", "dev", "xsd:string", ConfigurationStatus.PLANNED),
-                new ConfigurationItem("Password", "", "xsd:string", ConfigurationStatus.SKIPPED_EMPTY),
+                new ConfigurationItem("Password", "", "xsd:string", ConfigurationStatus.PLANNED),
                 new ConfigurationItem("ClientPassword", "dummy-dev-pass-1", "xsd:string", ConfigurationStatus.PLANNED));
         assertThat(response.results().get(1).error().code()).isEqualTo("CONFIGURATION_READ_FAILED");
         assertThat(response.results().get(1).configurations()).isEmpty();
@@ -252,7 +250,7 @@ class TransportServiceWireMockTests {
 
     @ParameterizedTest
     @ValueSource(strings = {"ERROR", "WAITING", "HTTP_FAILURE"})
-    @DisplayName("REQ-009 AC-3, AC-4: deployment failure or timeout preserves upload and copied configurations")
+    @DisplayName("REQ-009 AC-3, AC-4, REQ-701: deployment failure or timeout preserves upload and bundled configurations")
     void req009_ac3_deployment(String status) {
         if (status.equals("HTTP_FAILURE")) prd.stubFor(post(urlEqualTo(deploy("A"))).willReturn(serverError()));
         else prd.stubFor(get(urlEqualTo(runtime("A"))).willReturn(okJson("{\"d\":{\"Status\":\"" + status + "\"}}")));
@@ -260,7 +258,7 @@ class TransportServiceWireMockTests {
         assertThat(result.error().code()).isEqualTo(status.equals("WAITING") ? "DEPLOY_TIMEOUT" : "DEPLOY_FAILED");
         assertThat(result.deployStatus()).isEqualTo(status.equals("WAITING") ? DeployStatus.TIMEOUT : DeployStatus.ERROR);
         assertThat(result.action()).isEqualTo(TransportAction.CREATED);
-        assertThat(result.configurations()).extracting(ConfigurationItem::status).containsOnly(ConfigurationStatus.COPIED);
+        assertThat(result.configurations()).extracting(ConfigurationItem::status).containsOnly(ConfigurationStatus.BUNDLED);
     }
 
     @Test

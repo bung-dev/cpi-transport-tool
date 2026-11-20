@@ -13,6 +13,7 @@ const ROUTES: Array<[string, string]> = [
   ['#/history', '이관 이력'],
   ['#/tenants', '테넌트'],
   ['#/audit', '감사 이력'],
+  ['#/settings', '설정'],
 ];
 const createdTemplates: string[] = [];
 
@@ -29,7 +30,7 @@ async function templates(request: Parameters<typeof app>[0]): Promise<any[]> {
 const pageOverflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
 for (const width of [1280, 390]) {
-  test(`REQ-410: 폭 ${width}px에서 여섯 화면 모두 페이지 가로 스크롤이 없다`, async ({ page }) => {
+  test(`REQ-410: 폭 ${width}px에서 일곱 화면(설정 포함, REQ-708) 모두 페이지 가로 스크롤이 없다`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     const w = watch(page);
     for (const [hash, heading] of ROUTES) {
