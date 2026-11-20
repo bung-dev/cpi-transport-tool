@@ -282,7 +282,7 @@ export async function runInfo(page: Page): Promise<RunInfo> {
   const cur = stepTexts.find((t) => t.endsWith('|step'));
   const all = [...(await page.locator('main').getByRole('button').allInnerTexts()), ...(await page.getByRole('dialog').getByRole('button').allInnerTexts())];
   // 단계 줄 버튼("<n>. <단계>")은 실행 버튼이 아니므로 뺀다.
-  const buttons = all.map((s) => s.trim()).filter((s) => !/^\d+\./.test(s) && /미리보기|로 이관$|실제 이관$/.test(s));
+  const buttons = all.map((s) => s.trim()).filter((s) => !/^\d+\./.test(s) && /미리보기|실제 이관 실행$|실제 이관$/.test(s));
   const dep: string[] = [];
   for (const role of ['switch', 'checkbox'] as const) {
     const els = page.getByRole(role);
@@ -298,8 +298,8 @@ export async function runInfo(page: Page): Promise<RunInfo> {
   return { steps, current: cur ? cur.split('|')[0].replace(/^\d+\.\s*/, '') : null, buttons, deployControls: dep };
 }
 export const previewBtn = (page: Page) => page.getByRole('button', { name: '미리보기 실행', exact: true });
-/** 실제 이관 단계의 실행 버튼 "<대상>로 이관" */
-export const realBtn = (page: Page, target: string) => page.getByRole('button', { name: `${target}로 이관`, exact: true });
+/** 실제 이관 단계의 실행 버튼 "실제 이관 실행"(REQ-803, target은 호출 호환용으로 남김) */
+export const realBtn = (page: Page, target: string) => page.getByRole('button', { name: '실제 이관 실행', exact: true });
 /** 미리보기 결과 머리의 "이 구성으로 실제 이관" */
 export const realFromResult = (page: Page) => page.getByRole('button', { name: '이 구성으로 실제 이관', exact: true });
 export const confirmDialog = (page: Page) => page.getByRole('dialog', { name: '실제 이관 확인', exact: true });

@@ -44,10 +44,10 @@ export async function headStats(page: Page): Promise<Record<string, any>> {
     const leaves = all.filter((e) => e.children.length === 0);
     const tileLabel = leaves.find((e) => txt(e) === '실패');
     const tileValue = tileLabel?.parentElement ? txt(tileLabel.parentElement).replace(/^실패\s*/, '') : null;
-    const prob = smallest(/구성 값 문제 \d+건/);
+    const prob = smallest(/Externalized Parameters 문제 \d+건/);
     const fa = smallest(/실패 아티팩트 \d+개/);
     const full = (r as HTMLElement).innerText.replace(/\s+/g, ' ');
-    const pm = full.match(/구성 값 문제 (\d+)건/);
+    const pm = full.match(/Externalized Parameters 문제 (\d+)건/);
     const fm = [...full.matchAll(/실패 아티팩트 (\d+)개/g)];
     let ancestor: Element | null = null;
     if (prob[0] && fa[0]) {

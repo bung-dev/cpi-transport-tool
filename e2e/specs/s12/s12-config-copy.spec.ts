@@ -35,7 +35,7 @@ test('QA-REQ512-1: 미리보기는 빈 값까지 모두 복사 예정, 실제 �
   const region = resultRegion(page).first();
   const previewText = flat(await region.innerText());
   rec.preview = previewText.slice(0, 2000);
-  expect(previewText).toContain('구성 값');
+  expect(previewText).toContain('Externalized Parameters');
   expect(previewText).toContain('복사 예정');
   // REQ-701: 빈 민감 값 예외가 없어져 ApiToken(빈 값)도 복사 예정이다.
   expect(previewText).not.toContain('빈 값이라 건너뜀');
@@ -54,7 +54,7 @@ test('QA-REQ512-1: 미리보기는 빈 값까지 모두 복사 예정, 실제 �
   rec.real = realText.slice(0, 2000);
   expect(realText).toContain(BUNDLED);
   expect(realText).not.toContain('복사됨');
-  expect(realText).toContain('구성 값 문제 0건');
+  expect(realText).toContain('Externalized Parameters 문제 0건');
   expect(realText).not.toMatch(/치환|매핑되지 않은 키/);
   for (const key of ['Endpoint', 'ApiToken', 'ClientPassword', 'LogLevel'])
     await expect(realRegion.getByRole('row').filter({ hasText: key }).first(), key).toContainText(BUNDLED);
@@ -95,7 +95,7 @@ test('QA-REQ512-3: 이력에서 다시 연 결과와 새로고침 뒤에도 구�
     const region = resultRegion(page).first();
     const text = flat(await region.innerText());
     rec[label] = text.slice(0, 1500);
-    expect(text, `${label}: 구성 값 읽기 실패 카드`).toMatch(/IF_Fault_ConfigRead500.*CONFIGURATION_READ_FAILED.*구성 값 없음/);
+    expect(text, `${label}: 구성 값 읽기 실패 카드`).toMatch(/IF_Fault_ConfigRead500.*CONFIGURATION_READ_FAILED.*Externalized Parameters 없음/);
     await expect(region.getByRole('row').filter({ hasText: 'ParamA' }).first()).toContainText('a-dev');
     await expect(region.getByRole('row').filter({ hasText: 'ParamA' }).first()).toContainText(BUNDLED);
     await expect(region.getByRole('row').filter({ hasText: 'ParamB' }).first()).toContainText(BUNDLED);
@@ -149,7 +149,7 @@ test('QA-REQ707-1: 예전 이력의 복사됨·빈 값이라 건너뜀·실패�
   await expect(region.getByRole('row').filter({ hasText: 'LegacyCopied' }).first()).toContainText('복사됨');
   await expect(region.getByRole('row').filter({ hasText: 'LegacyPassword' }).first()).toContainText('빈 값이라 건너뜀');
   await expect(region.getByRole('row').filter({ hasText: 'LegacyFailed' }).first()).toContainText('실패');
-  expect(text).toContain('구성 값 문제 1건');
+  expect(text).toContain('Externalized Parameters 문제 1건');
   expect(text).not.toContain(BUNDLED);
   await shot(page, 'QA-REQ707-1');
   await page.setViewportSize({ width: 375, height: 812 });

@@ -80,7 +80,7 @@ test('QA-190: 실패 없음(M=0) - 보이지 않음, 실패 뒤 성공 재실행
   const noFail = async (label: string) => {
     const t = flat(await resultRegion(page).first().innerText());
     const dom = await page.evaluate(() => document.documentElement.outerHTML.includes('실패 아티팩트'));
-    return { label, regionHasText: t.includes('실패 아티팩트'), domHasText: dom, problemText: (t.match(/구성 값 문제 \d+건/) ?? [null])[0] };
+    return { label, regionHasText: t.includes('실패 아티팩트'), domHasText: dom, problemText: (t.match(/Externalized Parameters 문제 \d+건/) ?? [null])[0] };
   };
   // 1. 정상
   const o1 = await runRealUi(page, request);
