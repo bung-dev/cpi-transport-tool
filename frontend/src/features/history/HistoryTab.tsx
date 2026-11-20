@@ -55,8 +55,11 @@ const filterLabels = [
 
 function HistoryList({ query }: { query: string }) {
   const params = new URLSearchParams(query);
-  const filtered = HISTORY_FILTER_KEYS.some(key => params.has(key));
-  const labels = filterLabels.filter(([key, value]) => params.get(key) === value).map(([, , label]) => label);
+  const labels = HISTORY_FILTER_KEYS.flatMap(key => params.getAll(key).map(value => {
+    const match = filterLabels.find(([knownKey, knownValue]) => knownKey === key && knownValue === value);
+    return match?.[2] ?? `${key}=${value}`;
+  }));
+  const filtered = labels.length > 0;
   const { state, retry } = useRemote(() => getHistory(params), `history?${query}`);
   // 템플릿 열의 "(삭제됨)" 판단에만 쓴다. 실패해도 오류를 보이지 않고 기록된 이름만 보인다(REQ-425).
   const { state: templates } = useRemote(getTemplates, 'templates');
@@ -128,7 +131,7 @@ function HistoryList({ query }: { query: string }) {
         {filtered && (
           <div role="group" aria-label="이력 조건"
             className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-hairline bg-canvas px-3 py-2 text-sm">
-            <span className="basis-full sm:basis-auto">조건: {labels.join(' · ')}</span>
+            <span className="basis-full wrap-anywhere sm:basis-auto">조건: {labels.join(' · ')}</span>
             {state.status === 'ok' && <span className="text-ink-secondary">{state.data.length}건</span>}
             <Button size="sm" onClick={() => navigate('history')}>조건 해제</Button>
           </div>
