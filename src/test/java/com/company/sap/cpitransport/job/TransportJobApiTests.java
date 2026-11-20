@@ -76,6 +76,7 @@ class TransportJobApiTests {
         stubs.prd().setGlobalFixedDelay(0);
         stubs.dev().resetScenarios();
         stubs.prd().resetScenarios();
+        stubs.prd().resetRequests();
     }
 
     // ---- helpers ----
