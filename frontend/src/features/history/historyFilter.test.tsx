@@ -130,6 +130,18 @@ describe('이력 조건 표시 줄 (REQ-806)', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it.each([
+    ['?mode=x', '조건: mode=x'],
+    ['?date=today&mode=x', '조건: 오늘 · mode=x'],
+    ['?date=yesterday&mode=real&result=ok', '조건: date=yesterday · 실제 이관 · result=ok'],
+  ])('REQ-806 실패(리뷰 R1): 허용 밖 값이 있는 %s의 조건 줄은 "%s"이다(모르는 값은 키=값 원문, 빈 "조건: " 없음)', async (query, label) => {
+    mockApi(baseRoutes({ [`GET /transport/history${query}`]: () => json({ error: 'INVALID_REQUEST', message: 'Invalid request' }, 400) }));
+    renderAt(`#/history${query}`);
+    await screen.findByRole('alert');
+    expect(conditionBar()!.textContent).toContain(label);
+    expect(conditionBar()!.textContent).not.toMatch(/조건:\s*(조건 해제|$)/);
+  });
+
   it('REQ-806 실패: 서버 오류면 기존 오류 알림과 다시 시도가 보이고 조건 줄은 남는다', async () => {
     let fail = true;
     mockApi(baseRoutes({
