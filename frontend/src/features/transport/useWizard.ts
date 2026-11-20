@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { getArtifacts, postTransport } from '../../api/client';
-import { isTemplateError, toApiError, type ApiError } from '../../api/errors';
-import type { ArtifactSummary, TransportRequest, TransportResponse, TransportTemplate } from '../../api/types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { cancelTransportJob, getArtifacts, getTransportJob, postTransport, startTransportJob } from '../../api/client';
+import { ApiRequestError, isTemplateError, toApiError, type ApiError } from '../../api/errors';
+import type { ActiveJob, ArtifactSummary, JobItem, TransportRequest, TransportResponse, TransportTemplate } from '../../api/types';
 import { useReadOnlyState, useTenants } from '../tenants/TenantContext';
 import { hasNoTenants, REGISTER_TENANT_FIRST } from './noTenants';
 
@@ -16,6 +16,12 @@ type PackageArtifacts =
   | { status: 'error'; error: ApiError }
   | { status: 'ok'; items: ArtifactSummary[]; selected: string[] };
 
+interface PreviewJob extends ActiveJob {
+  items: JobItem[] | null;
+  pollFailed: boolean;
+  cancelRequested: boolean;
+}
+
 interface WizardData {
   /** 이 상태가 속한 경로. TenantContext의 원본·대상과 다르면 선택·결과·템플릿 연결을 비운다. */
   route: { source: string | null; target: string | null };
@@ -28,6 +34,8 @@ interface WizardData {
   artifacts: Record<string, PackageArtifacts>;
   previewPackages: TransportRequest['packages'] | null;
   preview: TransportResponse | null;
+  previewJob: PreviewJob | null;
+  previewCancelled: boolean;
   real: TransportResponse | null;
   error: ApiError | null;
   /** 실패한 요청이 템플릿 오류였으면 그 요청이 실제 이관이었는지 */
@@ -40,14 +48,14 @@ interface WizardData {
 const EMPTY_SELECTION = {
   packages: [] as ArtifactSummary[], packageOrder: [] as ArtifactSummary[],
   artifacts: {} as Record<string, PackageArtifacts>, previewPackages: null,
-  preview: null, real: null, error: null, templateFailure: null, confirm: null, busy: false,
+  preview: null, previewJob: null, previewCancelled: false, real: null, error: null, templateFailure: null, confirm: null, busy: false,
 } satisfies Partial<WizardData>;
 
 function initial(source: string | null, target: string | null): WizardData {
   return { route: { source, target }, step: 'template', templateDone: false, template: null, routeDialog: false, ...EMPTY_SELECTION };
 }
 
-export function useWizard() {
+export function useWizard(visible = true) {
   const { tenants, sourceTenantId, targetTenantId, setSourceTenantId, setTargetTenantId } = useTenants();
   const { realDisabled, notice } = useReadOnlyState();
   const [stored, setData] = useState(() => initial(sourceTenantId, targetTenantId));
@@ -75,12 +83,12 @@ export function useWizard() {
   const latest = useRef(data);
   latest.current = data;
 
-  const update = (f: (d: WizardData) => WizardData) => setData(d => { const next = f(d); latest.current = next; return next; });
+  const update = useCallback((f: (d: WizardData) => WizardData) => setData(d => { const next = f(d); latest.current = next; return next; }), []);
   /** 결과와 진행 중인 요청을 버린다(선택이 바뀔 때). */
   const dropResults = (d: WizardData): WizardData => {
     generation.current += 1;
     inFlight.current = false;
-    return { ...d, preview: null, previewPackages: null, real: null, error: null, templateFailure: null, confirm: null, busy: false };
+    return { ...d, preview: null, previewJob: null, previewCancelled: false, previewPackages: null, real: null, error: null, templateFailure: null, confirm: null, busy: false };
   };
 
   const list = tenants.state === 'success' ? tenants.data.tenants : [];
@@ -111,12 +119,13 @@ export function useWizard() {
     const a = data.artifacts[p.id];
     return a?.status === 'ok' && a.selected.length === 0;
   });
+  const busy = data.busy || data.previewJob !== null;
   const allPreviewReason = !packages.length ? '패키지를 먼저 선택하세요' : routeReason ?? (
-    pendingArtifacts ? '아티팩트 목록을 확인하세요' : data.busy ? '이관 실행 중입니다' : undefined);
+    pendingArtifacts ? '아티팩트 목록을 확인하세요' : busy ? '이관 실행 중입니다' : undefined);
   const previewReason = !packages.length ? '패키지를 먼저 선택하세요' : routeReason ?? (
     awaitingArtifacts ? '아티팩트 목록을 확인하세요' : tooMany ? TOO_MANY_ARTIFACTS
-      : noneSelected ? '아티팩트를 하나 이상 선택하세요' : data.busy ? '이관 실행 중입니다' : undefined);
-  const realReason = notice ?? (!data.preview ? '미리보기를 먼저 실행하세요' : data.busy ? '이관 실행 중입니다' : routeReason ?? undefined);
+      : noneSelected ? '아티팩트를 하나 이상 선택하세요' : busy ? '이관 실행 중입니다' : undefined);
+  const realReason = notice ?? (!data.preview ? '미리보기를 먼저 실행하세요' : busy ? '이관 실행 중입니다' : routeReason ?? undefined);
   const loaded = packages.flatMap(p => {
     const a = data.artifacts[p.id];
     return a?.status === 'ok' ? [a] : [];
@@ -147,9 +156,59 @@ export function useWizard() {
     if (data.step === 'artifacts') for (const p of packages) void loadArtifacts(p.id);
   }, [data.step, data.packages, data.route]);
 
+  // 화면을 떠나거나 선택을 바꾸면 예약된 조회와 뒤늦게 도착한 응답을 함께 버린다.
+  const pollingId = visible && !data.previewJob?.pollFailed ? data.previewJob?.jobId : undefined;
+  useEffect(() => {
+    if (!pollingId) return;
+    const id = pollingId;
+    const gen = generation.current;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let failures = 0;
+    async function poll() {
+      if (stopped || gen !== generation.current) return;
+      try {
+        const job = await getTransportJob(id);
+        if (stopped || gen !== generation.current) return;
+        if (job.status !== 'RUNNING') {
+          const completed = job.status === 'COMPLETED';
+          update(d => ({ ...d, step: 'preview', previewJob: null, previewCancelled: !completed,
+            preview: completed ? job.result : null, error: null }));
+          return;
+        }
+        failures = 0;
+        update(d => d.previewJob ? { ...d, previewJob: { ...d.previewJob, done: job.done, total: job.total, items: job.items } } : d);
+      } catch {
+        if (stopped || gen !== generation.current) return;
+        if (++failures === 3) {
+          update(d => d.previewJob ? { ...d, previewJob: { ...d.previewJob, pollFailed: true } } : d);
+          return;
+        }
+      }
+      timer = setTimeout(poll, 1000);
+    }
+    void poll();
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [pollingId, update]);
+
+  async function cancelPreview() {
+    const job = latest.current.previewJob;
+    if (!job || job.cancelRequested) return;
+    const gen = generation.current;
+    update(d => d.previewJob ? { ...d, error: null, previewJob: { ...d.previewJob, cancelRequested: true } } : d);
+    try {
+      await cancelTransportJob(job.jobId);
+    } catch (e) {
+      // 완료와 취소가 겹치면 다음 조회에서 서버의 최종 상태를 표시한다.
+      if (gen !== generation.current || e instanceof ApiRequestError && e.status === 409) return;
+      update(d => d.previewJob?.jobId === job.jobId ? { ...d, error: toApiError(e),
+        previewJob: { ...d.previewJob, cancelRequested: false } } : d);
+    }
+  }
+
   async function submit(real: boolean, deploy: boolean, options: { withoutTemplate?: boolean; allArtifacts?: boolean; createPackages?: string[] } = {}) {
     const d = latest.current;
-    if (inFlight.current || !d.packages.length || !sourceTenantId || !targetTenantId || routeReason) return;
+    if (inFlight.current || d.previewJob || !d.packages.length || !sourceTenantId || !targetTenantId || routeReason) return;
     if (real && (realDisabled || !d.preview)) return;
     if (!real && (options.allArtifacts ? allPreviewReason : previewReason)) return;
     const requestPackages: TransportRequest['packages'] | null = real || options.withoutTemplate ? d.previewPackages : options.allArtifacts
@@ -165,12 +224,17 @@ export function useWizard() {
       ...x, busy: true, error: null, templateFailure: null, template, previewPackages: requestPackages,
       ...(options.allArtifacts ? { artifacts: Object.fromEntries(Object.entries(x.artifacts).map(([id, a]) =>
         [id, a.status === 'ok' && x.packages.some(p => p.id === id) ? { ...a, selected: a.items.map(item => item.id) } : a])) } : {}),
-      ...(real ? {} : { preview: null, real: null }),
+      ...(real ? {} : { preview: null, previewCancelled: false, real: null }),
     }));
     try {
-      const result = await postTransport(body);
-      if (gen !== generation.current) return;
-      update(x => (real ? { ...x, real: result, step: 'real' } : { ...x, preview: result, real: null, step: 'preview' }));
+      if (real) {
+        const result = await postTransport(body);
+        if (gen === generation.current) update(x => ({ ...x, real: result, step: 'real' }));
+      } else {
+        const { jobId, total } = await startTransportJob(body);
+        if (gen !== generation.current) return;
+        update(x => ({ ...x, step: 'preview', previewJob: { jobId, total, done: 0, items: null, pollFailed: false, cancelRequested: false } }));
+      }
     } catch (e) {
       if (gen !== generation.current) return;
       const error = toApiError(e);
@@ -185,6 +249,11 @@ export function useWizard() {
 
   return {
     ...data,
+    busy,
+    cancelPreview,
+    retryPreviewPoll() {
+      update(d => d.previewJob ? { ...d, previewJob: { ...d.previewJob, pollFailed: false } } : d);
+    },
     packages,
     artifactSummary,
     noneSelected,
@@ -202,6 +271,7 @@ export function useWizard() {
       if (step === 'template') return true;
       if (step === 'package') return data.templateDone || data.packages.length > 0;
       if (step === 'artifacts') return data.packages.length > 0;
+      if (step === 'preview') return Boolean(data.preview || data.previewJob || data.previewCancelled);
       return data.preview !== null;
     },
     goStep(step: WizardStep) {

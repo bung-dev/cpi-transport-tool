@@ -29,7 +29,7 @@ function AppShell() {
   const main = useRef<HTMLElement>(null);
   const { tenants, sourceTenantId, targetTenantId, setSourceTenantId, setTargetTenantId, readOnly } = useTenants();
   // 새 이관 마법사의 상태는 여기서 들고 있어 팔레트 명령(미리보기 실행·실제 이관·원본·대상 변경)이 같은 상태로 동작한다(REQ-411).
-  const wizard = useWizard();
+  const wizard = useWizard(route === 'transport');
   const routeRef = useRef(route);
   routeRef.current = route;
   useEffect(() => {

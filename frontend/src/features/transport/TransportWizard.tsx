@@ -18,6 +18,7 @@ import { templateReason } from '../templates/TemplatesScreen';
 import { useReadOnlyState, useTenants } from '../tenants/TenantContext';
 import { ArtifactGrid } from './ArtifactGrid';
 import { ConfirmDialog } from './ConfirmDialog';
+import { PreviewProgress } from './PreviewProgress';
 import { REGISTER_TENANT_FIRST, hasNoTenants } from './noTenants';
 import { RouteDialog } from './RouteDialog';
 import { TOO_MANY_ARTIFACTS, type Wizard, type WizardStep } from './useWizard';
@@ -100,7 +101,7 @@ function StepBar({ w }: { w: Wizard }) {
 function RunStatus({ w }: { w: Wizard }) {
   return (
     <>
-      {w.busy && !w.confirm && <p role="status" className="text-sm text-ink-secondary">이관 실행 중</p>}
+      {w.busy && !w.previewJob && !w.confirm && <p role="status" className="text-sm text-ink-secondary">이관 실행 중</p>}
       {w.error && <ErrorAlert error={w.error} />}
       {w.templateFailure && (
         <div className="flex flex-wrap items-center gap-3">
@@ -271,6 +272,13 @@ function ArtifactList({ w, pkg }: { w: Wizard; pkg: ArtifactSummary }) {
 function PreviewStep({ w }: { w: Wizard }) {
   return (
     <div className="flex min-w-0 flex-col gap-4">
+      {!w.preview && <div className="flex justify-end">
+        <Button variant="primary" disabled={w.previewReason !== undefined} onClick={() => w.runPreview()}>미리보기 실행</Button>
+      </div>}
+      {w.previewJob && (w.previewJob.pollFailed
+        ? <ErrorAlert error={{ title: '진행 상황을 불러오지 못했습니다' }} onRetry={w.retryPreviewPoll} />
+        : <PreviewProgress job={w.previewJob} artifacts={w.artifacts} onCancel={w.cancelPreview} />)}
+      {w.previewCancelled && <p role="status" className="text-sm text-ink-secondary">미리보기를 취소했습니다</p>}
       {w.preview && <TransportResult result={w.preview} onOpenReal={w.openConfirm} />}
       <RunStatus w={w} />
     </div>

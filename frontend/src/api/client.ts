@@ -2,9 +2,10 @@ import { ApiRequestError, networkError, parseErrorBody, unknownError } from './e
 import type { ArtifactSummary, TransportHistoryEntry, TransportRequest, TransportResponse, Tenant, TenantsResponse, TenantStatusResponse } from './types';
 import type { TransportTemplate, TemplateInput, AuditCategory, AuditEntry } from './types';
 import type { DashboardResponse, Settings, VersionResponse } from './types';
+import type { ActiveJob, JobStarted, TransportJob } from './types';
 
 // REQ-002 AC-4, REQ-012 AC-2: 같은 출처의 상대 경로만 쓴다. 기준 URL이나 환경 변수 값은 없다.
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, emptyResponse = false): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, init);
@@ -20,7 +21,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiRequestError(parseErrorBody(res.status, text), res.status);
   }
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204 || emptyResponse) return undefined as T;
   try {
     return (await res.json()) as T;
   } catch {
@@ -41,11 +42,31 @@ export function getTargetPackageStatus(tenantId: string, packageIds: string[]): 
 }
 
 export function postTransport(body: TransportRequest): Promise<TransportResponse> {
-  return request('/transport', {
+  return postTransportRequest('/transport', body);
+}
+
+function postTransportRequest<T>(path: string, body: TransportRequest): Promise<T> {
+  return request(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+export function startTransportJob(body: TransportRequest): Promise<JobStarted> {
+  return postTransportRequest('/transport/jobs', body);
+}
+
+export function getTransportJob(id: string): Promise<TransportJob> {
+  return request(`/transport/jobs/${encodeURIComponent(id)}`);
+}
+
+export function cancelTransportJob(id: string): Promise<void> {
+  return request(`/transport/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }, true);
+}
+
+export function getActiveTransportJob(): Promise<ActiveJob | undefined> {
+  return request('/transport/jobs/active');
 }
 
 export const HISTORY_FILTER_KEYS = ['date', 'mode', 'result'] as const;
