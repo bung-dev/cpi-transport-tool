@@ -93,6 +93,12 @@ export interface Settings {
   transportConcurrency: number;
 }
 
+export interface VersionResponse {
+  version: string;
+  commit: string;
+  buildTime: string | null;
+}
+
 export type AuditCategory = 'tenant' | 'template' | 'transport' | 'settings';
 export interface AuditEntry {
   id: string; time: string; category: AuditCategory;
