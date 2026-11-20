@@ -299,6 +299,41 @@ class TransportJobPersistenceTests {
     }
 
     @Test
+    @DisplayName("REQ-805 (리뷰 1차): a graceful shutdown during a running real job does not wait for the remaining iFlows, finishes within about 10 seconds and the job reads INTERRUPTED after restart")
+    void req805_gracefulShutdownIsBounded() throws Exception {
+        var store = files("shutdown");
+        var first = app(store);
+        String id;
+        try {
+            stubs.prd().setGlobalFixedDelay(3000);
+            id = startJob(first, realBody());
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
+            while (true) {
+                var current = job(first, id);
+                assertThat(current.get("status").asString()).isEqualTo("RUNNING");
+                if (!current.get("items").get(0).get("stage").asString().equals("WAITING")) break;
+                if (System.nanoTime() > deadline) fail("first iFlow never started");
+                Thread.sleep(50);
+            }
+        } catch (Throwable failure) {
+            first.close();
+            throw failure;
+        }
+        long started = System.nanoTime();
+        first.close();
+        long seconds = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - started);
+        stubs.prd().setGlobalFixedDelay(0);
+        assertThat(seconds).as("shutdown seconds").isLessThan(16);
+        try (var second = app(store)) {
+            var after = job(second, id);
+            assertThat(after.get("status").asString()).isEqualTo("INTERRUPTED");
+            int skipped = 0;
+            for (var item : after.get("items")) if (item.get("stage").asString().equals("SKIPPED")) skipped++;
+            assertThat(skipped).isGreaterThanOrEqualTo(2);
+        }
+    }
+
+    @Test
     @DisplayName("REQ-805: the E2E app launcher passes a jobs file inside its work folder so E2E never writes the person's real jobs.json")
     void req805_e2eLauncherUsesWorkFolder() throws Exception {
         var launcher = Files.readString(Path.of("e2e/tools/app.py"));
