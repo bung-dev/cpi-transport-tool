@@ -1,7 +1,7 @@
 import { ApiRequestError, networkError, parseErrorBody, unknownError } from './errors';
 import type { ArtifactSummary, TransportRequest, TransportResponse, Tenant, TenantsResponse, TenantStatusResponse } from './types';
 import type { TransportTemplate, TemplateInput, AuditCategory, AuditEntry } from './types';
-import type { DashboardResponse } from './types';
+import type { DashboardResponse, Settings } from './types';
 
 // REQ-002 AC-4, REQ-012 AC-2: 같은 출처의 상대 경로만 쓴다. 기준 URL이나 환경 변수 값은 없다.
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -18,7 +18,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // 본문을 못 읽어도 상태 코드로 알 수 없는 오류를 만든다.
     }
-    throw new ApiRequestError(parseErrorBody(res.status, text));
+    throw new ApiRequestError(parseErrorBody(res.status, text), res.status);
   }
   if (res.status === 204) return undefined as T;
   try {
@@ -78,3 +78,15 @@ export function saveTemplate(body: TemplateInput, id?: string): Promise<Transpor
 }
 export function deleteTemplate(id: string): Promise<void> { return request(`/templates/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
 export function getAudit(category: AuditCategory | 'all'): Promise<AuditEntry[]> { return request(`/audit?category=${category}`); }
+
+export function getSettings(): Promise<Settings> {
+  return request('/settings');
+}
+
+export function saveSettings(settings: Settings): Promise<Settings> {
+  return request('/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+}

@@ -2,6 +2,7 @@ package com.company.sap.cpitransport.config;
 
 import java.time.Clock;
 import java.util.Optional;
+import com.company.sap.cpitransport.model.ConcurrencySettings;
 import com.company.sap.cpitransport.tenant.TenantProperties;
 import com.company.sap.cpitransport.tenant.TenantStoreKeySource;
 import com.company.sap.cpitransport.client.Sleeper;
@@ -13,7 +14,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({CpiProperties.class, TransportProperties.class, TenantProperties.class, ReadOnlyProperties.class, TemplateProperties.class, AuditProperties.class})
+@EnableConfigurationProperties({CpiProperties.class, TransportProperties.class, TenantProperties.class,
+        ReadOnlyProperties.class, TemplateProperties.class, AuditProperties.class, ConcurrencySettings.class})
 public class AppConfig {
     @Bean
     public EncryptedTenantStore encryptedTenantStore(TenantProperties properties,

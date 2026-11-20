@@ -58,7 +58,7 @@ export function parseErrorBody(status: number, text: string): ApiError {
 export class ApiRequestError extends Error {
   readonly apiError: ApiError;
 
-  constructor(apiError: ApiError) {
+  constructor(apiError: ApiError, readonly status?: number) {
     super(apiError.title);
     this.apiError = apiError;
   }

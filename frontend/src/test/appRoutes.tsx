@@ -12,6 +12,8 @@ export const ROUTES = {
   '이관 이력': '#/history',
   테넌트: '#/tenants',
   '감사 이력': '#/audit',
+  // 20261119-transport-speedup S3 REQ-708: 맨 끝 탭
+  설정: '#/settings',
 } as const;
 export type NavName = keyof typeof ROUTES;
 export const NAV_NAMES = Object.keys(ROUTES) as NavName[];

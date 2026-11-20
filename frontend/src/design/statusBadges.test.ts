@@ -12,6 +12,8 @@ const table: [StatusKind, string, StatusTone][] = [
   ['configurationStatus', 'COPIED', 'success'],
   ['configurationStatus', 'SKIPPED_EMPTY', 'caution'],
   ['configurationStatus', 'FAILED', 'danger'],
+  // 20261119 REQ-707: 실제 이관 구성 값은 iFlow와 함께 옮겨짐(성공 색)
+  ['configurationStatus', 'BUNDLED', 'success'],
   ['deployStatus', 'STARTED', 'success'],
   ['deployStatus', 'ERROR', 'danger'],
   ['deployStatus', 'TIMEOUT', 'warning'],
@@ -34,8 +36,8 @@ describe('상태 배지 매핑', () => {
     expect(badgeTone('transportAction', '__proto__')).toBe('neutral');
   });
 
-  it('REQ-103 AC-4: 표는 14쌍이다', () => {
-    expect(table).toHaveLength(14);
+  it('REQ-103 AC-4, REQ-707: 표는 15쌍이다', () => {
+    expect(table).toHaveLength(15);
   });
 
   it.each([
@@ -43,7 +45,8 @@ describe('상태 배지 매핑', () => {
     ['COPIED', '복사됨'],
     ['SKIPPED_EMPTY', '빈 값이라 건너뜀'],
     ['FAILED', '실패'],
-  ])('REQ-510: 구성 값 상태 %s의 배지 이름은 "%s"', (value, label) => {
+    ['BUNDLED', 'iFlow와 함께 옮겨짐'],
+  ])('REQ-510, REQ-707: 구성 값 상태 %s의 배지 이름은 "%s"', (value, label) => {
     expect(badgeLabel('configurationStatus', value)).toBe(label);
   });
 

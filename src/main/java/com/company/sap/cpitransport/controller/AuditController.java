@@ -21,7 +21,7 @@ public class AuditController {
 
     @GetMapping("/audit")
     public List<AuditEntry> list(@RequestParam(defaultValue = "all") String category) {
-        if (!Set.of("all", "tenant", "template", "transport").contains(category))
+        if (!Set.of("all", "tenant", "template", "transport", "settings").contains(category))
             throw new ApiException(Code.INVALID_REQUEST);
         var entries = new ArrayList<AuditEntry>();
         if (!category.equals("transport")) {

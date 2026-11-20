@@ -133,4 +133,39 @@ class TransportHistoryStoreTests {
         assertThat(old.configurations()).isEmpty();
         assertThat(Files.readAllLines(file()).getFirst() + "\n").isEqualTo(legacy);
     }
+
+    @Test
+    @DisplayName("REQ-702: legacy configuration statuses COPIED, SKIPPED_EMPTY and FAILED are returned as written next to new BUNDLED rows and the file is left unchanged")
+    void req702_legacyConfigurationStatuses() throws Exception {
+        Files.createDirectories(file().getParent());
+        String legacy = "{\"transportId\":\"legacy-2\",\"packageId\":\"Pkg\",\"dryRun\":false,\"deploy\":false,"
+                + "\"startedAt\":\"2026-09-29T00:00:00Z\",\"finishedAt\":\"2026-09-29T00:00:01Z\","
+                + "\"summary\":{\"total\":1,\"succeeded\":0,\"failed\":1},\"results\":[{\"artifactId\":\"A\",\"status\":\"FAILED\","
+                + "\"action\":\"CREATED\",\"configurations\":["
+                + "{\"key\":\"Endpoint\",\"value\":\"dev\",\"dataType\":\"xsd:string\",\"status\":\"COPIED\"},"
+                + "{\"key\":\"Password\",\"value\":\"\",\"dataType\":\"xsd:string\",\"status\":\"SKIPPED_EMPTY\"},"
+                + "{\"key\":\"Next\",\"value\":\"42\",\"dataType\":\"xsd:integer\",\"status\":\"FAILED\"}],"
+                + "\"deployStatus\":\"NOT_REQUESTED\",\"error\":{\"code\":\"CONFIGURATION_UPDATE_FAILED\","
+                + "\"message\":\"CONFIGURATION_UPDATE: Next: HTTP 500\"}}]}\n";
+        Files.writeString(file(), legacy);
+        var base = response(6);
+        var bundled = new TransportResponse(base.transportId(), "패키지", false, false, base.startedAt(), base.finishedAt(),
+                new TransportSummary(1, 1, 0), List.of(new ArtifactResult("B", null, TransportAction.CREATED,
+                List.of(new ConfigurationItem("Endpoint", "dev", "xsd:string", ConfigurationStatus.BUNDLED)),
+                DeployStatus.NOT_REQUESTED, null)));
+        store().append(bundled);
+        var all = store().findAll();
+        assertThat(all).extracting(TransportResponse::transportId).containsExactly("id-6", "legacy-2");
+        assertThat(all.get(0).results().getFirst().configurations()).extracting(ConfigurationItem::status)
+                .containsExactly(ConfigurationStatus.BUNDLED);
+        var old = all.get(1).results().getFirst();
+        assertThat(old.configurations()).extracting(ConfigurationItem::key, ConfigurationItem::status).containsExactly(
+                org.assertj.core.groups.Tuple.tuple("Endpoint", ConfigurationStatus.COPIED),
+                org.assertj.core.groups.Tuple.tuple("Password", ConfigurationStatus.SKIPPED_EMPTY),
+                org.assertj.core.groups.Tuple.tuple("Next", ConfigurationStatus.FAILED));
+        assertThat(old.error().code()).isEqualTo("CONFIGURATION_UPDATE_FAILED");
+        assertThat(Files.readAllLines(file()).getFirst() + "\n").isEqualTo(legacy);
+        assertThat(json.readTree(Files.readAllLines(file()).get(1)).at("/results/0/configurations/0/status").asString())
+                .isEqualTo("BUNDLED");
+    }
 }
