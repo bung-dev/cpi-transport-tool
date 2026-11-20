@@ -2,7 +2,7 @@
 
   python e2e/tools/app.py --label ro [--read-only true|false|default] [--tenants env|unset]
 
-빌드된 JAR(build/libs/*-SNAPSHOT.jar, bootJar)을 앞에서 실행하고 끝날 때까지 기다린다.
+빌드된 JAR(build/libs/cpi-transport-tool-<버전>.jar, bootJar. 여러 개면 가장 최근 것)을 앞에서 실행하고 끝날 때까지 기다린다.
 워크플로우 검사 스크립트(.claude/wf3/check.py)가 서비스로 띄우고 끝나면 멈춘다.
 실행할 때마다 build/e2e-app/<label>/을 비우고 새 저장소 키·저장 파일·이력 파일을 만든다.
   로그: build/e2e-app/<label>/app-<label>.log   이력: history-<label>.jsonl  (lib/qa.ts의 QA_APP_LOG 규칙)
@@ -36,9 +36,11 @@ def main():
     ap.add_argument("--read-only", default="default", choices=["true", "false", "default"])
     ap.add_argument("--tenants", default="env", choices=["env", "unset"])
     a = ap.parse_args()
-    jars = [j for j in glob.glob(str(ROOT / "build" / "libs" / "*-SNAPSHOT.jar")) if not j.endswith("-plain.jar")]
+    # 버전이 바뀌어도 찾도록 jar 이름의 버전에 기대지 않는다 (근거: changes/20261120-versioning REQ-006)
+    jars = [j for j in glob.glob(str(ROOT / "build" / "libs" / "cpi-transport-tool-*.jar")) if not j.endswith("-plain.jar")]
     if not jars:
         sys.exit("JAR이 없다. 먼저 gradlew bootJar")
+    jars.sort(key=os.path.getmtime, reverse=True)
     work = ROOT / "build" / "e2e-app" / a.label
     if work.exists():
         shutil.rmtree(work)
