@@ -3,9 +3,10 @@ export const ROUTES = [
   ['history', '이관 이력'], ['tenants', '테넌트'], ['audit', '감사 이력'],
   ['settings', '설정'],
 ] as const;
-export type Route = typeof ROUTES[number][0];
+export type Route = typeof ROUTES[number][0] | 'job';
 export function readRoute(): Route {
   const [path] = window.location.hash.split('?');
+  if (path === '#/job') return 'job';
   return ROUTES.find(([id]) => path === `#/${id}`)?.[0] ?? 'dashboard';
 }
 export function readQuery(): string {
@@ -18,3 +19,4 @@ export function subscribeToHashChange(onChange: () => void) {
   return () => window.removeEventListener('hashchange', onChange);
 }
 export function navigate(route: Route) { window.location.hash = `#/${route}`; }
+export function jobHref(jobId: string) { return `#/job?id=${encodeURIComponent(jobId)}`; }

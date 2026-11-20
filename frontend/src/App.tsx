@@ -3,6 +3,8 @@ import { flushSync } from 'react-dom';
 import { BrandIcon } from './components/ui/icons';
 import { Button } from './components/ui/Button';
 import { HistoryTab } from './features/history/HistoryTab';
+import { ActiveJobBanner, useActiveJob } from './features/job/ActiveJobBanner';
+import { JobScreen } from './features/job/JobScreen';
 import { Dashboard } from './features/dashboard/Dashboard';
 import { TransportWizard } from './features/transport/TransportWizard';
 import { useWizard } from './features/transport/useWizard';
@@ -29,7 +31,8 @@ function AppShell() {
   const main = useRef<HTMLElement>(null);
   const { tenants, sourceTenantId, targetTenantId, setSourceTenantId, setTargetTenantId, readOnly } = useTenants();
   // 새 이관 마법사의 상태는 여기서 들고 있어 팔레트 명령(미리보기 실행·실제 이관·원본·대상 변경)이 같은 상태로 동작한다(REQ-411).
-  const wizard = useWizard(route === 'transport');
+  const activeJob = useActiveJob();
+  const wizard = useWizard(route === 'transport', activeJob?.jobId);
   const routeRef = useRef(route);
   routeRef.current = route;
   useEffect(() => {
@@ -88,7 +91,7 @@ function AppShell() {
       else if (c.type === 'navigate') { if (c.route === 'transport') wizard.restart(); go(c.route); }
       else if (c.type === 'new') { wizard.restart(); go('transport'); }
       else if (c.type === 'route') { showTransport(); wizard.openRouteDialog(); }
-      else if (c.type === 'source' || c.type === 'target') { if (c.type === 'source') setSourceTenantId(c.id); else setTargetTenantId(c.id); go(route); }
+      else if (c.type === 'source' || c.type === 'target') { if (c.type === 'source') setSourceTenantId(c.id); else setTargetTenantId(c.id); if (route !== 'job') go(route); }
     });
     // 경로 선택 창은 열리면서 창 안으로 포커스를 옮긴다.
     if (c.type === 'createTenant' || c.type === 'createTemplate' || c.type === 'route') return;
@@ -108,6 +111,7 @@ function AppShell() {
         }}
           className={`shrink-0 rounded-md px-4 py-2 font-medium ${route === id ? 'bg-primary-soft text-primary' : 'text-ink-secondary hover:bg-surface-hover'}`}>{label}</a>)}
       </nav>
+      {route !== 'job' && activeJob && <ActiveJobBanner job={activeJob} />}
     </header>
     <main ref={main} tabIndex={-1} className="mx-auto w-full max-w-[1200px] min-w-0 px-4 py-8 md:px-6">
       <div key={`${route}-${revision}`} className="min-w-0">
@@ -116,6 +120,7 @@ function AppShell() {
           go('transport');
         }} />}
         {route === 'transport' && <TransportWizard wizard={wizard} />}
+        {route === 'job' && <JobScreen onNew={() => { wizard.restart(); go('transport'); }} />}
         {route === 'history' && <HistoryTab />}
         {route === 'tenants' && <TenantTab initiallyCreate={create === 'tenant'} />}
         {route === 'templates' && <TemplatesScreen initiallyCreate={create === 'template'} onUse={useTemplate} />}

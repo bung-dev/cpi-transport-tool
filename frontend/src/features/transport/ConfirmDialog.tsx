@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Callout';
 import { Switch } from '../../components/ui/Switch';
+import { ActiveJobNotice } from '../job/ActiveJobBanner';
 
 interface Props {
   targetName?: string;
@@ -19,6 +20,7 @@ interface Props {
   /** "<원본 이름> → <대상 이름>" */
   routeText?: string;
   busy: boolean;
+  activeJobId?: string;
   onConfirm: (createPackages: string[]) => void;
   onCancel: () => void;
   /** 연 버튼이 화면에서 없어졌을 때 포커스를 보낼 요소(실행 카드의 실행 버튼) */
@@ -26,7 +28,7 @@ interface Props {
 }
 
 // REQ-005 AC-3, REQ-009 AC-1: 실제 이관 확인 대화상자(role=dialog, aria-modal).
-export function ConfirmDialog({ packages, targetTenantId, artifactCount, deploy, onDeployChange, routeText, busy, onConfirm, onCancel, fallbackFocusRef, targetName = 'PRD' }: Props) {
+export function ConfirmDialog({ packages, targetTenantId, artifactCount, deploy, onDeployChange, routeText, busy, activeJobId, onConfirm, onCancel, fallbackFocusRef, targetName = 'PRD' }: Props) {
   const titleId = useId();
   const ids = packages.map(p => p.packageId);
   const { state, retry } = useRemote(() => getTargetPackageStatus(targetTenantId, ids), JSON.stringify([targetTenantId, ids]));
@@ -59,7 +61,7 @@ export function ConfirmDialog({ packages, targetTenantId, artifactCount, deploy,
     }
     if (e.key !== 'Tab') return;
     // Tab 순환은 대화상자 안에서만 한다.
-    const focusables = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)') ?? []);
+    const focusables = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href]') ?? []);
     if (focusables.length === 0) {
       e.preventDefault();
       return;
@@ -112,12 +114,13 @@ export function ConfirmDialog({ packages, targetTenantId, artifactCount, deploy,
           <Switch className="mt-3.5" label="배포" description={`이관 후 ${targetName}에 배포합니다`} checked={deploy} disabled={busy}
             onChange={(e) => onDeployChange(e.target.checked)} />
         )}
+        {activeJobId && <p role="status" className="mt-3 text-sm"><ActiveJobNotice jobId={activeJobId} onView={onCancel} /></p>}
         {/* 폭 640px 미만에서는 버튼이 세로로 쌓이고 DOM 순서(취소 → 실행)를 뒤집어 "실행"이 위에 온다 */}
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button ref={cancelRef} className="w-full sm:w-auto" onClick={onCancel} disabled={busy}>
             취소
           </Button>
-          <Button variant="primary" className="w-full sm:w-auto" onClick={() => { if (checked) onConfirm(createPackages); }} disabled={busy || !checked}>
+          <Button variant="primary" className="w-full sm:w-auto" onClick={() => { if (checked) onConfirm(createPackages); }} disabled={busy || !checked || !!activeJobId}>
             실행
           </Button>
         </div>

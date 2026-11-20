@@ -10,15 +10,17 @@ import { ArtifactCard } from './ArtifactCard';
 import { deployOutcome } from './deployOutcome';
 import { failedArtifactCount, initialExpanded, isProblemArtifact, totalProblemCount } from './problems';
 import { useReadOnlyState } from '../tenants/TenantContext';
+import { ActiveJobNotice } from '../job/ActiveJobBanner';
 
 // REQ-105 AC-8, REQ-012 AC-1: 서버 값은 모두 JSX 텍스트 노드로만 렌더링한다.
 interface Props {
   result: TransportHistoryEntry;
   /** 이관 탭이 넘긴다. 미리보기 결과의 머리에 "이 구성으로 실제 이관" 버튼을 보인다. 이력 상세는 넘기지 않는다(REQ-105 AC-6). */
   onOpenReal?: () => void;
+  activeJobId?: string;
 }
 
-export function TransportResult({ result, onOpenReal }: Props) {
+export function TransportResult({ result, onOpenReal, activeJobId }: Props) {
   const titleId = useId();
   const noticeId = `${titleId}-read-only`;
   const { realDisabled, notice } = useReadOnlyState();
@@ -64,13 +66,15 @@ export function TransportResult({ result, onOpenReal }: Props) {
         {result.dryRun ? <Badge tone="neutral">미리보기</Badge> : <Badge tone="accent">실제 이관</Badge>}
         {result.deploy && <Badge tone="info">배포</Badge>}
         {onOpenReal && result.dryRun && (
-          <Button className="ml-auto" disabled={realDisabled} aria-describedby={notice ? noticeId : undefined} onClick={() => { if (!realDisabled) onOpenReal(); }}>
+          <Button className="ml-auto" disabled={realDisabled || !!activeJobId} aria-describedby={activeJobId || notice ? noticeId : undefined} onClick={onOpenReal}>
             이 구성으로 실제 이관
           </Button>
         )}
       </div>
       {outcome && <p className={outcome.tone === 'success' ? 'text-success-fg' : 'text-danger-fg'}>{outcome.summary}</p>}
-      {onOpenReal && result.dryRun && notice && <p id={noticeId} className="text-sm text-ink-secondary">{notice}</p>}
+      {onOpenReal && result.dryRun && (activeJobId || notice) && <p id={noticeId} className="text-sm text-ink-secondary">
+        {activeJobId ? <ActiveJobNotice jobId={activeJobId} /> : notice}
+      </p>}
       {/* 경로·템플릿은 메타 dl 밖에 둔다(dl의 용어 목록과 순서는 그대로, REQ-424). 머리 줄 바로 다음은 배포 결과 요약 자리라 그 뒤에 둔다(REQ-309 AC-8). */}
       <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         <p className="min-w-0 break-all font-medium">{route}</p>

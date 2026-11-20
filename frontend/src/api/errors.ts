@@ -2,6 +2,7 @@
 export interface ApiError {
   title: string;
   message?: string;
+  activeJobId?: string;
 }
 
 const TITLES: Record<string, string> = {
@@ -29,6 +30,7 @@ export function isTemplateError(error: ApiError): boolean {
 }
 
 export const NETWORK_ERROR_TITLE = '서버에 연결할 수 없습니다';
+export const JOB_ALREADY_RUNNING = '다른 실제 이관이 진행 중입니다';
 
 export function unknownError(status: number): ApiError {
   return { title: `알 수 없는 오류(HTTP ${status})` };
@@ -43,7 +45,10 @@ export function parseErrorBody(status: number, text: string): ApiError {
   try {
     const body: unknown = JSON.parse(text);
     if (typeof body === 'object' && body !== null) {
-      const { error, message } = body as Record<string, unknown>;
+      const { error, message, jobId } = body as Record<string, unknown>;
+      if (status === 409 && error === 'JOB_ALREADY_RUNNING' && typeof jobId === 'string' && jobId) {
+        return { title: JOB_ALREADY_RUNNING, activeJobId: jobId };
+      }
       if (typeof error === 'string' && Object.hasOwn(TITLES, error) && typeof message === 'string') {
         return { title: TITLES[error], message };
       }
