@@ -1,11 +1,15 @@
 package com.company.sap.cpitransport.controller;
 
+import java.time.Clock;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Predicate;
 import com.company.sap.cpitransport.template.TemplateService;
 import com.company.sap.cpitransport.config.ReadOnlyProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.company.sap.cpitransport.model.*;
 import com.company.sap.cpitransport.service.EnvironmentGuard;
+import com.company.sap.cpitransport.service.HistoryCriteria;
 import com.company.sap.cpitransport.service.TransportService;
 import com.company.sap.cpitransport.service.TransportHistoryStore;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +25,7 @@ public class TransportController {
 
     private final ReadOnlyProperties readOnly;
     private final TemplateService templates;
+    private final Clock clock;
 
     public TransportController(TransportService service, EnvironmentGuard guard, TransportHistoryStore history) {
         this(service, guard, history, new ReadOnlyProperties(true));
@@ -28,12 +33,13 @@ public class TransportController {
 
     public TransportController(TransportService service, EnvironmentGuard guard, TransportHistoryStore history,
                                ReadOnlyProperties readOnly) {
-        this(service, guard, history, readOnly, null);
+        this(service, guard, history, readOnly, null, Clock.systemUTC());
     }
 
     @Autowired
     public TransportController(TransportService service, EnvironmentGuard guard, TransportHistoryStore history,
-                               ReadOnlyProperties readOnly, TemplateService templates) {
+                               ReadOnlyProperties readOnly, TemplateService templates, Clock clock) {
+        this.clock = clock;
         this.templates = templates;
         this.service = service;
         this.guard = guard;
@@ -87,8 +93,31 @@ public class TransportController {
     }
 
     @GetMapping("/transport/history")
-    public java.util.List<TransportResponse> history() {
-        return history.findAll();
+    public List<TransportResponse> history(@RequestParam(required = false) String date,
+                                           @RequestParam(required = false) String mode,
+                                           @RequestParam(required = false) String result) {
+        if (date == null && mode == null && result == null) return history.findAll();
+
+        Predicate<TransportResponse> filter = t -> true;
+        if (date != null) {
+            if (!date.equals("today")) invalid();
+            filter = HistoryCriteria.startedToday(clock);
+        }
+        if (mode != null) {
+            switch (mode) {
+                case "preview" -> filter = filter.and(TransportResponse::dryRun);
+                case "real" -> filter = filter.and(t -> !t.dryRun());
+                default -> invalid();
+            }
+        }
+        if (result != null) {
+            switch (result) {
+                case "succeeded" -> filter = filter.and(HistoryCriteria::succeeded);
+                case "failed" -> filter = filter.and(HistoryCriteria::failed);
+                default -> invalid();
+            }
+        }
+        return history.findAll().stream().filter(filter).toList();
     }
 
     private static PackageSelection selection(JsonNode body) {

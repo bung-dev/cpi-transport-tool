@@ -1,7 +1,7 @@
 import { packageSummary } from '../../lib/packageSummary';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { useId, useRef, useState, type ReactNode } from 'react';
-import type { TransportResponse } from '../../api/types';
+import type { TransportHistoryEntry } from '../../api/types';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Switch } from '../../components/ui/Switch';
@@ -13,7 +13,7 @@ import { useReadOnlyState } from '../tenants/TenantContext';
 
 // REQ-105 AC-8, REQ-012 AC-1: 서버 값은 모두 JSX 텍스트 노드로만 렌더링한다.
 interface Props {
-  result: TransportResponse;
+  result: TransportHistoryEntry;
   /** 이관 탭이 넘긴다. 미리보기 결과의 머리에 "이 구성으로 실제 이관" 버튼을 보인다. 이력 상세는 넘기지 않는다(REQ-105 AC-6). */
   onOpenReal?: () => void;
 }
@@ -22,7 +22,7 @@ export function TransportResult({ result, onOpenReal }: Props) {
   const titleId = useId();
   const noticeId = `${titleId}-read-only`;
   const { realDisabled, notice } = useReadOnlyState();
-  const { total, succeeded, failed } = result.summary;
+  const summary = result.summary;
   const outcome = deployOutcome(result);
 
   // 접기·펼치기와 "문제 항목만 보기" 상태. 새 결과가 나타나면 그 결과의 처음 상태로 초기화한다(REQ-105 AC-5).
@@ -76,11 +76,11 @@ export function TransportResult({ result, onOpenReal }: Props) {
         <p className="min-w-0 break-all font-medium">{route}</p>
         {result.template && <p className="min-w-0 break-all text-ink-secondary">{`템플릿 ${result.template.name}`}</p>}
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        <Stat label="전체" value={total} />
-        <Stat label="성공" value={succeeded} valueClass={succeeded >= 1 ? 'text-success-fg' : 'text-ink'} />
-        <Stat label="실패" value={failed} valueClass={failed >= 1 ? 'text-danger-fg' : 'text-ink'} />
-      </div>
+      {summary && <div className="grid grid-cols-3 gap-3">
+        <Stat label="전체" value={summary.total} />
+        <Stat label="성공" value={summary.succeeded} valueClass={summary.succeeded >= 1 ? 'text-success-fg' : 'text-ink'} />
+        <Stat label="실패" value={summary.failed} valueClass={summary.failed >= 1 ? 'text-danger-fg' : 'text-ink'} />
+      </div>}
       <dl className="grid grid-cols-1 gap-x-6 gap-y-2 rounded-lg border border-hairline bg-canvas px-4 py-3 sm:grid-cols-2 lg:grid-cols-4 min-w-0">
         <Meta label="이관 ID">
           <span className="font-mono text-[13px]">{result.transportId}</span>

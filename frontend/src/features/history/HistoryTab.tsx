@@ -1,7 +1,8 @@
 import { packageSummary } from '../../lib/packageSummary';
-import { useEffect, useRef, useState } from 'react';
-import { getHistory, getTemplates } from '../../api/client';
-import type { TransportResponse } from '../../api/types';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { getHistory, getTemplates, HISTORY_FILTER_KEYS } from '../../api/client';
+import { navigate, readQuery, subscribeToHashChange } from '../../app/routes';
+import type { TransportHistoryEntry } from '../../api/types';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -34,13 +35,29 @@ function TableSkeleton() {
 }
 
 /** 템플릿 칸: 없으면 "—", 있으면 실행 당시 이름. 지금 목록에 그 id가 없으면 "(삭제됨)"을 붙인다(목록을 못 읽었으면 판단하지 않는다). */
-function templateLabel(h: TransportResponse, liveIds: Set<string> | null): string {
+function templateLabel(h: TransportHistoryEntry, liveIds: Set<string> | null): string {
   if (!h.template) return '—';
   return liveIds && !liveIds.has(h.template.id) ? `${h.template.name} (삭제됨)` : h.template.name;
 }
 
 export function HistoryTab() {
-  const { state, retry } = useRemote(getHistory, 'history');
+  const query = useSyncExternalStore(subscribeToHashChange, readQuery);
+  return <HistoryList key={query} query={query} />;
+}
+
+const filterLabels = [
+  ['date', 'today', '오늘'],
+  ['mode', 'preview', '미리보기'],
+  ['mode', 'real', '실제 이관'],
+  ['result', 'succeeded', '성공'],
+  ['result', 'failed', '실패'],
+] as const;
+
+function HistoryList({ query }: { query: string }) {
+  const params = new URLSearchParams(query);
+  const filtered = HISTORY_FILTER_KEYS.some(key => params.has(key));
+  const labels = filterLabels.filter(([key, value]) => params.get(key) === value).map(([, , label]) => label);
+  const { state, retry } = useRemote(() => getHistory(params), `history?${query}`);
   // 템플릿 열의 "(삭제됨)" 판단에만 쓴다. 실패해도 오류를 보이지 않고 기록된 이름만 보인다(REQ-425).
   const { state: templates } = useRemote(getTemplates, 'templates');
   const liveTemplateIds = templates.status === 'ok' ? new Set(templates.data.map((t) => t.id)) : null;
@@ -108,12 +125,21 @@ export function HistoryTab() {
         }
       />
       <div className="flex flex-col gap-4 min-w-0">
+        {filtered && (
+          <div role="group" aria-label="이력 조건"
+            className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-hairline bg-canvas px-3 py-2 text-sm">
+            <span className="basis-full sm:basis-auto">조건: {labels.join(' · ')}</span>
+            {state.status === 'ok' && <span className="text-ink-secondary">{state.data.length}건</span>}
+            <Button size="sm" onClick={() => navigate('history')}>조건 해제</Button>
+          </div>
+        )}
         {state.status === 'loading' && <TableSkeleton />}
         {state.status === 'error' && <ErrorAlert error={state.error} onRetry={retry} />}
         {state.status === 'ok' &&
           (state.data.length === 0 ? (
             <div className="rounded-lg border border-hairline bg-canvas">
-              <EmptyState title="이관 이력이 없습니다" description="이관을 실행하면 여기에 기록됩니다." />
+              <EmptyState title={filtered ? '조건에 맞는 이력이 없습니다' : '이관 이력이 없습니다'}
+                description={filtered ? undefined : '이관을 실행하면 여기에 기록됩니다.'} />
             </div>
           ) : (
             <Table className="min-w-[720px]">
@@ -158,10 +184,10 @@ export function HistoryTab() {
                       </span>
                     </Td>
                     <Td className="whitespace-nowrap">
-                      <span className="inline-flex items-center gap-2">
+                      {h.summary ? <span className="inline-flex items-center gap-2">
                         <span className="tabular-nums">{`성공 ${h.summary.succeeded} / 전체 ${h.summary.total}`}</span>
                         {h.summary.failed >= 1 && <Badge tone="danger">{`실패 ${h.summary.failed}`}</Badge>}
-                      </span>
+                      </span> : '—'}
                     </Td>
                     <Td className="min-w-28">
                       <button

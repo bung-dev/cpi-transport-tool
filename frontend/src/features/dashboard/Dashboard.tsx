@@ -90,12 +90,15 @@ export function Dashboard({ onForward }: { onForward: (template: TransportTempla
           <h3 className="mb-5 font-semibold">오늘 요약</h3>
           <div className="grid grid-cols-2 gap-5 sm:grid-cols-4">
             {([
-              ['미리보기', data.today.previews], ['실제 이관', data.today.transports],
-              ['성공', data.today.succeeded], ['실패', data.today.failed],
-            ] as const).map(([label, count]) => <div key={label}>
+              ['미리보기', data.today.previews, 'mode=preview'],
+              ['실제 이관', data.today.transports, 'mode=real'],
+              ['성공', data.today.succeeded, 'mode=real&result=succeeded'],
+              ['실패', data.today.failed, 'mode=real&result=failed'],
+            ] as const).map(([label, count, query]) => <a key={label} href={`#/history?date=today&${query}`}
+              aria-label={`${label} ${count}건 이력 보기`} className="rounded hover:bg-surface-hover">
               <span className="block text-sm text-ink-secondary">{label} </span>
               <strong className={`text-3xl font-semibold ${label === '실패' && count > 0 ? 'text-danger-fg' : 'text-primary'}`}>{count}</strong>
-            </div>)}
+            </a>)}
           </div>
         </section>
       </div>

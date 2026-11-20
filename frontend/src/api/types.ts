@@ -63,6 +63,8 @@ export interface TransportResponse {
   results: ArtifactResult[];
 }
 
+export type TransportHistoryEntry = Omit<TransportResponse, 'summary'> & { summary: TransportSummary | null };
+
 export interface TransportRequest {
   sourceTenantId?: string;
   targetTenantId?: string;
