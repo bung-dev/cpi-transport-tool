@@ -1,5 +1,5 @@
 import { ApiRequestError, networkError, parseErrorBody, unknownError } from './errors';
-import type { ArtifactSummary, TransportRequest, TransportResponse, Tenant, TenantsResponse, TenantStatusResponse } from './types';
+import type { ArtifactSummary, TransportHistoryEntry, TransportRequest, TransportResponse, Tenant, TenantsResponse, TenantStatusResponse } from './types';
 import type { TransportTemplate, TemplateInput, AuditCategory, AuditEntry } from './types';
 import type { DashboardResponse, Settings } from './types';
 
@@ -48,8 +48,14 @@ export function postTransport(body: TransportRequest): Promise<TransportResponse
   });
 }
 
-export function getHistory(): Promise<TransportResponse[]> {
-  return request('/transport/history');
+export const HISTORY_FILTER_KEYS = ['date', 'mode', 'result'] as const;
+
+export function getHistory(query?: URLSearchParams): Promise<TransportHistoryEntry[]> {
+  const params = new URLSearchParams();
+  for (const key of HISTORY_FILTER_KEYS) {
+    for (const value of query?.getAll(key) ?? []) params.append(key, value);
+  }
+  return request(`/transport/history${params.size ? `?${params}` : ''}`);
 }
 
 export function getDashboard(templateId?: string): Promise<DashboardResponse> {
