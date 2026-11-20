@@ -17,6 +17,7 @@ export default defineConfig({
       '/dashboard': BACKEND,
       '/audit': BACKEND,
       '/settings': BACKEND,
+      '/version': BACKEND,
     },
   },
   test: {

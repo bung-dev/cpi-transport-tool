@@ -122,6 +122,20 @@ docker compose up -d --build
 - **대상 아티팩트가 SAP 화면에서 편집 중이면**(잠김, Draft) 업로드가 실패(UPLOAD_FAILED)합니다. SAP 화면에서 편집을 저장(Save as version)하거나 취소한 뒤 다시 이관하세요. 도구가 잠금을 풀지는 않습니다.
 - **배포에 실패하면** 결과와 이력 상세에 SAP가 알려 준 오류 내용이 보입니다. 비밀값·토큰·호스트처럼 보이는 글자는 가려서 보이지만, 모든 민감값이 가려진다는 보장은 없으니 공유하기 전에 직접 확인하세요. 배포에 실패한 아티팩트는 대상에 그대로 남습니다(도구가 지우거나 배포를 해제하지 않음).
 
+## 버전
+
+- 버전은 `build.gradle`의 `version` 하나에서 정합니다(0.x 유의적 버전). 실행 중인 앱의 버전과 커밋은 세 곳에서 봅니다.
+  - 화면 맨 아래: `v0.1.0 · abc1234`
+  - API: `GET /version` → `{"version":"0.1.0","commit":"abc1234","buildTime":"2026-11-20T10:00:00Z"}`
+  - 기동 로그 한 줄: `CPI Transport Tool 0.1.0 (커밋 abc1234, 빌드 2026-11-20T10:00:00Z)` (Docker는 `docker compose logs app`)
+- 커밋을 알 수 없으면 `unknown`(예: 저장소 밖이나 git worktree에서 Docker 빌드), 빌드 정보 없이 실행하면 버전이 `dev`입니다.
+- 번호 규칙: main 병합 하나가 버전 하나입니다. `feat/` 병합은 minor(0.1.0 → 0.2.0), `fix/` 병합은 patch(0.2.0 → 0.2.1)를 올립니다. `docs/`·`chore/`·`spike/` 병합은 버전을 올리지 않고 태그도 붙이지 않습니다. 접두사가 이 규칙에 맞지 않으면 병합하는 사람이 기능인지 수정인지 정합니다.
+- 병합 절차(브랜치는 `version`을 바꾸지 않습니다):
+  1. `git merge --no-ff --no-commit <브랜치>`
+  2. `build.gradle`의 `version`을 올리고, [CHANGELOG.md](CHANGELOG.md)의 `## 미출시` 항목을 `## X.Y.Z — YYYY-MM-DD`로 옮깁니다(버전을 올리지 않는 병합이면 `## 미출시`에 한 줄 더함)
+  3. 두 파일을 `git add` 하고 병합 커밋을 만듭니다
+  4. 버전을 올렸으면 `git tag -a vX.Y.Z -m "X.Y.Z"` (병합 커밋에)
+
 ## 개발자용
 
 - 구조: 백엔드는 Spring Boot(`src/`), 화면은 React + TypeScript + Vite(`frontend/`)이고, 화면 빌드 결과가 실행형 JAR 안에 함께 들어갑니다.
@@ -130,4 +144,4 @@ docker compose up -d --build
   - 백엔드 테스트: `./gradlew test` (PowerShell은 `.\gradlew.bat test`)
   - 화면 단위 테스트와 빌드: `frontend/`에서 `npm test`, `npm run build`
   - 전체 검사(위 두 가지와 실행형 JAR, 브라우저 E2E): `python .claude/wf3/check.py`. 브라우저 E2E는 실제 테넌트에 접속하지 않습니다. 자세한 내용은 [e2e/README.md](e2e/README.md)에 있습니다.
-- 실행형 JAR 만들기: `./gradlew bootJar` → `build/libs/cpi-transport-tool-0.0.1-SNAPSHOT.jar`
+- 실행형 JAR 만들기: `./gradlew bootJar` → `build/libs/cpi-transport-tool-<버전>.jar`
