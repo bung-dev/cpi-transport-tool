@@ -46,6 +46,16 @@ test('QA-REQ805-1: 오늘 숫자를 누르면 같은 조건의 이력으로 가�
     if (label === '성공') expect(n, '방금 만든 성공 실제 이관이 들어 있다').toBeGreaterThanOrEqual(1);
   }
 
+  // 뒤로 가기로 대시보드에 돌아간다(REQ-806)
+  await page.goto('/#/dashboard');
+  await (await todayCount(page, '실패')).link.click();
+  await expect(page).toHaveURL(/#\/history\?date=today&mode=real&result=failed$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/dashboard$/);
+  await expect(page.getByRole('region', { name: '오늘 요약' })).toBeVisible();
+  await page.goForward();
+  await expect(page.getByRole('group', { name: '이력 조건' })).toContainText('조건: 오늘 · 실제 이관 · 실패');
+
   // 새로고침해도 조건이 남는다
   await page.reload();
   await expect(page.getByRole('group', { name: '이력 조건' })).toContainText('조건: 오늘 · 실제 이관 · 실패');

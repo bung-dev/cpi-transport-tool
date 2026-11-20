@@ -173,6 +173,10 @@ describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
     // Card: 머리 div > h3 제목. 카드 루트는 제목의 조부모다.
     const card = screen.getByRole('heading', { level: 3, name: '실제 이관' }).parentElement!.parentElement as HTMLElement;
     expect(card).toContainElement(btn);
+    // 오른쪽 아래: 버튼 줄은 카드 본문의 마지막 줄이고 오른쪽 정렬이다(아티팩트 단계 "미리보기 실행"과 같은 자리)
+    const row = btn.parentElement as HTMLElement;
+    expect(row.className).toContain('justify-end');
+    expect(row.parentElement!.lastElementChild).toBe(row);
     expect(within(card).getByText('미리보기한 패키지·아티팩트를 대상 테넌트에 업로드합니다.')).toBeInTheDocument();
     expect(card.textContent).not.toMatch(/운영|개발|→|미리보기와 같은 구성|로 이관/);
     expect(screen.queryByRole('button', { name: /로 이관$/ })).toBeNull();
