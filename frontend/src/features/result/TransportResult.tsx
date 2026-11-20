@@ -1,14 +1,14 @@
 import { packageSummary } from '../../lib/packageSummary';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { useId, useRef, useState, type ReactNode } from 'react';
-import type { ArtifactResult, TransportResponse } from '../../api/types';
+import type { TransportResponse } from '../../api/types';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Switch } from '../../components/ui/Switch';
 import { formatTime } from '../../lib/formatTime';
 import { ArtifactCard } from './ArtifactCard';
 import { deployOutcome } from './deployOutcome';
-import { failedArtifactCount, initialExpanded, isProblemArtifact, problemCount, totalProblemCount } from './problems';
+import { failedArtifactCount, initialExpanded, isProblemArtifact, totalProblemCount } from './problems';
 import { useReadOnlyState } from '../tenants/TenantContext';
 
 // REQ-105 AC-8, REQ-012 AC-1: 서버 값은 모두 JSX 텍스트 노드로만 렌더링한다.
@@ -101,7 +101,7 @@ export function TransportResult({ result, onOpenReal }: Props) {
             disabled={!hasProblemArtifact}
             onChange={(e) => setOnlyProblems(e.target.checked)}
           />
-          <span className="text-xs text-ink-tertiary">구성 값 문제 {problemTotal}건</span>
+          <span className="text-xs text-ink-tertiary">Externalized Parameters 문제 {problemTotal}건</span>
           {/* REQ-511: 구성 값 문제 수와 실패 아티팩트 수는 별도로 보인다. 필터를 켜면 FAILED 카드도 남는다. */}
           {failedArtifacts >= 1 && <span className="text-xs font-medium text-danger-fg">실패 아티팩트 {failedArtifacts}개</span>}
         </div>
@@ -116,7 +116,6 @@ export function TransportResult({ result, onOpenReal }: Props) {
       </div>
       {/* 넓은 폭: 왼쪽 탐색 목록·오른쪽 상세 카드 2열. 좁은 폭: 1열로 쌓는다(REQ-424). */}
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-        {/* AI-NOTE: 탐색 목록 안에는 svg 아이콘을 두지 않는다. 버튼 글자는 artifactId 뒤에 상태 글자를 한 텍스트로 붙여 카드 접기 버튼(이름 = artifactId)과 이름이 겹치지 않게 한다 (근거: REQ-424, S3a 입력 패키지) */}
         <nav aria-label="결과 바로가기" className="min-w-0 self-start rounded-lg border border-hairline bg-canvas p-2">
           <ul className="flex flex-col gap-0.5">
             {result.results.map((r, i) => {
@@ -125,10 +124,11 @@ export function TransportResult({ result, onOpenReal }: Props) {
                 <li key={`${r.artifactId}-${i}`}>
                   <button
                     type="button"
+                    aria-label={`${r.artifactId} 바로가기`}
                     onClick={() => jumpTo(i)}
                     className={`w-full cursor-pointer rounded-md px-3 py-2 text-left text-xs break-all transition-colors duration-150 hover:bg-neutral-bg ${r.status === 'FAILED' ? 'text-danger-fg' : 'text-ink-secondary'}`}
                   >
-                    {`${r.artifactId} ${jumpLabel(r)}`}
+                    {r.artifactId}
                   </button>
                 </li>
               );
@@ -172,15 +172,6 @@ export function TransportResult({ result, onOpenReal }: Props) {
       </div>
     </section>
   );
-}
-
-/** 탐색 목록은 실패, 문제 항목 수, 구성 값 수 순으로 짧은 상태를 보인다(REQ-510). */
-function jumpLabel(r: ArtifactResult): string {
-  if (r.status === 'FAILED') return '실패';
-  const problems = problemCount(r);
-  if (problems > 0) return `문제 ${problems}건`;
-  const count = (r.configurations ?? []).length;
-  return count > 0 ? `구성 값 ${count}개` : '구성 값 없음';
 }
 
 function Stat({ label, value, valueClass = 'text-ink' }: { label: string; value: number; valueClass?: string }) {

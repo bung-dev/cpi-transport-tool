@@ -61,7 +61,7 @@ export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
         </div>
         {!expanded && (
           <p className="text-xs text-ink-secondary">
-            구성 값 {configurations.length}개 · 문제 {problemCount(r)}건
+            Externalized Parameters {configurations.length}개 · 문제 {problemCount(r)}건
           </p>
         )}
         {expanded && (
@@ -82,9 +82,9 @@ export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
               </div>
             )}
             <div className="min-w-0">
-              <h5 className="mb-1.5 text-xs font-semibold text-ink-secondary">구성 값</h5>
+              <h5 className="mb-1.5 text-xs font-semibold text-ink-secondary">Externalized Parameters</h5>
               {configurations.length === 0 && !onlyProblems ? (
-                <p className="text-sm text-ink-secondary">구성 값 없음</p>
+                <p className="text-sm text-ink-secondary">Externalized Parameters 없음</p>
               ) : rows.length === 0 ? (
                 <p className="text-sm text-ink-secondary">문제 항목 없음</p>
               ) : (
