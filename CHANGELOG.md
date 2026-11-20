@@ -4,6 +4,10 @@
 
 ## 미출시
 
+## 0.2.0 — 2026-11-20
+
+- `feat/20261120-r1-wording` 화면 문구·표기 정리(R-1): 결과 바로가기 이름만, 결과 화면 구성 값 표기 Externalized Parameters, 실제 이관 단계 "실제 이관 실행". 대시보드 오늘 숫자를 누르면 같은 조건의 이관 이력(`GET /transport/history?date&mode&result`, 조건 줄·조건 해제), summary 없는 이력 기록 표시
+
 ## 0.1.0 — 2026-11-20
 
 - `claude/r1a-versioning-228015` 버전 관리 도입: 버전·커밋을 화면 아래, `GET /version`, 기동 로그 한 줄에 표시. 빌드 정보는 `build.gradle` 하나에서 정함. Dockerfile의 jar 이름 고정 제거, `CHANGELOG.md`와 병합 때 버전·태그 절차 추가

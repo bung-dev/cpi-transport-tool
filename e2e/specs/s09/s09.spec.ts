@@ -121,7 +121,7 @@ test('QA-215: 이관 탭 문구와 기본 선택', async ({ page }) => {
   expect(rec.buttonAfterPackage, '패키지 선택 뒤 활성').toBe(false);
   rec.runInfoAfterPackage = await runInfo(page);
   expect(rec.runInfoAfterPackage.deployControls).toEqual([]);
-  expect(rec.runInfoAfterPackage.buttons.filter((b: string) => /로 이관$|실제 이관$/.test(b)), '미리보기 전에는 실제 이관 실행 버튼 없음').toEqual([]);
+  expect(rec.runInfoAfterPackage.buttons.filter((b: string) => /실제 이관 실행$|실제 이관$/.test(b)), '미리보기 전에는 실제 이관 실행 버튼 없음').toEqual([]);
   await scan(page, rec, '이관-패키지선택', w);
   await shot(page, 'QA-215-transport');
   finish(rec, w);

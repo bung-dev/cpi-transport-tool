@@ -882,6 +882,68 @@ class TemplateAuditDashboardApiTests {
             assertThat(empty.get("today").get(field).asInt()).isZero();
     }
 
+    // ---- 20261120-r1-wording REQ-804: 이력 API 선택 조건 ----
+
+    List<String> historyIds(String query) throws Exception {
+        var ids = new ArrayList<String>();
+        ok(request("GET", "/transport/history" + query, null), 200).forEach(h -> ids.add(h.get("transportId").asString()));
+        return ids;
+    }
+
+    @Test @DisplayName("REQ-804: date·mode·result 조건은 대시보드 today와 같은 판단으로 거르고, 조건 없으면 전체를 같은 순서로 돌려준다")
+    void req804_historyQuery() throws Exception {
+        LocalDate today = LocalDate.ofInstant(CLOCK.instant(), ZONE);
+        Instant morning = today.atTime(0, 5).atZone(ZONE).toInstant();
+        Instant yesterday = today.minusDays(1).atTime(23, 55).atZone(ZONE).toInstant();
+        Files.write(historyFile(), List.of(
+                historyLine("q-preview", "QPkg", true, "DEV", "DEV", "PRD", "PRD", morning, 1, 0),
+                historyLine("q-ok", "QPkg", false, "DEV", "DEV", "PRD", "PRD", morning.plusSeconds(60), 2, 0),
+                historyLine("q-fail", "QPkg", false, "DEV", "DEV", "PRD", "PRD", morning.plusSeconds(120), 2, 2),
+                historyLine("q-preview-fail", "QPkg", true, "DEV", "DEV", "PRD", "PRD", morning.plusSeconds(180), 2, 1),
+                historyLine("q-ok2", "QPkg", false, "DEV", "DEV", "PRD", "PRD", morning.plusSeconds(240), 1, 0),
+                historyLine("y-ok", "QPkg", false, "DEV", "DEV", "PRD", "PRD", yesterday, 1, 0),
+                historyLine("y-fail", "QPkg", false, "DEV", "DEV", "PRD", "PRD", yesterday, 1, 1),
+                historyLine("y-preview", "QPkg", true, "DEV", "DEV", "PRD", "PRD", yesterday, 1, 0)), StandardCharsets.UTF_8);
+
+        var all = historyIds("");
+        assertThat(all).containsExactlyInAnyOrder("q-preview", "q-ok", "q-fail", "q-preview-fail", "q-ok2", "y-ok", "y-fail", "y-preview");
+
+        var previews = historyIds("?date=today&mode=preview");
+        var reals = historyIds("?date=today&mode=real");
+        var succeeded = historyIds("?date=today&mode=real&result=succeeded");
+        var failed = historyIds("?date=today&mode=real&result=failed");
+        assertThat(previews).containsExactlyInAnyOrder("q-preview", "q-preview-fail");
+        assertThat(reals).containsExactlyInAnyOrder("q-ok", "q-fail", "q-ok2");
+        assertThat(succeeded).containsExactlyInAnyOrder("q-ok", "q-ok2");
+        assertThat(failed).containsExactly("q-fail");
+        // 걸러진 목록은 조건 없는 목록의 순서를 그대로 따른다
+        assertThat(reals).isEqualTo(all.stream().filter(reals::contains).toList());
+
+        // 같은 시점의 대시보드 숫자와 건수가 같다
+        var todayNode = ok(request("GET", "/dashboard", null), 200).get("today");
+        assertThat(previews).hasSize(todayNode.get("previews").asInt());
+        assertThat(reals).hasSize(todayNode.get("transports").asInt());
+        assertThat(succeeded).hasSize(todayNode.get("succeeded").asInt());
+        assertThat(failed).hasSize(todayNode.get("failed").asInt());
+
+        // 조건끼리는 AND이고, result가 있으면 미리보기는 빠진다
+        assertThat(historyIds("?date=today")).containsExactlyInAnyOrder("q-preview", "q-ok", "q-fail", "q-preview-fail", "q-ok2");
+        assertThat(historyIds("?mode=preview")).containsExactlyInAnyOrder("q-preview", "q-preview-fail", "y-preview");
+        assertThat(historyIds("?result=failed")).containsExactlyInAnyOrder("q-fail", "y-fail");
+        assertThat(historyIds("?result=succeeded")).containsExactlyInAnyOrder("q-ok", "q-ok2", "y-ok");
+        assertThat(historyIds("?date=today&mode=preview&result=failed")).isEmpty();
+
+        // 응답 원소 형식은 조건 없는 응답과 같다
+        var one = ok(request("GET", "/transport/history?date=today&mode=real&result=failed", null), 200).get(0);
+        assertThat(one.propertyNames()).containsAll(List.of("transportId", "dryRun", "deploy", "startedAt", "finishedAt", "summary", "results", "sourceTenant", "targetTenant"));
+    }
+
+    @Test @DisplayName("REQ-804 실패: 허용 목록 밖의 date·mode·result 값은 400 INVALID_REQUEST")
+    void req804_historyQueryInvalid() throws Exception {
+        for (String query : List.of("?date=yesterday", "?date=", "?mode=x", "?mode=PREVIEW", "?result=ok", "?result=", "?date=today&mode=real&result=partial"))
+            error(request("GET", "/transport/history" + query, null), 400, "INVALID_REQUEST");
+    }
+
     // ---- 별도 앱 컨텍스트 ----
 
     org.springframework.context.ConfigurableApplicationContext start(Path templates, Path audit) {

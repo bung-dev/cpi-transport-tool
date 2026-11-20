@@ -284,13 +284,15 @@ function RealStep({ w, buttonRef }: { w: Wizard; buttonRef: RefObject<HTMLButton
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <Card title="실제 이관">
-        <div className="flex min-w-0 flex-col items-start gap-3">
-          <p className="text-sm text-ink-secondary">{`미리보기와 같은 구성(${w.routeText})으로 ${w.targetName}에 업로드합니다.`}</p>
-          <Button ref={buttonRef} variant="primary" disabled={disabled} aria-describedby={notice ? noticeId : undefined}
-            onClick={() => { if (!disabled) w.openConfirm(); }}>
-            {`${w.targetName}로 이관`}
-          </Button>
+        <div className="flex min-w-0 flex-col gap-3">
+          <p className="text-sm text-ink-secondary">미리보기한 패키지·아티팩트를 대상 테넌트에 업로드합니다.</p>
           {notice && <p id={noticeId} className="text-sm text-ink-secondary">{notice}</p>}
+          <div className="flex justify-end">
+            <Button ref={buttonRef} variant="primary" disabled={disabled} aria-describedby={notice ? noticeId : undefined}
+              onClick={() => { if (!disabled) w.openConfirm(); }}>
+              실제 이관 실행
+            </Button>
+          </div>
         </div>
       </Card>
       {w.real && <TransportResult result={w.real} />}

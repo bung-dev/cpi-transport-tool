@@ -7,6 +7,7 @@ import com.company.sap.cpitransport.model.TransportResponse;
 import com.company.sap.cpitransport.model.ArtifactResult;
 import com.company.sap.cpitransport.model.ArtifactStatus;
 import com.company.sap.cpitransport.model.TargetPackageStatus;
+import com.company.sap.cpitransport.service.HistoryCriteria;
 import com.company.sap.cpitransport.service.TransportHistoryStore;
 import com.company.sap.cpitransport.template.TemplateService;
 import com.company.sap.cpitransport.tenant.TenantRegistry;
@@ -49,15 +50,14 @@ public class DashboardService {
         var arrivals = new LinkedHashMap<Arrival, PackageArrival>();
         var departures = new HashMap<Departure, Instant>();
         int previews = 0, transports = 0, succeeded = 0, failed = 0;
-        var zone = ZoneId.systemDefault();
-        var today = LocalDate.ofInstant(clock.instant(), zone);
+        var startedToday = HistoryCriteria.startedToday(clock);
         for (var t : records) {
-            if (LocalDate.ofInstant(t.startedAt(), zone).equals(today)) {
+            if (startedToday.test(t)) {
                 if (t.dryRun()) previews++;
                 else {
                     transports++;
-                    if (t.summary() != null && t.summary().failed() == 0) succeeded++;
-                    else if (t.summary() != null && t.summary().failed() > 0) failed++;
+                    if (HistoryCriteria.succeeded(t)) succeeded++;
+                    else if (HistoryCriteria.failed(t)) failed++;
                 }
             }
             if (t.dryRun()) continue;

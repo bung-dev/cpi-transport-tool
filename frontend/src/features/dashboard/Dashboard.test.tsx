@@ -359,7 +359,7 @@ describe('REQ-430 실패와 빈 상태', () => {
     expect(within(region).getByRole('button', { name: '이 구성으로 실제 이관' })).toBeDisabled();
     expect(stepButton('실제 이관')).toBeEnabled();
     await userEvent.click(stepButton('실제 이관'));
-    expect(screen.getByRole('button', { name: '운영로 이관' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '실제 이관 실행' })).toBeDisabled();
   });
 
   it('REQ-430 실패(노드별, 사람 결정 2026-11-16): 한 노드의 연결 확인이 OK가 아니면 그 노드에 "확인 실패" 글자와 아이콘. 그 노드로 가는 전달은 되지만 실제 이관은 막힌다', async () => {
@@ -385,6 +385,6 @@ describe('REQ-430 실패와 빈 상태', () => {
     const region = await screen.findByRole('region', { name: '이관 결과' });
     expect(within(region).getByRole('button', { name: '이 구성으로 실제 이관' })).toBeDisabled();
     await userEvent.click(stepButton('실제 이관'));
-    expect(screen.getByRole('button', { name: '운영로 이관' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '실제 이관 실행' })).toBeDisabled();
   });
 });
