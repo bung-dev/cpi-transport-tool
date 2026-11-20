@@ -1,7 +1,7 @@
 import { ApiRequestError, networkError, parseErrorBody, unknownError } from './errors';
 import type { ArtifactSummary, TransportRequest, TransportResponse, Tenant, TenantsResponse, TenantStatusResponse } from './types';
 import type { TransportTemplate, TemplateInput, AuditCategory, AuditEntry } from './types';
-import type { DashboardResponse, Settings } from './types';
+import type { DashboardResponse, Settings, VersionResponse } from './types';
 
 // REQ-002 AC-4, REQ-012 AC-2: 같은 출처의 상대 경로만 쓴다. 기준 URL이나 환경 변수 값은 없다.
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -81,6 +81,10 @@ export function getAudit(category: AuditCategory | 'all'): Promise<AuditEntry[]>
 
 export function getSettings(): Promise<Settings> {
   return request('/settings');
+}
+
+export function getVersion(): Promise<VersionResponse> {
+  return request('/version');
 }
 
 export function saveSettings(settings: Settings): Promise<Settings> {

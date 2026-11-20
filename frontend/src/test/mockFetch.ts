@@ -6,7 +6,14 @@ export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-/** "METHOD /path" → 핸들러. 등록되지 않은 요청은 실제 네트워크 대신 throw 한다(REQ-010 AC-2). */
+/** 20261120-versioning REQ-004: 화면 아래 footer가 부르는 GET /version의 기본 응답 */
+export const VERSION = { version: '0.1.0', commit: 'abc1234', buildTime: '2026-11-20T10:00:00Z' };
+
+/**
+ * "METHOD /path" → 핸들러. 등록되지 않은 요청은 실제 네트워크 대신 throw 한다(REQ-010 AC-2).
+ * 20261120-versioning REQ-004: 'GET /version'을 등록하지 않으면 VERSION을 돌려주고 반환하는 fn의 호출 기록에 넣지 않는다
+ * (기존 테스트의 요청 목록·횟수 단언이 footer 요청에 흔들리지 않게). 등록하면 다른 경로처럼 기록된다.
+ */
 export function mockApi(routes: Record<string, Handler>) {
   const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const key = `${init?.method ?? 'GET'} ${String(input)}`;
@@ -14,7 +21,12 @@ export function mockApi(routes: Record<string, Handler>) {
     if (!h) throw new Error(`mock 없음: ${key}`);
     return h(init);
   });
-  vi.stubGlobal('fetch', fn);
+  // 전역 fetch 자체도 vi.fn이다(일부 테스트가 fetch.mock.calls를 URL로 걸러 읽는다).
+  const fetchStub = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    if (`${init?.method ?? 'GET'} ${String(input)}` === 'GET /version' && !routes['GET /version']) return Promise.resolve(json(VERSION));
+    return fn(input, init);
+  });
+  vi.stubGlobal('fetch', fetchStub);
   return fn;
 }
 
