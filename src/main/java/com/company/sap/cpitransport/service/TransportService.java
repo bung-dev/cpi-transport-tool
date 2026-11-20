@@ -6,6 +6,7 @@ import com.company.sap.cpitransport.model.*;
 import com.company.sap.cpitransport.settings.SettingsService;
 import java.time.Clock;
 import java.util.*;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
@@ -136,6 +137,7 @@ public class TransportService {
         public TransportResponse execute(TransportRun run) {
             var targets = new HashMap<String, TargetPackage>();
             for (int i = 0; i < sources.size(); i++) {
+                if (run.isShuttingDown()) return null;
                 var source = sources.get(i);
                 var target = targets.computeIfAbsent(source.selection().packageId(),
                         id -> prepareTarget(run.id(), request, source.metadata()));
@@ -143,8 +145,9 @@ public class TransportService {
             }
 
             var callerContext = MDC.getCopyOfContextMap();
-            try (var pool = Executors.newFixedThreadPool(limit)) {
-                var pending = new ArrayList<CompletableFuture<Void>>();
+            var pending = new ArrayList<CompletableFuture<Void>>();
+            // Wait in pool.close() so a coordinator interrupt also interrupts the iFlow workers.
+            try (var pool = Executors.newFixedThreadPool(limit, Thread.ofVirtual().factory())) {
                 for (var source : sources) {
                     String packageId = source.selection().packageId();
                     var target = targets.get(packageId);
@@ -166,8 +169,9 @@ public class TransportService {
                         }, pool));
                     }
                 }
-                pending.forEach(CompletableFuture::join);
             }
+            if (Thread.currentThread().isInterrupted()) throw new CancellationException();
+            pending.forEach(CompletableFuture::join);
             return run.finish();
         }
     }

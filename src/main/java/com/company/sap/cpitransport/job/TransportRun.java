@@ -42,6 +42,7 @@ public final class TransportRun {
     private final Consumer<TransportResponse> history;
     private JobStatus status = JobStatus.RUNNING;
     private boolean cancelRequested;
+    private boolean shuttingDown;
     private int done;
     private TransportResponse result;
     private Consumer<TransportJobStore.SavedJob> persist;
@@ -81,6 +82,15 @@ public final class TransportRun {
     private List<ArtifactResult> completedResults() {
         return Arrays.stream(results).filter(Objects::nonNull).toList();
     }
+    synchronized void beginShutdown() {
+        shuttingDown = true;
+    }
+    public synchronized boolean isShuttingDown() {
+        return shuttingDown;
+    }
+    synchronized void stopSaving() {
+        persist = null;
+    }
     public synchronized void cancel() {
         if (status != JobStatus.RUNNING) throw new ErrorResponse.ApiException(ErrorResponse.Code.JOB_NOT_RUNNING);
         cancelRequested = true;
@@ -91,6 +101,7 @@ public final class TransportRun {
         save();
     }
     public synchronized boolean startItem(int index) {
+        if (shuttingDown) return false;
         if (!cancelRequested) return true;
         items.set(index, items.get(index).at(Stage.SKIPPED, null));
         itemEnded();
@@ -109,16 +120,17 @@ public final class TransportRun {
     }
     private void itemEnded() {
         done++;
-        if (done == items.size()) finish();
+        if (done == items.size() && !shuttingDown) finish();
         else save();
     }
     // Also called after package preparation for a transport with no artifacts.
     public synchronized TransportResponse finish() {
-        if (result == null) finish(cancelRequested ? JobStatus.CANCELLED : JobStatus.COMPLETED);
+        if (!shuttingDown && result == null) finish(cancelRequested ? JobStatus.CANCELLED : JobStatus.COMPLETED);
         return result;
     }
     public synchronized void interrupted() {
-        if (result != null) return;
+        if (shuttingDown || result != null) return;
+        log.warn("Transport job {} interrupted", id);
         for (int i = 0; i < results.length; i++) {
             if (results[i] == null) items.set(i, items.get(i).at(Stage.SKIPPED, null));
         }
