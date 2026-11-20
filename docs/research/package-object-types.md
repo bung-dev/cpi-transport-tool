@@ -1,6 +1,6 @@
 # 패키지 안 iFlow 외 오브젝트 이관 조사 (로드맵 R-2)
 
-- 조사일: 2026-11-20 (트랙 E 탐색, 브랜치 `claude/r2-object-types-ae5ec9`)
+- 조사일: 2026-11-20 (트랙 E 탐색, 로드맵 R-2)
 - 앞선 조사: [transport-module-api.md](transport-module-api.md) · [content-agent-api.md](content-agent-api.md) · [ctms-benchmark.md](ctms-benchmark.md)
 - 표기: **확인됨** = SAP 공식 도움말 원문에서 직접 읽음 / **공개 도구** = SAP 문서가 아닌 공개 소스 코드(FlashPipe, SAP Project Piper)에서 읽음 / **추정** = 정황으로 판단 / **확인 못함** = 공개 자료로는 찾지 못함
 - 실제 SAP 테넌트에는 접속하지 않았다. SAP Business Accelerator Hub의 Integration Content 명세는 로그인이 필요해 이번에는 읽지 못했다. SAP 도움말은 도움말 원문을 공개한 GitHub 저장소(SAP-docs/btp-integration-suite)에서 읽었다.
