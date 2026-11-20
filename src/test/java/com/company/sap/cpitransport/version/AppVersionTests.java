@@ -4,6 +4,7 @@ import java.util.Properties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.info.BuildProperties;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -41,6 +42,13 @@ class AppVersionTests {
         assertThat(v.version()).isEqualTo("dev");
         assertThat(v.commit()).isEqualTo("unknown");
         assertThat(v.buildTime()).isNull();
+    }
+
+    @Test
+    @DisplayName("REQ-002: without build info the JSON response still carries buildTime as null")
+    void noBuildInfoJsonKeepsBuildTimeKey() {
+        String body = new JsonMapper().writeValueAsString(AppVersion.from(null));
+        assertThat(body).isEqualTo("{\"version\":\"dev\",\"commit\":\"unknown\",\"buildTime\":null}");
     }
 
     @Test
