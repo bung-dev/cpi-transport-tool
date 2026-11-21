@@ -224,6 +224,25 @@ class RetryApiTests {
     }
 
     @Test
+    @DisplayName("REQ-907: a package left NOT_CHECKED because the original stopped before the target check is put back for creation (사람 결정 2026-11-21)")
+    void req907_notCheckedCreateAgain() throws Exception {
+        String old = "{\"transportId\":\"t-old-not-checked\",\"packages\":[{\"packageId\":\"PkgNotInPrd\",\"packageName\":\"Not In PRD\",\"targetPackage\":\"NOT_CHECKED\"}],"
+                + "\"dryRun\":false,\"deploy\":false,\"startedAt\":\"2026-11-21T00:00:00Z\",\"finishedAt\":\"2026-11-21T00:00:01Z\","
+                + "\"summary\":{\"total\":1,\"succeeded\":0,\"failed\":0,\"fixRequired\":0,\"retryable\":0,\"skipped\":1},\"results\":[],"
+                + "\"skipped\":[{\"packageId\":\"PkgNotInPrd\",\"artifactId\":\"IF_Orphan\"}],"
+                + "\"sourceTenant\":{\"id\":\"DEV\",\"name\":\"DEV\"},\"targetTenant\":{\"id\":\"PRD\",\"name\":\"PRD\"}}";
+        Files.createDirectories(history.getParent());
+        Files.writeString(history, old + "\n", StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        var reply = retry("t-old-not-checked");
+        assertThat(reply.status()).as(String.valueOf(reply.body())).isEqualTo(202);
+        assertThat(reply.body().get("total").asInt()).isEqualTo(1);
+        var again = await(reply.body().get("jobId").asString());
+        stubs.prd().verify(1, postRequestedFor(urlPathEqualTo(ROOT + "IntegrationPackages")).withRequestBody(matchingJsonPath("$.Id", equalTo("PkgNotInPrd"))));
+        assertThat(again.get("packages").get(0).get("targetPackage").asString()).isEqualTo("CREATED");
+        assertThat(again.get("result").get("summary").get("failed").asInt()).isZero();
+    }
+
+    @Test
     @DisplayName("REQ-907 failure: unknown transport 404 TRANSPORT_NOT_FOUND, preview 400 RETRY_NOT_ALLOWED, nothing failed 400 NOTHING_TO_RETRY, bad body 400 INVALID_REQUEST, and no job is created")
     void req907_errors() throws Exception {
         var unknown = retry("00000000-0000-0000-0000-000000000000");
@@ -259,6 +278,22 @@ class RetryApiTests {
         try {
             var reply = retry(transportId);
             assertThat(reply.status()).isEqualTo(409);
+            assertThat(reply.body().get("error").asString()).isEqualTo("JOB_ALREADY_RUNNING");
+            assertThat(call("GET", "/transport/jobs/active", null).body().get("jobId").asString()).isEqualTo(running);
+        } finally {
+            stubs.prd().setGlobalFixedDelay(0);
+            await(running);
+        }
+    }
+
+    @Test
+    @DisplayName("REQ-907 failure: retrying the transport whose own job is still running answers 409 JOB_ALREADY_RUNNING and creates no job")
+    void req907_originalStillRunning() throws Exception {
+        stubs.prd().setGlobalFixedDelay(800);
+        String running = start(real("PkgFaultDemo", List.of("IF_Fault_A", "IF_Fault_Download500"), false));
+        try {
+            var reply = retry(running);
+            assertThat(reply.status()).as(String.valueOf(reply.body())).isEqualTo(409);
             assertThat(reply.body().get("error").asString()).isEqualTo("JOB_ALREADY_RUNNING");
             assertThat(call("GET", "/transport/jobs/active", null).body().get("jobId").asString()).isEqualTo(running);
         } finally {

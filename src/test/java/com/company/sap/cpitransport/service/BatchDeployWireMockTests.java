@@ -97,6 +97,45 @@ class BatchDeployWireMockTests {
     }
 
     @Test
+    @DisplayName("REQ-909: four iFlows, concurrency 1, runtime STARTED from the second read: list reads equal the wait rounds (2) and no single status read")
+    void req909_listReadsEqualRounds() {
+        var starting = RuntimeListStub.of("A", "STARTING", "B", "STARTING", "C", "STARTING", "D", "STARTING");
+        var started = RuntimeListStub.of("A", "STARTED", "B", "STARTED", "C", "STARTED", "D", "STARTED");
+        prd.stubFor(RuntimeListStub.list().inScenario("rounds").whenScenarioStateIs("Started").willSetStateTo("second")
+                .willReturn(okJson(RuntimeListStub.body(starting))));
+        prd.stubFor(RuntimeListStub.list().inScenario("rounds").whenScenarioStateIs("second")
+                .willReturn(okJson(RuntimeListStub.body(started))));
+        var response = run(service(Duration.ofSeconds(1), Duration.ofSeconds(10), 1), true, IDS);
+        assertThat(response.results()).extracting(ArtifactResult::deployStatus).containsOnly(DeployStatus.STARTED);
+        prd.verify(2, getRequestedFor(urlPathEqualTo(RuntimeListStub.PATH)));
+        for (String id : IDS) prd.verify(0, getRequestedFor(urlEqualTo(runtime(id))));
+    }
+
+    @Test
+    @DisplayName("REQ-904: progress done counts only iFlows whose deployment is judged; waiting iFlows stay in DEPLOY and are not counted")
+    void req904_doneCountsJudgedOnly() throws Exception {
+        RuntimeListStub.stub(prd, Map.of());
+        var service = service(Duration.ofMillis(200), Duration.ofSeconds(20), 1);
+        var prepared = service.prepare(new TransportRequest(List.of(new PackageSelection("PKG", List.of("A", "B"))), List.of(), false, true,
+                new TenantRef("DEV", "DEV"), new TenantRef("PRD", "PRD")));
+        var run = prepared.newRun(null, null);
+        var finished = CompletableFuture.supplyAsync(() -> prepared.execute(run));
+        long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+        while (prd.findAll(postRequestedFor(urlEqualTo(deploy("B")))).isEmpty()
+                || prd.findAll(getRequestedFor(urlPathEqualTo(RuntimeListStub.PATH))).size() < 2) {
+            if (System.nanoTime() > deadline) fail("B was not deployed or the list was not read");
+            Thread.sleep(10);
+        }
+        var waiting = run.snapshot();
+        assertThat(waiting.total()).isEqualTo(2);
+        assertThat(waiting.done()).isZero();
+        assertThat(waiting.items()).extracting(TransportRun.Item::stage).containsOnly(TransportService.Stage.DEPLOY);
+        RuntimeListStub.stub(prd, "STARTED", "A", "B");
+        finished.get(30, TimeUnit.SECONDS);
+        assertThat(run.snapshot().done()).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("REQ-904: the timeout is measured per iFlow from its deploy request; an iFlow missing from the list ends DEPLOY_TIMEOUT while others start")
     void req904_timeoutPerIflow() {
         RuntimeListStub.stub(prd, RuntimeListStub.of("B", "STARTED"));
