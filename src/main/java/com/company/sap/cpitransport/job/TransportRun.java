@@ -5,7 +5,9 @@ import com.company.sap.cpitransport.service.TransportService.Stage;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,7 +52,7 @@ public final class TransportRun {
     private boolean shuttingDown;
     private int done;
     private TransportResponse result;
-    private Consumer<TransportJobStore.SavedJob> persist;
+    private Function<TransportJobStore.SavedJob, CompletableFuture<Void>> persist;
 
     public TransportRun(Clock clock, TransportRequest request, List<TransportPackage> packages,
                         List<Item> items, TemplateRef template, Consumer<TransportResponse> history) {
@@ -74,15 +76,20 @@ public final class TransportRun {
                 result == null ? null : result.finishedAt(), items.size(), done, request.source(), request.target(),
                 List.copyOf(packages), List.copyOf(items), result);
     }
-    synchronized void persistTo(Consumer<TransportJobStore.SavedJob> persist) {
-        this.persist = persist;
-        save();
-    }
-    private void save() {
-        if (persist != null) {
-            List<ArtifactResult> completed = status == JobStatus.RUNNING ? completedResults() : List.of();
-            persist.accept(new TransportJobStore.SavedJob(snapshot(), id, template, completed));
+    void persistTo(Function<TransportJobStore.SavedJob, CompletableFuture<Void>> persist) {
+        CompletableFuture<Void> started;
+        synchronized (this) {
+            this.persist = persist;
+            started = save();
         }
+        started.join();
+    }
+    // Publish under the run lock so concurrent stages reach the store in order.
+    // Wait for immediate writes only after releasing that lock.
+    private CompletableFuture<Void> save() {
+        if (persist == null) return CompletableFuture.completedFuture(null);
+        List<ArtifactResult> completed = status == JobStatus.RUNNING ? completedResults() : List.of();
+        return persist.apply(new TransportJobStore.SavedJob(snapshot(), id, template, completed, cancelRequested));
     }
     private List<ArtifactResult> completedResults() {
         return Arrays.stream(results).filter(Objects::nonNull).toList();
@@ -96,53 +103,80 @@ public final class TransportRun {
     synchronized void stopSaving() {
         persist = null;
     }
-    public synchronized void cancel() {
-        if (status != JobStatus.RUNNING) throw new ErrorResponse.ApiException(ErrorResponse.Code.JOB_NOT_RUNNING);
-        cancelRequested = true;
+    public void cancel() {
+        CompletableFuture<Void> saved;
+        synchronized (this) {
+            if (status != JobStatus.RUNNING) throw new ErrorResponse.ApiException(ErrorResponse.Code.JOB_NOT_RUNNING);
+            if (cancelRequested) return;
+            cancelRequested = true;
+            saved = save();
+        }
+        saved.join();
     }
     public synchronized void targetPrepared(int index, TargetPackageStatus target) {
         var pkg = packages.get(index);
+        if (pkg.targetPackage() == target) return;
         packages.set(index, new TransportPackage(pkg.packageId(), pkg.packageName(), target));
         save();
     }
-    public synchronized boolean startItem(int index) {
-        if (shuttingDown) return false;
-        if (!cancelRequested) return true;
-        items.set(index, items.get(index).at(Stage.SKIPPED, null));
-        itemEnded();
+    public boolean startItem(int index) {
+        CompletableFuture<Void> saved;
+        synchronized (this) {
+            if (shuttingDown) return false;
+            if (!cancelRequested) return true;
+            items.set(index, items.get(index).at(Stage.SKIPPED, null));
+            saved = itemEnded();
+        }
+        saved.join();
         return false;
     }
     public synchronized void stage(int index, Stage stage) {
         // The execution log records the skipped upload, while progress shows only work performed.
         if (request.dryRun() && stage == Stage.UPLOAD) return;
+        if (items.get(index).stage() == stage) return;
         items.set(index, items.get(index).at(stage, null));
         save();
     }
-    public synchronized void completed(int index, ArtifactResult artifact) {
-        results[index] = artifact;
-        items.set(index, items.get(index).at(Stage.DONE, artifact.status()));
-        itemEnded();
+    public void completed(int index, ArtifactResult artifact) {
+        CompletableFuture<Void> saved;
+        synchronized (this) {
+            results[index] = artifact;
+            items.set(index, items.get(index).at(Stage.DONE, artifact.status()));
+            saved = itemEnded();
+        }
+        saved.join();
     }
-    private void itemEnded() {
+    private CompletableFuture<Void> itemEnded() {
         done++;
-        if (done == items.size() && !shuttingDown) finish();
-        else save();
+        if (done == items.size() && !shuttingDown && result == null) {
+            return finish(cancelRequested ? JobStatus.CANCELLED : JobStatus.COMPLETED);
+        }
+        return save();
     }
     // Also called after package preparation for a transport with no artifacts.
-    public synchronized TransportResponse finish() {
-        if (!shuttingDown && result == null) finish(cancelRequested ? JobStatus.CANCELLED : JobStatus.COMPLETED);
+    public TransportResponse finish() {
+        CompletableFuture<Void> saved;
+        synchronized (this) {
+            if (shuttingDown || result != null) return result;
+            saved = finish(cancelRequested ? JobStatus.CANCELLED : JobStatus.COMPLETED);
+        }
+        saved.join();
         return result;
     }
-    public synchronized void interrupted() {
-        if (shuttingDown || result != null) return;
-        log.warn("Transport job {} interrupted", id);
-        for (int i = 0; i < results.length; i++) {
-            if (results[i] == null) items.set(i, items.get(i).at(Stage.SKIPPED, null));
+    public void interrupted() {
+        CompletableFuture<Void> saved;
+        synchronized (this) {
+            if (shuttingDown || result != null) return;
+            log.warn("Transport job {} interrupted", id);
+            for (int i = 0; i < results.length; i++) {
+                if (results[i] == null) items.set(i, items.get(i).at(Stage.SKIPPED, null));
+            }
+            done = items.size();
+            saved = finish(JobStatus.INTERRUPTED);
         }
-        done = items.size();
-        finish(JobStatus.INTERRUPTED);
+        saved.join();
     }
-    private void finish(JobStatus terminal) {
+    private CompletableFuture<Void> finish(JobStatus terminal) {
         result = snapshot().response(history == null ? null : terminal, clock.instant(), completedResults(), items, template);
         status = terminal;
         if (history != null) {
@@ -152,6 +186,6 @@ public final class TransportRun {
                 log.warn("Could not append transport job {} to history", id);
             }
         }
-        save();
+        return save();
     }
 }

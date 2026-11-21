@@ -80,6 +80,9 @@ public class TransportJobService {
             if (executor.awaitTermination(SHUTDOWN_WAIT_SECONDS, TimeUnit.SECONDS)) return;
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
+        } finally {
+            // Drain queued progress before handing the jobs file to the next application context.
+            store.close();
         }
         synchronized (this) {
             // A worker may return after another application context has recovered the jobs file.
