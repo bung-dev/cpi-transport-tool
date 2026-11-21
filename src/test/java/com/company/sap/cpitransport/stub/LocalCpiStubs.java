@@ -170,15 +170,15 @@ public final class LocalCpiStubs {
 
     // 20261121-package-objects(REQ-1001~1005): iFlow 밖 오브젝트(스크립트 컬렉션·메시지 매핑·밸류 매핑)가 있는 패키지 둘.
     // 기존 패키지는 새 종류 목록 매핑이 없어 404(= 빈 목록)라 지금 테스트의 호출 수가 바뀌지 않는다. 두 패키지 모두 iFlow는 0개다.
-    // - PkgObjectDemo: 정상. SC·MM은 대상에 없어 만들고(201), VM_Object_Codes는 대상에 있어 삭제 후 다시 만든다. 배포는 모두 SUCCESS.
-    // - PkgObjectFault: 메시지 매핑 목록 500. SC_Fault_DeployFail 배포 상태 FAIL. VM_Fault_Recreate는 다시 만들기(원본 zip POST)가
+    // - PkgObjSet: 정상. SC·MM은 대상에 없어 만들고(201), VM_Object_Codes는 대상에 있어 삭제 후 다시 만든다. 배포는 모두 SUCCESS.
+    // - PkgObjFault: 메시지 매핑 목록 500. SC_Fault_DeployFail 배포 상태 FAIL. VM_Fault_Recreate는 다시 만들기(원본 zip POST)가
     //   500이고 되살리기(대상 zip POST)는 성공. VM_Fault_Lost는 다시 만들기·되살리기 모두 500.
     private static final List<Map<String, String>> OBJECT_PACKAGES = List.of(
-            packageMetadata("PkgObjectDemo", "Object Demo", null), packageMetadata("PkgObjectFault", "Object Fault Demo", null));
+            packageMetadata("PkgObjSet", "Object Set", null), packageMetadata("PkgObjFault", "Object Faults", null));
     private static final Map<String, Map<String, List<String>>> OBJECTS = Map.of(
-            "PkgObjectDemo", Map.of("ScriptCollection", List.of("SC_Object_Scripts"), "MessageMapping", List.of("MM_Object_Order"),
+            "PkgObjSet", Map.of("ScriptCollection", List.of("SC_Object_Scripts"), "MessageMapping", List.of("MM_Object_Order"),
                     "ValueMapping", List.of("VM_Object_Codes")),
-            "PkgObjectFault", Map.of("ScriptCollection", List.of("SC_Fault_DeployFail"),
+            "PkgObjFault", Map.of("ScriptCollection", List.of("SC_Fault_DeployFail"),
                     "ValueMapping", List.of("VM_Fault_Recreate", "VM_Fault_Lost")));
     private static final Set<String> IN_PRD = Set.of("VM_Object_Codes", "VM_Fault_Recreate", "VM_Fault_Lost");
     private static String object(String segment, String id) {
@@ -191,7 +191,7 @@ public final class LocalCpiStubs {
             getJson(dev, path, data(pkg));
             getJson(prd, path, data(pkg));
             getJson(dev, path + "/IntegrationDesigntimeArtifacts", results(List.of()));
-            if (id.equals("PkgObjectFault")) dev.stubFor(get(urlPathEqualTo(path + "/MessageMappingDesigntimeArtifacts")).willReturn(serverError()));
+            if (id.equals("PkgObjFault")) dev.stubFor(get(urlPathEqualTo(path + "/MessageMappingDesigntimeArtifacts")).willReturn(serverError()));
             for (var entry : OBJECTS.get(id).entrySet()) {
                 String segment = entry.getKey();
                 getJson(dev, path + "/" + segment + "DesigntimeArtifacts", results(entry.getValue().stream()
