@@ -129,6 +129,23 @@ public class CpiApiClient {
                 "/DeployIntegrationDesigntimeArtifact?Id='" + identifier(id) + "'&Version='active'", null);
     }
 
+    public String deployObject(String environment, String id, ArtifactType type) {
+        String path = ROOT + "/Deploy" + type.odataPrefix() + "DesigntimeArtifact?Id='" + identifier(id) + "'&Version='active'";
+        byte[] body = http.execute(environment, HttpMethod.POST, path, null, false).getBody();
+        String task = body == null ? "" : new String(body, StandardCharsets.UTF_8).strip();
+        if (task.length() >= 2 && task.startsWith("\"") && task.endsWith("\"")) {
+            task = task.substring(1, task.length() - 1).strip();
+        }
+        return task;
+    }
+
+    public String getBuildAndDeployStatus(String environment, String task) {
+        String encoded = UriUtils.encode(task.replace("'", "''"), StandardCharsets.UTF_8);
+        String path = ROOT + "/BuildAndDeployStatus(TaskId='" + encoded + "')";
+        byte[] body = http.execute(environment, HttpMethod.GET, path, null, true, false).getBody();
+        return field(data(body), "Status");
+    }
+
     public Optional<String> getRuntimeStatus(String environment, String id) {
         return optional(environment, "/IntegrationRuntimeArtifacts('" + identifier(id) + "')")
                 .map(node -> field(node, "Status"));

@@ -13,6 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -68,8 +69,11 @@ public class TransportService {
         }
 
         ArtifactResult result(TransportAction action, ArtifactError error, ArtifactGrade grade) {
-            return new ArtifactResult(packageId, id, null, action, List.of(), DeployStatus.NOT_REQUESTED,
-                    error, grade, false, type);
+            return result(action, DeployStatus.NOT_REQUESTED, error, grade);
+        }
+
+        ArtifactResult result(TransportAction action, DeployStatus deployStatus, ArtifactError error, ArtifactGrade grade) {
+            return new ArtifactResult(packageId, id, null, action, List.of(), deployStatus, error, grade, false, type);
         }
 
         ArtifactResult failed(ArtifactError error, ArtifactGrade grade) {
@@ -154,7 +158,7 @@ public class TransportService {
         return request.dryRun() ? current.previewConcurrency() : current.transportConcurrency();
     }
 
-    // Owned by one iFlow worker. Deployment acceptance can release its permit early.
+    // Owned by one artifact worker. Deployment acceptance can release its permit early.
     private static final class ProcessingSlot implements AutoCloseable {
         private final Semaphore permits;
         private boolean released;
@@ -180,15 +184,16 @@ public class TransportService {
     public final class PreparedTransport {
         private final TransportRequest request;
         private final List<SourcePackage> sources;
-        private final List<SelectedArtifact> ordered;
+        private final List<List<SelectedArtifact>> stages;
         private final boolean preflight;
         private final int limit;
 
         private PreparedTransport(TransportRequest request, List<SourcePackage> sources, boolean preflight, int limit) {
             this.request = request;
             this.sources = List.copyOf(sources);
-            this.ordered = sources.stream().flatMap(source -> source.artifacts().stream())
-                    .sorted(Comparator.comparingInt(SelectedArtifact::stageOrder)).toList();
+            var byStage = sources.stream().flatMap(source -> source.artifacts().stream())
+                    .collect(Collectors.groupingBy(SelectedArtifact::stageOrder, TreeMap::new, Collectors.toList()));
+            this.stages = List.copyOf(byStage.values());
             this.preflight = preflight;
             this.limit = limit;
         }
@@ -198,7 +203,7 @@ public class TransportService {
             for (var source : sources) {
                 packages.add(new TransportPackage(source.metadata().id(), source.metadata().name(), TargetPackageStatus.NOT_CHECKED));
             }
-            var items = ordered.stream().map(a -> new TransportRun.Item(a.packageId(), a.id(), Stage.WAITING, null, a.type()))
+            var items = stages.stream().flatMap(List::stream).map(a -> new TransportRun.Item(a.packageId(), a.id(), Stage.WAITING, null, a.type()))
                     .toList();
             return new TransportRun(clock, request, packages, items, template, history,
                     request.dryRun() ? previewBundles::complete : null);
@@ -223,14 +228,25 @@ public class TransportService {
                 run.targetPrepared(i, target.status());
             }
 
+            int offset = 0;
+            for (var stage : stages) {
+                executeStage(run, targets, stage, offset);
+                offset += stage.size();
+            }
+            return run.finish();
+        }
+
+        private void executeStage(TransportRun run, Map<String, TargetPackage> targets,
+                                  List<SelectedArtifact> artifacts, int offset) {
             var callerContext = MDC.getCopyOfContextMap();
             var pending = new ArrayList<CompletableFuture<Void>>();
             var slots = new Semaphore(limit);
-            try (var batch = request.deploy() && !request.dryRun() ? deployment.newBatch(request.target().id()) : null;
+            boolean batchFlows = artifacts.getFirst().type() == ArtifactType.INTEGRATION_FLOW && request.deploy() && !request.dryRun();
+            try (var batch = batchFlows ? deployment.newBatch(request.target().id()) : null;
                  var pool = Executors.newVirtualThreadPerTaskExecutor()) {
-                for (var selected : ordered) {
+                for (var selected : artifacts) {
                     var target = targets.get(selected.packageId());
-                    int index = pending.size();
+                    int index = offset + pending.size();
                     var slot = new ProcessingSlot(slots);
                     pending.add(CompletableFuture.runAsync(() -> {
                         try (slot) {
@@ -250,7 +266,6 @@ public class TransportService {
             }
             if (Thread.currentThread().isInterrupted()) throw new CancellationException();
             pending.forEach(CompletableFuture::join);
-            return run.finish();
         }
     }
 
@@ -275,7 +290,14 @@ public class TransportService {
         }
         event(transportId, id, Stage.LOOKUP, "succeeded");
         if (selected.type() != ArtifactType.INTEGRATION_FLOW) {
-            return processObject(transportId, request, selected, target, progress);
+            var transfer = processObject(transportId, request, selected, target, progress);
+            if (!request.deploy()) return transfer;
+            if (request.dryRun()) {
+                return selected.result(transfer.action(), DeployStatus.SKIPPED_DRY_RUN, transfer.error(), transfer.grade());
+            }
+            if (transfer.error() != null) return transfer;
+            progress.accept(Stage.DEPLOY);
+            return deployObject(transportId, request.target().id(), selected, transfer.action(), slot);
         }
         return process(transportId, request, selected.packageId(), id, selected.source(), target, progress, batch, slot);
     }
@@ -473,6 +495,28 @@ public class TransportService {
             return selected.failed(new ArtifactError(stage.code, stage + ": " + failureDescription(failure)),
                     callFailureGrade(failure));
         }
+    }
+
+    private ArtifactResult deployObject(String transportId, String tenant, SelectedArtifact selected,
+                                        TransportAction action, ProcessingSlot slot) {
+        String id = selected.id();
+        event(transportId, id, Stage.DEPLOY, "started");
+        DeployOutcome outcome;
+        try {
+            outcome = deployment.deployObjectAndAwait(tenant, id, selected.type(), slot::close);
+        } catch (RuntimeException failure) {
+            event(transportId, id, Stage.DEPLOY, "failed", " deployFailure=CALL_FAILED");
+            return selected.result(action, DeployStatus.ERROR,
+                    new ArtifactError(Stage.DEPLOY.code, "DEPLOY: " + failureDescription(failure)), callFailureGrade(failure));
+        }
+        if (outcome.status() == DeployStatus.STARTED) {
+            event(transportId, id, Stage.DEPLOY, "succeeded");
+            return selected.result(action, outcome.status(), null, ArtifactGrade.SUCCESS);
+        }
+        String code = outcome.status() == DeployStatus.TIMEOUT ? "DEPLOY_TIMEOUT" : Stage.DEPLOY.code;
+        var grade = outcome.failure() == DeployOutcome.DeployFailure.RUNTIME_ERROR ? ArtifactGrade.FIX_REQUIRED : ArtifactGrade.RETRYABLE;
+        event(transportId, id, Stage.DEPLOY, "failed", " code=" + code + " deployFailure=" + outcome.failure());
+        return selected.result(action, outcome.status(), new ArtifactError(code, "DEPLOY: CPI deployment " + outcome.status()), grade);
     }
 
     private byte[] objectZip(String tenant, String id, ArtifactType type) {

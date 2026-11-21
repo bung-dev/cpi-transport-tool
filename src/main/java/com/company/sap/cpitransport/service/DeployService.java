@@ -4,6 +4,7 @@ import com.company.sap.cpitransport.client.CpiApiClient;
 import com.company.sap.cpitransport.client.CpiCallException;
 import com.company.sap.cpitransport.client.Sleeper;
 import com.company.sap.cpitransport.config.TransportProperties;
+import com.company.sap.cpitransport.model.ArtifactType;
 import com.company.sap.cpitransport.model.DeployStatus;
 import com.company.sap.cpitransport.model.ArtifactError;
 import java.util.List;
@@ -32,6 +33,42 @@ public class DeployService {
 
     DeployBatch newBatch(String tenantId) {
         return new DeployBatch(api, tenantId, settings, clock, sleeper);
+    }
+
+    DeployOutcome deployObjectAndAwait(String tenant, String id, ArtifactType type, Runnable releaseSlot) {
+        var deadline = clock.instant().plus(settings.timeout());
+        String task = api.deployObject(tenant, id, type);
+        releaseSlot.run();
+        if (task.isEmpty()) return new DeployOutcome(DeployStatus.ERROR, CALL_FAILED);
+
+        int failures = 0;
+        try {
+            while (true) {
+                Duration remaining = Duration.between(clock.instant(), deadline);
+                if (!remaining.isPositive()) break;
+                sleeper.sleep(remaining.compareTo(settings.pollInterval()) < 0 ? remaining : settings.pollInterval());
+                if (!clock.instant().isBefore(deadline)) break;
+
+                String status;
+                try {
+                    status = api.getBuildAndDeployStatus(tenant, task);
+                    failures = 0;
+                } catch (CpiCallException failure) {
+                    if (!clock.instant().isBefore(deadline)) break;
+                    if (++failures == 3) return new DeployOutcome(DeployStatus.ERROR, CALL_FAILED);
+                    continue;
+                }
+                if (!clock.instant().isBefore(deadline)) break;
+                if ("SUCCESS".equals(status)) return new DeployOutcome(DeployStatus.STARTED, NONE);
+                if ("FAIL".equals(status) || "FAIL_ON_LICENSE_ERROR".equals(status)) {
+                    return new DeployOutcome(DeployStatus.ERROR, RUNTIME_ERROR);
+                }
+            }
+            return new DeployOutcome(DeployStatus.TIMEOUT, NONE);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return new DeployOutcome(DeployStatus.ERROR, CALL_FAILED);
+        }
     }
 
     public DeployStatus deployAndWait(String id) { return deployAndWait("PRD", id); }
