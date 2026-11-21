@@ -49,7 +49,9 @@ public class TransportRequestParser {
             if (ids == null) continue;
             var selected = packages.addObject().put("packageId", pkg.packageId()).putArray("artifactIds");
             ids.forEach(selected::add);
-            if (pkg.targetPackage() == TargetPackageStatus.CREATE_FAILED || pkg.targetPackage() == TargetPackageStatus.NOT_FOUND) {
+            var targetStatus = pkg.targetPackage();
+            if (targetStatus == TargetPackageStatus.CREATE_FAILED || targetStatus == TargetPackageStatus.NOT_FOUND
+                    || targetStatus == TargetPackageStatus.NOT_CHECKED) {
                 create.add(pkg.packageId());
             }
         }
