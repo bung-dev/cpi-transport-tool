@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
+import com.company.sap.cpitransport.model.ArtifactType;
 import com.company.sap.cpitransport.model.CpiArtifact;
 import com.company.sap.cpitransport.model.CpiConfiguration;
 import com.company.sap.cpitransport.model.CpiPackage;
@@ -51,10 +52,22 @@ public class CpiApiClient {
     }
 
     public List<CpiArtifact> listArtifacts(String environment, String packageId) {
-        // Preserve the HTTP 404 so callers can distinguish a missing package from an empty list.
-        return list(environment, "/IntegrationPackages('" + identifier(packageId)
-                + "')/IntegrationDesigntimeArtifacts",
-                node -> new CpiArtifact(field(node, "Id"), field(node, "Name"), field(node, "Version")));
+        return listArtifacts(environment, packageId, ArtifactType.INTEGRATION_FLOW);
+    }
+
+    public List<CpiArtifact> listArtifacts(String environment, String packageId, ArtifactType type) {
+        String path = "/IntegrationPackages('" + identifier(packageId) + "')/"
+                + type.odataPrefix() + "DesigntimeArtifacts";
+        try {
+            return list(environment, path,
+                    node -> new CpiArtifact(field(node, "Id"), field(node, "Name"), field(node, "Version")));
+        } catch (CpiCallException failure) {
+            if (type != ArtifactType.INTEGRATION_FLOW && !failure.isTokenStageFailure()
+                    && Integer.valueOf(404).equals(failure.httpStatus())) {
+                return List.of();
+            }
+            throw failure;
+        }
     }
 
     public boolean artifactExists(String environment, String id) {
