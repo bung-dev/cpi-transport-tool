@@ -124,7 +124,8 @@ describe('REQ-423 미리보기', () => {
     await waitFor(() => expect(postBodies(fn)).toHaveLength(2));
     expect(postBodies(fn)).toEqual([
       { ...ONE, dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
-      { ...ONE, dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
+      // 20261121-perf-retry REQ-902: 미리보기 뒤 실제 이관은 그 미리보기 ID를 보낸다.
+      { ...ONE, dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1', previewId: 't-dry' },
     ]);
   });
 });
@@ -158,6 +159,8 @@ describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
     // 대상에 있는 패키지뿐이면 createPackages 키를 보내지 않는다
     expect(postBodies(fn)[1]).toEqual({
       packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'] }], dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD',
+      // 20261121-perf-retry REQ-902: 미리보기 뒤 실제 이관은 그 미리보기 ID를 보낸다.
+      previewId: 't-dry',
     });
     // 20261120-async-transport REQ-808: 실제 이관 결과는 마법사가 아니라 작업 화면(완료 화면)에 나온다.
     await waitFor(() => expect(window.location.hash).toMatch(/^#\/job\?id=/));
