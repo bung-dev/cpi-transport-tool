@@ -23,9 +23,14 @@ public final class TransportRun {
     public record Snapshot(String jobId, JobStatus status, boolean dryRun, boolean deploy,
             Instant startedAt, Instant finishedAt, int total, int done, TenantRef sourceTenant,
             TenantRef targetTenant, List<TransportPackage> packages, List<Item> items, TransportResponse result) {
-        TransportResponse response(JobStatus terminal, Instant end, List<ArtifactResult> completed, TemplateRef template) {
+        TransportResponse response(JobStatus terminal, Instant end, List<ArtifactResult> completed,
+                                   List<Item> terminalItems, TemplateRef template) {
             int successes = (int) completed.stream().filter(r -> r.status() == ArtifactStatus.SUCCESS).count();
-            var summary = new TransportSummary(completed.size(), successes, completed.size() - successes);
+            int fixRequired = (int) completed.stream().filter(r -> r.grade() == ArtifactGrade.FIX_REQUIRED).count();
+            int retryable = (int) completed.stream().filter(r -> r.grade() == ArtifactGrade.RETRYABLE).count();
+            int skipped = (int) terminalItems.stream().filter(item -> item.stage() == Stage.SKIPPED).count();
+            var summary = new TransportSummary(completed.size(), successes, completed.size() - successes,
+                    fixRequired, retryable, skipped);
             return new TransportResponse(jobId, packages, dryRun, deploy, startedAt, end, summary, completed,
                     sourceTenant, targetTenant, template, terminal);
         }
@@ -138,7 +143,7 @@ public final class TransportRun {
         finish(JobStatus.INTERRUPTED);
     }
     private void finish(JobStatus terminal) {
-        result = snapshot().response(history == null ? null : terminal, clock.instant(), completedResults(), template);
+        result = snapshot().response(history == null ? null : terminal, clock.instant(), completedResults(), items, template);
         status = terminal;
         if (history != null) {
             try {

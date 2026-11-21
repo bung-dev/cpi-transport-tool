@@ -28,6 +28,7 @@ export interface ArtifactResult {
   packageId?: string;
   artifactId: string;
   status: ArtifactStatus;
+  grade?: 'SUCCESS' | 'FIX_REQUIRED' | 'RETRYABLE' | 'SKIPPED' | null;
   action: TransportAction;
   configurations: ConfigurationItem[];
   deployStatus: DeployStatus;
@@ -38,6 +39,9 @@ export interface TransportSummary {
   total: number;
   succeeded: number;
   failed: number;
+  fixRequired?: number | null;
+  retryable?: number | null;
+  skipped?: number | null;
 }
 
 export type TargetPackageStatus = 'NOT_CHECKED' | 'EXISTING' | 'CREATED' | 'CREATE_FAILED' | 'NOT_FOUND' | 'CHECK_FAILED';

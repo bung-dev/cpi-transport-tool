@@ -51,9 +51,9 @@ public class TransportJobStore {
             var packages = progress.packages();
             if (status == JobStatus.RUNNING) {
                 if (result == null) {
-                    result = progress.response(JobStatus.INTERRUPTED, clock.instant(), completedResults, template);
                     items = items.stream().map(item -> item.stage() == Stage.DONE ? item : item.at(Stage.SKIPPED, null))
                             .toList();
+                    result = progress.response(JobStatus.INTERRUPTED, clock.instant(), completedResults, items, template);
                     try {
                         history.append(result);
                     } catch (RuntimeException failure) {

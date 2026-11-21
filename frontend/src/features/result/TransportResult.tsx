@@ -86,6 +86,12 @@ export function TransportResult({ result, onOpenReal, activeJobId }: Props) {
         <Stat label="성공" value={summary.succeeded} valueClass={summary.succeeded >= 1 ? 'text-success-fg' : 'text-ink'} />
         <Stat label="실패" value={summary.failed} valueClass={summary.failed >= 1 ? 'text-danger-fg' : 'text-ink'} />
       </div>}
+      {summary?.fixRequired != null && summary.retryable != null && summary.skipped != null &&
+        summary.failed + summary.skipped > 0 && (
+          <p className="text-sm text-ink-secondary">
+            고쳐야 함 {summary.fixRequired} · 다시 시도 가능 {summary.retryable} · 건너뜀 {summary.skipped}
+          </p>
+        )}
       <dl className="grid grid-cols-1 gap-x-6 gap-y-2 rounded-lg border border-hairline bg-canvas px-4 py-3 sm:grid-cols-2 lg:grid-cols-4 min-w-0">
         <Meta label="이관 ID">
           <span className="font-mono text-[13px]">{result.transportId}</span>

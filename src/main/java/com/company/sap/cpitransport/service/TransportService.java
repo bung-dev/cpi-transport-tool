@@ -53,7 +53,7 @@ public class TransportService {
             return selected == null || selected.isEmpty() ? artifacts.stream().map(CpiArtifact::id).toList() : selected;
         }
     }
-    private record TargetPackage(TargetPackageStatus status, ArtifactError error) {}
+    private record TargetPackage(TargetPackageStatus status, ArtifactError error, ArtifactGrade grade) {}
 
     public TransportResponse execute(TransportRequest request) {
         int limit = concurrency(request);
@@ -185,48 +185,58 @@ public class TransportService {
             event(transportId, id, Stage.TARGET, "started");
             event(transportId, id, Stage.TARGET, "failed");
             return new ArtifactResult(packageId, id, null, TransportAction.NONE,
-                    List.of(), DeployStatus.NOT_REQUESTED, target.error());
+                    List.of(), DeployStatus.NOT_REQUESTED, target.error(), target.grade());
         }
-        return process(transportId, request, packageId, id, source.artifacts(), target.error(), progress).withPackageId(packageId);
+        return process(transportId, request, packageId, id, source.artifacts(), target, progress);
     }
 
     private TargetPackage prepareTarget(String transportId, TransportRequest request, CpiPackage source) {
-        if (request.dryRun()) return new TargetPackage(TargetPackageStatus.NOT_CHECKED, null);
+        if (request.dryRun()) return new TargetPackage(TargetPackageStatus.NOT_CHECKED, null, null);
         try {
             if (api.getPackage(request.target().id(), source.id()).isPresent())
-                return new TargetPackage(TargetPackageStatus.EXISTING, null);
+                return new TargetPackage(TargetPackageStatus.EXISTING, null, null);
         } catch (RuntimeException failure) {
-            return new TargetPackage(TargetPackageStatus.CHECK_FAILED, targetError("TARGET_CHECK_FAILED", failure));
+            return targetFailure(TargetPackageStatus.CHECK_FAILED, "TARGET_CHECK_FAILED", failure);
         }
         if (!request.createPackages().contains(source.id())) {
             return new TargetPackage(TargetPackageStatus.NOT_FOUND,
-                    new ArtifactError("PACKAGE_NOT_FOUND_IN_TARGET", "TARGET: HTTP 404; CPI package not found"));
+                    new ArtifactError("PACKAGE_NOT_FOUND_IN_TARGET", "TARGET: HTTP 404; CPI package not found"),
+                    ArtifactGrade.FIX_REQUIRED);
         }
         log.info("transportId={} packageId={} step=PACKAGE_CREATE phase=START result=PENDING", transportId, source.id());
         try {
             api.createPackage(request.target().id(), source);
             log.info("transportId={} packageId={} step=PACKAGE_CREATE phase=END result=OK", transportId, source.id());
-            return new TargetPackage(TargetPackageStatus.CREATED, null);
+            return new TargetPackage(TargetPackageStatus.CREATED, null, null);
         } catch (RuntimeException failure) {
             log.info("transportId={} packageId={} step=PACKAGE_CREATE phase=END result=FAILED", transportId, source.id());
-            return new TargetPackage(TargetPackageStatus.CREATE_FAILED, targetError("PACKAGE_CREATE_FAILED", failure));
+            return targetFailure(TargetPackageStatus.CREATE_FAILED, "PACKAGE_CREATE_FAILED", failure);
         }
     }
 
-    private ArtifactError targetError(String code, RuntimeException failure) {
+    private TargetPackage targetFailure(TargetPackageStatus status, String code, RuntimeException failure) {
         String detail = failure instanceof CpiCallException call
                 ? "HTTP " + call.httpStatus() + "; CPI call failed" : "CPI processing failed";
-        return new ArtifactError(code, "TARGET: " + detail);
+        return new TargetPackage(status, new ArtifactError(code, "TARGET: " + detail), callFailureGrade(failure));
+    }
+
+    private static ArtifactGrade callFailureGrade(RuntimeException failure) {
+        Integer status = failure instanceof CpiCallException call ? call.httpStatus() : null;
+        if (status != null && status >= 400 && status < 500 && status != 408 && status != 429) {
+            return ArtifactGrade.FIX_REQUIRED;
+        }
+        return ArtifactGrade.RETRYABLE;
     }
 
     private ArtifactResult process(String transportId, TransportRequest request, String packageId, String id,
-                                   List<CpiArtifact> artifacts, ArtifactError packageError, Consumer<Stage> progress) {
+                                   List<CpiArtifact> artifacts, TargetPackage target, Consumer<Stage> progress) {
         Stage stage = Stage.LOOKUP;
         TransportAction action = TransportAction.NONE;
         DeployStatus deployStatus = request.dryRun() && request.deploy()
                 ? DeployStatus.SKIPPED_DRY_RUN : DeployStatus.NOT_REQUESTED;
         List<ConfigurationItem> items = List.of();
         ArtifactError error = null;
+        ArtifactGrade grade = ArtifactGrade.SUCCESS;
         String successResult = "succeeded";
         var deployFailure = DeployOutcome.DeployFailure.NONE;
         boolean exists = false;
@@ -235,6 +245,7 @@ public class TransportService {
             var artifact = artifacts.stream().filter(a -> id.equals(a.id())).findFirst();
             if (artifact.isEmpty()) {
                 error = new ArtifactError(stage.code, "LOOKUP: artifact absent from DEV package");
+                grade = ArtifactGrade.FIX_REQUIRED;
             } else {
                 stage = next(transportId, id, stage, Stage.DOWNLOAD, progress);
                 byte[] zip = api.downloadArtifact(request.source().id(), id);
@@ -243,8 +254,9 @@ public class TransportService {
                 stage = next(transportId, id, stage, request.dryRun() ? Stage.UPLOAD : Stage.TARGET, progress);
                 if (request.dryRun()) {
                     items = source;
-                } else if (packageError != null) {
-                    error = packageError;
+                } else if (target.error() != null) {
+                    error = target.error();
+                    grade = target.grade();
                 } else {
                     exists = api.artifactExists(request.target().id(), id);
                     stage = next(transportId, id, stage, Stage.UPLOAD, progress);
@@ -270,7 +282,10 @@ public class TransportService {
                             error = new ArtifactError(deployStatus == DeployStatus.TIMEOUT ? "DEPLOY_TIMEOUT" : stage.code,
                                     "DEPLOY: CPI deployment " + deployStatus);
                             if (deployFailure == DeployOutcome.DeployFailure.RUNTIME_ERROR) {
+                                grade = ArtifactGrade.FIX_REQUIRED;
                                 error = deployment.errorDetail(request.target().id(), id, configurations.sensitiveValues(source));
+                            } else {
+                                grade = ArtifactGrade.RETRYABLE;
                             }
                         }
                     } else {
@@ -281,7 +296,12 @@ public class TransportService {
         } catch (RuntimeException failure) {
             if (stage == Stage.DEPLOY) {
                 deployStatus = DeployStatus.ERROR;
-                deployFailure = DeployOutcome.DeployFailure.CALL_FAILED;
+                if (deployFailure != DeployOutcome.DeployFailure.RUNTIME_ERROR) {
+                    deployFailure = DeployOutcome.DeployFailure.CALL_FAILED;
+                    grade = ArtifactGrade.RETRYABLE;
+                }
+            } else {
+                grade = callFailureGrade(failure);
             }
             // AI-NOTE: CPI bodies can echo unknown sensitive values; use a categorical summary. (근거: REQ-012 AC-3, run 20260928-cpi-transport)
             // REQ-309 permits only masked ErrorInformation in ArtifactError.detail; other failures remain categorical.
@@ -307,7 +327,7 @@ public class TransportService {
             }
         }
         event(transportId, id, stage, error == null ? successResult : "failed " + error.code(), logFields);
-        return new ArtifactResult(id, null, action, items, deployStatus, error);
+        return new ArtifactResult(packageId, id, null, action, items, deployStatus, error, grade);
     }
 
     private Stage next(String transportId, String id, Stage previous, Stage next, Consumer<Stage> progress) {
