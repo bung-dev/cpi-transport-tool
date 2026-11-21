@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cancelTransportJob, getArtifacts, startTransportJob } from '../../api/client';
 import { ApiRequestError, isTemplateError, JOB_ALREADY_RUNNING, toApiError, type ApiError } from '../../api/errors';
-import type { ActiveJob, ArtifactSummary, JobItem, TransportRequest, TransportResponse, TransportTemplate } from '../../api/types';
+import type { ActiveJob, ArtifactSummary, ArtifactType, JobItem, TransportRequest, TransportResponse, TransportTemplate } from '../../api/types';
 import { useReadOnlyState, useTenants } from '../tenants/TenantContext';
 import { hasNoTenants, REGISTER_TENANT_FIRST } from './noTenants';
 import { jobHref } from '../../app/routes';
@@ -13,10 +13,52 @@ export const TOO_MANY_ARTIFACTS = '한 번에 100개까지 선택할 수 있습�
 
 export type WizardStep = 'template' | 'package' | 'artifacts' | 'preview' | 'real';
 
-type PackageArtifacts =
+const NEW_TYPES = ['SCRIPT_COLLECTION', 'MESSAGE_MAPPING', 'VALUE_MAPPING'] as const;
+export const ARTIFACT_TYPES = ['INTEGRATION_FLOW', ...NEW_TYPES] as const;
+
+type ArtifactListState =
   | { status: 'loading' }
   | { status: 'error'; error: ApiError }
   | { status: 'ok'; items: ArtifactSummary[]; selected: string[] };
+
+type PackageArtifacts = Partial<Record<ArtifactType, ArtifactListState>>;
+
+export function artifactCounts(lists: PackageArtifacts = {}) {
+  let total = 0, selected = 0;
+  for (const list of Object.values(lists)) {
+    if (list.status === 'ok') {
+      total += list.items.length;
+      selected += list.selected.length;
+    }
+  }
+  return { total, selected };
+}
+
+function selectAllInPackage(lists: PackageArtifacts, select: boolean): PackageArtifacts {
+  const next = { ...lists };
+  for (const type of ARTIFACT_TYPES) {
+    const list = lists[type];
+    if (list?.status === 'ok') next[type] = { ...list, selected: select ? list.items.map(a => a.id) : [] };
+  }
+  return next;
+}
+
+function selectionRequest(packageId: string, lists: PackageArtifacts = {}, allArtifacts = false): TransportRequest['packages'] {
+  const flow = lists.INTEGRATION_FLOW;
+  const { selected } = artifactCounts(lists);
+  if (flow && (flow.status !== 'ok' || !selected)) return [];
+  const ids = (type: ArtifactType) => {
+    const list = lists[type];
+    return list?.status === 'ok' ? list.selected : [];
+  };
+  const explicitFlows = !allArtifacts && flow && (!flow.selected.length || flow.selected.length < flow.items.length);
+  return [{
+    packageId, ...(explicitFlows ? { artifactIds: flow.selected } : {}),
+    scriptCollectionIds: ids('SCRIPT_COLLECTION'),
+    messageMappingIds: ids('MESSAGE_MAPPING'),
+    valueMappingIds: ids('VALUE_MAPPING'),
+  }];
+}
 
 interface PreviewJob extends ActiveJob {
   items: JobItem[] | null;
@@ -54,6 +96,12 @@ const EMPTY_SELECTION = {
 
 function initial(source: string | null, target: string | null): WizardData {
   return { route: { source, target }, step: 'template', templateDone: false, template: null, routeDialog: false, ...EMPTY_SELECTION };
+}
+
+function selectAllInPackages(d: WizardData, select: boolean) {
+  const artifacts = { ...d.artifacts };
+  for (const { id } of d.packages) artifacts[id] = selectAllInPackage(artifacts[id] ?? {}, select);
+  return artifacts;
 }
 
 export function useWizard(visible = true, activeJobId?: string) {
@@ -102,24 +150,15 @@ export function useWizard(visible = true, activeJobId?: string) {
     ...d.packages.filter(p => !d.packageOrder.some(item => item.id === p.id)),
   ];
   const packages = ordered(data);
-  const selectionRequest = (d: WizardData): TransportRequest['packages'] => ordered(d).flatMap(p => {
-    const a = d.artifacts[p.id];
-    if (!a) return [{ packageId: p.id }];
-    if (a.status !== 'ok' || a.selected.length === 0) return [];
-    return [{ packageId: p.id, ...(a.selected.length === a.items.length ? {} : {
-      artifactIds: a.items.filter(item => a.selected.includes(item.id)).map(item => item.id),
-    }) }];
-  });
-  const tooMany = selectionRequest(data).some(p => (p.artifactIds?.length ?? 0) > MAX_ARTIFACTS);
-  const pendingArtifacts = packages.some(p => {
-    const a = data.artifacts[p.id];
-    return a && a.status !== 'ok';
-  });
-  const awaitingArtifacts = pendingArtifacts || data.step === 'artifacts' && packages.some(p => !data.artifacts[p.id]);
-  const noneSelected = packages.length > 0 && packages.every(p => {
-    const a = data.artifacts[p.id];
-    return a?.status === 'ok' && a.selected.length === 0;
-  });
+  const selections = packages.flatMap(p => selectionRequest(p.id, data.artifacts[p.id]));
+  const tooMany = selections.some(p => (p.artifactIds?.length ?? 0) > MAX_ARTIFACTS);
+  const pendingArtifacts = packages.some(p => ARTIFACT_TYPES.some(type => {
+    const state = data.artifacts[p.id]?.[type]?.status;
+    return state === 'loading' || type === 'INTEGRATION_FLOW' && state === 'error';
+  }));
+  const missingLists = packages.some(p => ARTIFACT_TYPES.some(type => !data.artifacts[p.id]?.[type]));
+  const awaitingArtifacts = pendingArtifacts || data.step === 'artifacts' && missingLists;
+  const noneSelected = packages.length > 0 && !missingLists && !pendingArtifacts && selections.length === 0;
   const busy = data.busy || data.previewJob !== null;
   const allPreviewReason = !packages.length ? '패키지를 먼저 선택하세요' : routeReason ?? (
     pendingArtifacts ? '아티팩트 목록을 확인하세요' : busy ? '이관 실행 중입니다' : undefined);
@@ -127,34 +166,42 @@ export function useWizard(visible = true, activeJobId?: string) {
     awaitingArtifacts ? '아티팩트 목록을 확인하세요' : tooMany ? TOO_MANY_ARTIFACTS
       : noneSelected ? '아티팩트를 하나 이상 선택하세요' : busy ? '이관 실행 중입니다' : undefined);
   const realReason = activeJobId ? JOB_ALREADY_RUNNING : notice ?? (!data.preview ? '미리보기를 먼저 실행하세요' : busy ? '이관 실행 중입니다' : routeReason ?? undefined);
-  const loaded = packages.flatMap(p => {
-    const a = data.artifacts[p.id];
-    return a?.status === 'ok' ? [a] : [];
-  });
-  const artifactSummary = !packages.length ? null : loaded.every(a => a.selected.length === a.items.length)
-    ? '전체' : `${loaded.reduce((n, a) => n + a.selected.length, 0)} / ${loaded.reduce((n, a) => n + a.items.length, 0)}개`;
+  const counts = packages.map(p => artifactCounts(data.artifacts[p.id]));
+  const total = counts.reduce((n, c) => n + c.total, 0);
+  const selected = counts.reduce((n, c) => n + c.selected, 0);
+  const artifactSummary = !packages.length ? null : selected === total ? '전체' : `${selected} / ${total}개`;
 
   // 조회 결과는 단계 이동 뒤에도 보존한다. 경로가 바뀐 뒤 도착한 응답은 버린다.
-  const artifactRequests = useRef(new Map<string, object>());
-  async function loadArtifacts(packageId: string, retry = false) {
-    const d = latest.current;
-    if (!d.route.source || (!retry && d.artifacts[packageId])) return;
-    if (artifactRequests.current.get(packageId) === d.route) return;
-    artifactRequests.current.set(packageId, d.route);
-    update(x => ({ ...x, artifacts: { ...x.artifacts, [packageId]: { status: 'loading' } } }));
-    try {
-      const items = await getArtifacts(packageId, d.route.source);
-      if (latest.current.route !== d.route) return;
-      update(x => ({ ...x, artifacts: { ...x.artifacts, [packageId]: { status: 'ok', items, selected: items.map(a => a.id) } } }));
-    } catch (e) {
-      if (latest.current.route !== d.route) return;
-      update(x => ({ ...x, artifacts: { ...x.artifacts, [packageId]: { status: 'error', error: toApiError(e) } } }));
-    } finally {
-      if (artifactRequests.current.get(packageId) === d.route) artifactRequests.current.delete(packageId);
+  const artifactRequests = useRef(new Map<string, { route: WizardData['route']; promise: Promise<ArtifactListState> }>());
+  async function loadArtifacts(packageId: string, type: ArtifactType, retry = false) {
+    const { route, artifacts } = latest.current;
+    if (!route.source) return;
+    const key = type + ':' + packageId;
+    const pending = artifactRequests.current.get(key);
+    if (pending?.route === route) return pending.promise;
+    const cached = artifacts[packageId]?.[type];
+    if (cached && !retry) return cached;
+
+    function setList(list: ArtifactListState) {
+      update(d => d.route !== route ? d : { ...d, artifacts: { ...d.artifacts,
+        [packageId]: { ...d.artifacts[packageId], [type]: list },
+      } });
     }
+    if (retry) update(dropResults);
+    setList({ status: 'loading' });
+    const promise = getArtifacts(packageId, route.source, type === 'INTEGRATION_FLOW' ? undefined : type)
+      .then((items): ArtifactListState => ({ status: 'ok', items, selected: items.map(a => a.id) }))
+      .catch((e): ArtifactListState => ({ status: 'error', error: toApiError(e) }));
+    artifactRequests.current.set(key, { route, promise });
+    const list = await promise;
+    if (artifactRequests.current.get(key)?.promise === promise) artifactRequests.current.delete(key);
+    setList(list);
+    return list;
   }
   useEffect(() => {
-    if (data.step === 'artifacts') for (const p of packages) void loadArtifacts(p.id);
+    if (data.step === 'artifacts') {
+      for (const p of packages) for (const type of ARTIFACT_TYPES) void loadArtifacts(p.id, type);
+    }
   }, [data.step, data.packages, data.route]);
 
   // 화면을 떠나거나 선택을 바꾸면 예약된 조회와 뒤늦게 도착한 응답을 함께 버린다.
@@ -183,28 +230,49 @@ export function useWizard(visible = true, activeJobId?: string) {
     }
   }
 
+  // 패키지 단계의 단축 실행과 팔레트 실행은 iFlow를 읽지 않고도 요청할 수 있다.
+  async function preparePackage(packageId: string, cached: PackageArtifacts = {}, all = false) {
+    const lists = { ...cached };
+    const required = NEW_TYPES.filter(type => all || !lists[type]);
+    await Promise.all(required.map(async type => { lists[type] = await loadArtifacts(packageId, type); }));
+    if (required.some(type => lists[type]?.status !== 'ok')) return null;
+    return selectionRequest(packageId, all ? selectAllInPackage(lists, true) : lists, all);
+  }
+
   async function submit(real: boolean, deploy: boolean, options: { withoutTemplate?: boolean; allArtifacts?: boolean; createPackages?: string[] } = {}) {
     const d = latest.current;
     if (inFlight.current || d.previewJob || !d.packages.length || !sourceTenantId || !targetTenantId || routeReason) return;
     if (real && (realDisabled || activeJobId || d.confirm?.conflictJobId || !d.preview)) return;
     if (!real && (options.allArtifacts ? allPreviewReason : previewReason)) return;
-    const requestPackages: TransportRequest['packages'] | null = real || options.withoutTemplate ? d.previewPackages : options.allArtifacts
-      ? ordered(d).map(p => ({ packageId: p.id })) : selectionRequest(d);
-    if (!requestPackages?.length || requestPackages.some(p => (p.artifactIds?.length ?? 0) > MAX_ARTIFACTS)) return;
     const template = options.withoutTemplate ? null : d.template;
-    const body: TransportRequest = { packages: requestPackages, dryRun: !real, deploy: real ? deploy : false, sourceTenantId, targetTenantId };
-    if (real && d.preview) body.previewId = d.preview.transportId;
-    if (real && options.createPackages?.length) body.createPackages = options.createPackages;
-    if (template) body.templateId = template.id;
     inFlight.current = true;
     const gen = generation.current;
     update(x => ({
-      ...x, busy: true, error: null, templateFailure: null, template, previewPackages: requestPackages,
-      ...(options.allArtifacts ? { artifacts: Object.fromEntries(Object.entries(x.artifacts).map(([id, a]) =>
-        [id, a.status === 'ok' && x.packages.some(p => p.id === id) ? { ...a, selected: a.items.map(item => item.id) } : a])) } : {}),
+      ...x, busy: true, error: null, templateFailure: null, template,
       ...(real ? {} : { preview: null, previewCancelled: false }),
     }));
     try {
+      let requestPackages = selections;
+      if (real || options.withoutTemplate) {
+        requestPackages = d.previewPackages ?? [];
+      } else if (options.allArtifacts || missingLists) {
+        const prepared = await Promise.all(ordered(d).map(p => preparePackage(p.id, d.artifacts[p.id], options.allArtifacts)));
+        if (gen !== generation.current) return;
+        requestPackages = prepared.flatMap(p => p ?? []);
+        if (prepared.includes(null) || !requestPackages.length) {
+          update(x => ({ ...x, step: 'artifacts', previewPackages: null }));
+          return;
+        }
+        if (options.allArtifacts) {
+          update(x => ({ ...x, artifacts: selectAllInPackages(x, true) }));
+        }
+      }
+      if (!requestPackages.length || requestPackages.some(p => (p.artifactIds?.length ?? 0) > MAX_ARTIFACTS)) return;
+      update(x => ({ ...x, previewPackages: requestPackages }));
+      const body: TransportRequest = { packages: requestPackages, dryRun: !real, deploy: real ? deploy : false, sourceTenantId, targetTenantId };
+      if (real && d.preview) body.previewId = d.preview.transportId;
+      if (real && options.createPackages?.length) body.createPackages = options.createPackages;
+      if (template) body.templateId = template.id;
       const { jobId, total } = await startTransportJob(body);
       if (gen !== generation.current) return;
       if (real) {
@@ -310,15 +378,17 @@ export function useWizard(visible = true, activeJobId?: string) {
       update(d => ({ ...dropResults(d), packages: [...d.packages, ...items.filter(p => !d.packages.some(s => s.id === p.id))] }));
     },
     clearPackages() { update(d => ({ ...dropResults(d), packages: [] })); },
-    setArtifactIds(packageId: string, ids: string[]) {
+    setArtifactIds(packageId: string, type: ArtifactType, ids: string[]) {
       update(d => {
-        const a = d.artifacts[packageId];
-        return a?.status === 'ok' ? { ...dropResults(d), artifacts: { ...d.artifacts, [packageId]: { ...a, selected: ids } } } : d;
+        const lists = d.artifacts[packageId];
+        const list = lists?.[type];
+        return list?.status === 'ok' ? { ...dropResults(d), artifacts: { ...d.artifacts,
+          [packageId]: { ...lists, [type]: { ...list, selected: ids } },
+        } } : d;
       });
     },
     selectAllArtifacts(select: boolean) {
-      update(d => ({ ...dropResults(d), artifacts: Object.fromEntries(Object.entries(d.artifacts).map(([id, a]) =>
-        [id, a.status === 'ok' && d.packages.some(p => p.id === id) ? { ...a, selected: select ? a.items.map(item => item.id) : [] } : a])) }));
+      update(d => ({ ...dropResults(d), artifacts: selectAllInPackages(d, select) }));
     },
     openRouteDialog() { update(d => ({ ...d, routeDialog: true })); },
     closeRouteDialog() { update(d => ({ ...d, routeDialog: false })); },

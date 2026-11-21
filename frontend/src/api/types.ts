@@ -1,4 +1,6 @@
 // 백엔드 model/*.java의 테넌트 및 이관 응답 계약.
+export type ArtifactType = 'INTEGRATION_FLOW' | 'SCRIPT_COLLECTION' | 'MESSAGE_MAPPING' | 'VALUE_MAPPING';
+
 export interface ArtifactSummary {
   id: string;
   name: string;
@@ -113,7 +115,13 @@ export interface TransportRequest {
   previewId?: string;
   sourceTenantId?: string;
   targetTenantId?: string;
-  packages: { packageId: string; artifactIds?: string[] }[];
+  packages: {
+    packageId: string;
+    artifactIds?: string[];
+    scriptCollectionIds?: string[];
+    messageMappingIds?: string[];
+    valueMappingIds?: string[];
+  }[];
   createPackages?: string[];
   dryRun?: boolean;
   deploy?: boolean;

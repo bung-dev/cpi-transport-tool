@@ -14,7 +14,7 @@ export function PreviewProgress({ job, artifacts, onCancel }: {
       actions={<Button size="sm" disabled={job.cancelRequested} onClick={onCancel}>취소</Button>}>
       <JobProgressBar label="미리보기 진행률" done={job.done} total={job.total} />
       {job.items === null ? <ListSkeleton /> : <JobItems items={job.items} nameOf={item => {
-        const list = artifacts[item.packageId];
+        const list = artifacts[item.packageId]?.INTEGRATION_FLOW;
         return list?.status === 'ok' ? list.items.find(a => a.id === item.artifactId)?.name : undefined;
       }} />}
     </Card>
