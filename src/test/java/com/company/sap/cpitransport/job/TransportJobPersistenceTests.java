@@ -155,7 +155,8 @@ class TransportJobPersistenceTests {
                 if (System.nanoTime() > deadline) fail("no progress");
                 Thread.sleep(20);
             }
-            Thread.sleep(100); // 단계 변화 저장이 파일에 닿을 여유
+            // 단계 변화 저장이 파일에 닿을 여유. 20261121-perf-retry REQ-905: 진행 중 변경은 최대 1초에 한 번 저장된다.
+            Thread.sleep(1200);
             Files.createDirectories(crashed.jobs().getParent());
             Files.copy(live.jobs(), crashed.jobs(), StandardCopyOption.REPLACE_EXISTING);
             if (Files.exists(live.history())) Files.copy(live.history(), crashed.history(), StandardCopyOption.REPLACE_EXISTING);
