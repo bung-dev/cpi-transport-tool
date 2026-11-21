@@ -103,6 +103,8 @@ class RealSampleEndToEndTests {
                 .willReturn(aResponse().withStatus(202)));
         target.stubFor(get(urlPathEqualTo("/api/v1/IntegrationRuntimeArtifacts('CPITT_Sample_Push')"))
                 .willReturn(okJson("{\"d\":{\"Id\":\"CPITT_Sample_Push\",\"Status\":\"STARTED\"}}")));
+        // 20261121-perf-retry REQ-904: 배포 확인은 런타임 목록을 읽는다.
+        RuntimeListStub.stub(target, "STARTED", "CPITT_Sample_Push");
     }
 
     private TransportResponse transport(boolean dryRun) throws Exception {
@@ -152,7 +154,9 @@ class RealSampleEndToEndTests {
         // REQ-701: the parameter travels inside the uploaded bundle; no configuration PUT is sent.
         target.verify(0, putRequestedFor(urlPathMatching(".*/\\$links/Configurations.*")));
         target.verify(1, postRequestedFor(urlPathEqualTo("/api/v1/DeployIntegrationDesigntimeArtifact")));
-        target.verify(1, getRequestedFor(urlPathEqualTo("/api/v1/IntegrationRuntimeArtifacts('CPITT_Sample_Push')")));
+        // REQ-904·REQ-909: 단건 상태 조회 없이 목록으로 판정한다.
+        target.verify(0, getRequestedFor(urlPathEqualTo("/api/v1/IntegrationRuntimeArtifacts('CPITT_Sample_Push')")));
+        target.verify(moreThanOrExactly(1), getRequestedFor(urlPathEqualTo(RuntimeListStub.PATH)));
         target.verify(1, postRequestedFor(urlPathEqualTo("/oauth/token")));
         target.verify(1, getRequestedFor(urlPathEqualTo(RealSampleStub.ARTIFACT)));
         target.verify(0, getRequestedFor(urlPathEqualTo(RealSampleStub.ARTIFACT + "/Configurations")));

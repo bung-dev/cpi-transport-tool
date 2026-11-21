@@ -86,6 +86,11 @@ class DeployErrorDetailWireMockTests {
         stubs.dev().verify(0, getRequestedFor(urlPathMatching(".*ErrorInformation.*")));
         stubs.prd().verify(1, postRequestedFor(urlEqualTo("/oauth/token")));
     }
+    /** 20261121-perf-retry REQ-904: 상태 조회 실패는 이제 런타임 목록 조회 실패(연속 3번)다. RuntimeGet500일 때 목록을 500으로. */
+    private void runtimeListFailsFor(String id) {
+        if (id.equals("IF_Fault_RuntimeGet500")) stubs.prd().stubFor(com.company.sap.cpitransport.stub.RuntimeListStub.list()
+                .atPriority(0).willReturn(serverError()));
+    }
     private void noDetail() { stubs.prd().verify(0, getRequestedFor(urlPathMatching(".*ErrorInformation.*"))); }
     private void failed(ArtifactResult result) {
         assertThat(result.deployStatus()).isEqualTo(DeployStatus.ERROR);
@@ -135,6 +140,7 @@ class DeployErrorDetailWireMockTests {
     @ParameterizedTest(name = "REQ-309 AC-1 / REQ-309 AC-5 / REQ-309 AC-10: {0} never requests detail")
     @ValueSource(strings = {"IF_Fault_A", "IF_Fault_DeployTimeout", "IF_Fault_DeployPost500", "IF_Fault_RuntimeGet500"})
     void req309_ac1_noRequest(String id, CapturedOutput output) {
+        runtimeListFailsFor(id);
         var result = run(id, false, true).results().getFirst();
         noDetail();
         if (id.endsWith("500")) {
@@ -373,6 +379,7 @@ class DeployErrorDetailWireMockTests {
     @ValueSource(strings = {"IF_Fault_DeployPost500", "IF_Fault_RuntimeGet500"})
     @DisplayName("REQ-309 AC-5: deployFailure=CALL_FAILED log omits detailHttpStatus and detailLength")
     void req314_callFailedLog(String id, CapturedOutput output) {
+        runtimeListFailsFor(id);
         var result = run(id, false, true).results().getFirst();
         failed(result);
         assertThat(result.error().detail()).isNull();

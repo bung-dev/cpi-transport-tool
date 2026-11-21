@@ -74,6 +74,8 @@ class LockHintWireMockTests {
         prd.stubFor(com.github.tomakehurst.wiremock.client.WireMock.put(urlEqualTo(parameter("A"))).willReturn(noContent()));
         prd.stubFor(com.github.tomakehurst.wiremock.client.WireMock.post(urlEqualTo(deploy("A"))).willReturn(noContent()));
         prd.stubFor(com.github.tomakehurst.wiremock.client.WireMock.get(urlEqualTo(runtime("A"))).willReturn(okJson("{\"d\":{\"Status\":\"STARTED\"}}")));
+        // 20261121-perf-retry REQ-904: 배포 확인은 런타임 목록을 읽는다.
+        com.company.sap.cpitransport.stub.RuntimeListStub.stub(prd, "STARTED", "A");
     }
 
     @AfterEach void tearDown() { if (dev != null) dev.stop(); if (prd != null) prd.stop(); }

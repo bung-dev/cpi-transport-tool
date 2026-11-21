@@ -4,6 +4,7 @@ import com.company.sap.cpitransport.client.*;
 import com.company.sap.cpitransport.config.*;
 import com.company.sap.cpitransport.job.TransportRun;
 import com.company.sap.cpitransport.model.*;
+import com.company.sap.cpitransport.stub.RuntimeListStub;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.http.Fault;
 import java.io.*;
@@ -60,6 +61,8 @@ class ResultGradeWireMockTests {
             prd.stubFor(get(urlEqualTo(runtime(id))).willReturn(okJson("{\"d\":{\"Status\":\"STARTED\"}}")));
         }
         prd.stubFor(post(urlEqualTo(COLLECTION)).willReturn(created()));
+        // S3(REQ-904): 배포 확인은 런타임 목록을 읽는다.
+        RuntimeListStub.stub(prd, "STARTED", "A", "B", "C");
     }
 
     @AfterEach void tearDown() { if (dev != null) dev.stop(); if (prd != null) prd.stop(); }
@@ -108,9 +111,9 @@ class ResultGradeWireMockTests {
             case "CONFIGURATION_502" -> dev.stubFor(get(urlEqualTo(path(id) + "/Configurations")).willReturn(aResponse().withStatus(502)));
             case "TARGET_403" -> prd.stubFor(get(urlEqualTo(path(id))).willReturn(aResponse().withStatus(403)));
             case "TARGET_500" -> prd.stubFor(get(urlEqualTo(path(id))).willReturn(aResponse().withStatus(500)));
-            case "DEPLOY_RUNTIME_ERROR" -> prd.stubFor(get(urlEqualTo(runtime(id))).willReturn(okJson("{\"d\":{\"Status\":\"ERROR\"}}")));
-            case "DEPLOY_TIMEOUT" -> prd.stubFor(get(urlEqualTo(runtime(id))).willReturn(okJson("{\"d\":{\"Status\":\"STARTING\"}}")));
-            case "DEPLOY_STATUS_CALL_500" -> prd.stubFor(get(urlEqualTo(runtime(id))).willReturn(aResponse().withStatus(500)));
+            case "DEPLOY_RUNTIME_ERROR" -> RuntimeListStub.stub(prd, "ERROR", id);
+            case "DEPLOY_TIMEOUT" -> RuntimeListStub.stub(prd, "STARTING", id);
+            case "DEPLOY_STATUS_CALL_500" -> prd.stubFor(RuntimeListStub.list().willReturn(aResponse().withStatus(500)));
             case "ARTIFACT_ABSENT" -> id = "MISSING";
             default -> fail("unknown scenario " + scenario);
         }
