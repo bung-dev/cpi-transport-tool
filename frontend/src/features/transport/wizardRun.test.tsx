@@ -24,6 +24,8 @@ const TENANTS: TenantsResponse = {
 const status = (readOnly: boolean): TenantStatusResponse => ({ readOnly, tenants: TENANTS.tenants.map((t) => ({ ...t, check: 'OK' as const })) });
 const respond = (body: Pick<TransportRequest, 'packages' | 'dryRun' | 'deploy'>) => respondTo(body);
 const ONE = { packages: [{ packageId: 'PkgTransportDemo' }] };
+// 20261121-package-objects REQ-1003: 화면이 보내는 요청 본문에는 새 종류 Id 목록이 항상 있다(응답을 만드는 ONE과 구분)
+const ONE_SENT = { packages: [{ packageId: 'PkgTransportDemo', ...NO_TYPES }] };
 const T_PKG = tpl({ id: 'tp-1', name: '개발에서 운영', sourceTenantId: 'DEV', targetTenantId: 'PRD' });
 
 type Routes = Parameters<typeof mockApi>[0];
@@ -123,9 +125,9 @@ describe('REQ-423 미리보기', () => {
     await userEvent.click(await runButton());
     await waitFor(() => expect(postBodies(fn)).toHaveLength(2));
     expect(postBodies(fn)).toEqual([
-      { ...ONE, dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
+      { ...ONE_SENT, dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
       // 20261121-perf-retry REQ-902: 미리보기 뒤 실제 이관은 그 미리보기 ID를 보낸다.
-      { ...ONE, dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1', previewId: 't-dry' },
+      { ...ONE_SENT, dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1', previewId: 't-dry' },
     ]);
   });
 });
@@ -339,7 +341,7 @@ describe('REQ-423 요청 오류 (ADR-016)', () => {
     const bodies = postBodies(fn);
     expect(bodies).toHaveLength(2);
     expect(bodies[0]).toMatchObject({ templateId: 'tp-1', dryRun: true });
-    expect(bodies[1]).toEqual({ ...ONE, dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
+    expect(bodies[1]).toEqual({ ...ONE_SENT, dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
     expect(stepButton('템플릿')).not.toHaveTextContent('개발에서 운영');
   });
 });
