@@ -227,19 +227,24 @@ class DeployErrorDetailWireMockTests {
         var controller = new TransportController(transport(client), new EnvironmentGuard(connections), history, new ReadOnlyProperties(false));
         var mvc = MockMvcBuilders.standaloneSetup(controller).build();
         var result = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/transport")
-                .contentType("application/json").content("{\"packageId\":\"PkgFaultDemo\",\"artifactIds\":[\"" + ERROR_ID
-                        + "\",\"IF_Fault_A\"],\"dryRun\":false,\"deploy\":true}"))
+                // 20261121-perf-retry REQ-904: 배포 요청 뒤 자리를 비우므로 성공 iFlow를 먼저 두어, 상세 조회 중 토큰을 깨뜨리는 동안
+                // 다른 iFlow의 업로드가 겹치지 않게 한다. 결과는 ID로 찾는다.
+                .contentType("application/json").content("{\"packageId\":\"PkgFaultDemo\",\"artifactIds\":[\"IF_Fault_A\",\"" + ERROR_ID
+                        + "\"],\"dryRun\":false,\"deploy\":true}"))
                 .andExpect(status().isOk()).andReturn();
         var response = json.readValue(result.getResponse().getContentAsString(), TransportResponse.class);
-        failed(response.results().getFirst());
-        assertThat(response.results().getFirst().error().detail()).isNull();
-        assertThat(response.results().getFirst().error().detailHttpStatus()).isZero();
+        var errorResult = response.results().stream().filter(r -> r.artifactId().equals(ERROR_ID)).findFirst().orElseThrow();
+        var nextResult = response.results().stream().filter(r -> r.artifactId().equals("IF_Fault_A")).findFirst().orElseThrow();
+        failed(errorResult);
+        assertThat(errorResult.error().detail()).isNull();
+        assertThat(errorResult.error().detailHttpStatus()).isZero();
         assertThat(deployLine(output, ERROR_ID)).endsWith("phase=END result=FAILED deployFailure=RUNTIME_ERROR detailHttpStatus=0 detailLength=0");
-        assertThat(response.results().get(1).deployStatus()).isEqualTo(DeployStatus.STARTED);
+        assertThat(nextResult.deployStatus()).isEqualTo(DeployStatus.STARTED);
         assertThat(response.summary()).isEqualTo(new TransportSummary(2, 1, 1));
         assertThat(result.getResponse().getContentAsString()).contains("\"detailHttpStatus\":0").doesNotContain("test-dummy-sensitive-cause");
         stubs.prd().verify(mode.equals("timeout") ? 1 : 0, getRequestedFor(urlEqualTo(DETAIL)));
-        if (mode.equals("token")) stubs.prd().verify(3, postRequestedFor(urlEqualTo("/oauth/token")));
+        // 20261121-perf-retry: 성공 iFlow가 앞이라 상세 조회 뒤 토큰을 다시 받을 iFlow가 없다(처음 1번 + 상세 조회 중 실패 1번, 사람 승인 2026-11-21).
+        if (mode.equals("token")) stubs.prd().verify(2, postRequestedFor(urlEqualTo("/oauth/token")));
     }
 
     @ParameterizedTest(name = "REQ-309 AC-2 / REQ-309 AC-4 / REQ-309 AC-10: {0} Unicode code points masked before truncation")

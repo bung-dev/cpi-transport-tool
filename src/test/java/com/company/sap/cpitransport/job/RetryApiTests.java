@@ -191,7 +191,8 @@ class RetryApiTests {
         var first = retry(createFailed.get("result").get("transportId").asString());
         assertThat(first.status()).isEqualTo(202);
         var firstJob = await(first.body().get("jobId").asString());
-        stubs.prd().verify(1, postRequestedFor(urlPathEqualTo(ROOT + "IntegrationPackages")).withRequestBody(matchingJsonPath("$.Id", equalTo("PkgCreateFail"))));
+        // 만들기 POST 500은 기존 재시도 규칙(최대 3번)으로 다시 나간다. 다시 이관이 만들기를 시도했는지만 본다.
+        stubs.prd().verify(moreThanOrExactly(1), postRequestedFor(urlPathEqualTo(ROOT + "IntegrationPackages")).withRequestBody(matchingJsonPath("$.Id", equalTo("PkgCreateFail"))));
         assertThat(firstJob.get("packages").get(0).get("targetPackage").asString()).isEqualTo("CREATE_FAILED");
 
         var second = retry(notFound.get("result").get("transportId").asString());
