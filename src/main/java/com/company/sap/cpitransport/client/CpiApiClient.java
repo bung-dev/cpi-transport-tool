@@ -57,7 +57,7 @@ public class CpiApiClient {
 
     public List<CpiArtifact> listArtifacts(String environment, String packageId, ArtifactType type) {
         String path = "/IntegrationPackages('" + identifier(packageId) + "')/"
-                + type.odataPrefix() + "DesigntimeArtifacts";
+                + collection(type);
         try {
             return list(environment, path,
                     node -> new CpiArtifact(field(node, "Id"), field(node, "Name"), field(node, "Version")));
@@ -71,20 +71,39 @@ public class CpiApiClient {
     }
 
     public boolean artifactExists(String environment, String id) {
-        return optional(environment, artifactPath(id)).isPresent();
+        return artifactExists(environment, id, ArtifactType.INTEGRATION_FLOW);
+    }
+
+    public boolean artifactExists(String environment, String id, ArtifactType type) {
+        return optional(environment, artifactPath(id, type)).isPresent();
     }
 
     public byte[] downloadArtifact(String environment, String id) {
-        return http.execute(environment, HttpMethod.GET, ROOT + artifactPath(id) + "/$value", null, false)
+        return downloadArtifact(environment, id, ArtifactType.INTEGRATION_FLOW);
+    }
+
+    public byte[] downloadArtifact(String environment, String id, ArtifactType type) {
+        return http.execute(environment, HttpMethod.GET, ROOT + artifactPath(id, type) + "/$value", null, false)
                 .getBody();
     }
 
     public void createArtifact(String environment, String name, String id, String packageId,
                                String base64) {
-        identifier(id);
-        identifier(packageId);
-        write(environment, HttpMethod.POST, "/IntegrationDesigntimeArtifacts",
-                Map.of("Name", name, "Id", id, "PackageId", packageId, "ArtifactContent", base64));
+        createArtifact(environment, name, id, packageId, base64, ArtifactType.INTEGRATION_FLOW);
+    }
+
+    public void createArtifact(String environment, String name, String id, String packageId, String base64,
+                               ArtifactType type) {
+        var body = Map.of("Name", name, "Id", identifier(id), "PackageId", identifier(packageId), "ArtifactContent", base64);
+        write(environment, HttpMethod.POST, "/" + collection(type), body, type == ArtifactType.INTEGRATION_FLOW);
+    }
+
+    public void updateArtifactContent(String environment, String id, ArtifactType type, String base64) {
+        write(environment, HttpMethod.PUT, artifactPath(id, type), Map.of("ArtifactContent", base64), false);
+    }
+
+    public void deleteArtifact(String environment, String id, ArtifactType type) {
+        write(environment, HttpMethod.DELETE, artifactPath(id, type), null, false);
     }
 
     public void updateArtifact(String environment, String id, String name, String base64) {
@@ -155,7 +174,15 @@ public class CpiApiClient {
     public Optional<String> getRuntimeStatus(CpiEnvironment environment, String id) { return getRuntimeStatus(environment.name(), id); }
 
     private String artifactPath(String id) {
-        return "/IntegrationDesigntimeArtifacts(Id='" + identifier(id) + "',Version='active')";
+        return artifactPath(id, ArtifactType.INTEGRATION_FLOW);
+    }
+
+    private String artifactPath(String id, ArtifactType type) {
+        return "/" + collection(type) + "(Id='" + identifier(id) + "',Version='active')";
+    }
+
+    private String collection(ArtifactType type) {
+        return type.odataPrefix() + "DesigntimeArtifacts";
     }
 
     private String identifier(String id) {
@@ -309,7 +336,12 @@ public class CpiApiClient {
     }
 
     private void write(String environment, HttpMethod method, String path, Map<String, String> body) {
+        write(environment, method, path, body, true);
+    }
+
+    private void write(String environment, HttpMethod method, String path, Map<String, String> body,
+                       boolean retryTransient) {
         http.execute(environment, method, ROOT + path,
-                body == null ? null : mapper.writeValueAsBytes(body), true);
+                body == null ? null : mapper.writeValueAsBytes(body), true, retryTransient);
     }
 }

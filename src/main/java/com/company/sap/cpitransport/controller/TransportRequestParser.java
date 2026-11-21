@@ -6,6 +6,7 @@ import com.company.sap.cpitransport.service.EnvironmentGuard;
 import com.company.sap.cpitransport.template.TemplateService;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
@@ -109,16 +110,29 @@ public class TransportRequestParser {
 
     private static PackageSelection selection(JsonNode body) {
         if (!body.isObject() || !validId(body.get("packageId"))) invalid();
-        var ids = new ArrayList<String>();
+        List<String> ids = null;
         var selected = body.get("artifactIds");
         if (selected != null && !selected.isNull()) {
             if (!selected.isArray() || selected.size() > 100) invalid();
+            ids = new ArrayList<>();
             for (var id : selected) {
                 if (!validId(id)) invalid();
                 ids.add(id.asString());
             }
         }
-        return new PackageSelection(body.get("packageId").asString(), ids);
+        return new PackageSelection(body.get("packageId").asString(), ids, objectIds(body, "scriptCollectionIds"),
+                objectIds(body, "messageMappingIds"), objectIds(body, "valueMappingIds"));
+    }
+
+    private static List<String> objectIds(JsonNode body, String key) {
+        var selected = body.get(key);
+        if (selected == null) return null;
+        if (!selected.isArray()) invalid();
+        var ids = new LinkedHashSet<String>();
+        for (var id : selected) {
+            if (!validId(id) || !ids.add(id.asString())) invalid();
+        }
+        return List.copyOf(ids);
     }
 
     private static String tenantId(JsonNode body, String key, String fallback) {

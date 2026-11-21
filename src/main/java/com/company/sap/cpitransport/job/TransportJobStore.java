@@ -90,7 +90,8 @@ public class TransportJobStore {
             for (var item : items) {
                 var artifact = next < results.size() ? results.get(next) : null;
                 if (artifact != null && item.packageId().equals(artifact.packageId())
-                        && item.artifactId().equals(artifact.artifactId()) && item.stage() != Stage.SKIPPED) {
+                        && item.type() == artifact.type() && item.artifactId().equals(artifact.artifactId())
+                        && item.stage() != Stage.SKIPPED) {
                     terminal.add(item.at(Stage.DONE, artifact.status()));
                     next++;
                 } else {

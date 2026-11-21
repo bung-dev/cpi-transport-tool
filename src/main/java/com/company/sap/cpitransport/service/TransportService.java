@@ -56,20 +56,60 @@ public class TransportService {
         this.clock = clock;
     }
 
-    private record SourcePackage(PackageSelection selection, CpiPackage metadata, List<CpiArtifact> artifacts) {
-        List<String> artifactIds() {
-            var selected = selection.artifactIds();
-            return selected == null || selected.isEmpty() ? artifacts.stream().map(CpiArtifact::id).toList() : selected;
+    private record SourcePackage(CpiPackage metadata, List<SelectedArtifact> artifacts) {}
+
+    private record SelectedArtifact(String packageId, ArtifactType type, String id, CpiArtifact source) {
+        int stageOrder() {
+            return switch (type) {
+                case SCRIPT_COLLECTION, MESSAGE_MAPPING -> 1;
+                case VALUE_MAPPING -> 2;
+                case INTEGRATION_FLOW -> 3;
+            };
+        }
+
+        ArtifactResult result(TransportAction action, ArtifactError error, ArtifactGrade grade) {
+            return new ArtifactResult(packageId, id, null, action, List.of(), DeployStatus.NOT_REQUESTED,
+                    error, grade, false, type);
+        }
+
+        ArtifactResult failed(ArtifactError error, ArtifactGrade grade) {
+            return result(TransportAction.NONE, error, grade);
         }
     }
+
+    private SourcePackage loadSource(String tenant, PackageSelection selection, CpiPackage metadata,
+                                     List<CpiArtifact> suppliedFlows) {
+        var artifacts = new ArrayList<SelectedArtifact>();
+        for (var type : ArtifactType.values()) {
+            var ids = selection.ids(type);
+            boolean allFlows = type == ArtifactType.INTEGRATION_FLOW && ids == null;
+            if (!allFlows && (ids == null || ids.isEmpty())) continue;
+            List<CpiArtifact> listed;
+            if (type == ArtifactType.INTEGRATION_FLOW) {
+                listed = suppliedFlows != null ? suppliedFlows : api.listArtifacts(tenant, metadata.id());
+            } else {
+                listed = api.listArtifacts(tenant, metadata.id(), type);
+            }
+            if (allFlows) {
+                for (var artifact : listed) {
+                    artifacts.add(new SelectedArtifact(metadata.id(), type, artifact.id(), artifact));
+                }
+            } else {
+                var byId = new HashMap<String, CpiArtifact>();
+                for (var artifact : listed) byId.putIfAbsent(artifact.id(), artifact);
+                for (var id : ids) artifacts.add(new SelectedArtifact(metadata.id(), type, id, byId.get(id)));
+            }
+        }
+        return new SourcePackage(metadata, List.copyOf(artifacts));
+    }
+
     private record TargetPackage(TargetPackageStatus status, ArtifactError error, ArtifactGrade grade) {}
 
     public TransportResponse execute(TransportRequest request) {
         int limit = concurrency(request);
         var sources = new ArrayList<SourcePackage>();
         for (var selected : request.packages()) {
-            sources.add(new SourcePackage(selected, new CpiPackage(selected.packageId(), null, null),
-                    api.listArtifacts(request.source().id(), selected.packageId())));
+            sources.add(loadSource(request.source().id(), selected, new CpiPackage(selected.packageId(), null, null), null));
         }
         return new PreparedTransport(request, sources, false, limit).executeSynchronously();
     }
@@ -90,8 +130,7 @@ public class TransportService {
             }
             for (int i = 0; i < request.packages().size(); i++) {
                 var selected = request.packages().get(i);
-                sources.add(new SourcePackage(selected, metadata.get(i),
-                        api.listArtifacts(request.source().id(), selected.packageId())));
+                sources.add(loadSource(request.source().id(), selected, metadata.get(i), null));
             }
         } catch (CpiCallException failure) {
             // A token-endpoint 404 is an authentication failure, not a missing package.
@@ -106,8 +145,8 @@ public class TransportService {
     public TransportResponse execute(TransportRequest request, List<CpiArtifact> artifacts) {
         if (request.packages().size() != 1) throw new IllegalArgumentException("One package required for supplied artifacts");
         var selected = request.packages().getFirst();
-        return new PreparedTransport(request, List.of(new SourcePackage(selected,
-                new CpiPackage(selected.packageId(), null, null), artifacts)), false, concurrency(request)).executeSynchronously();
+        var source = loadSource(request.source().id(), selected, new CpiPackage(selected.packageId(), null, null), artifacts);
+        return new PreparedTransport(request, List.of(source), false, concurrency(request)).executeSynchronously();
     }
 
     private int concurrency(TransportRequest request) {
@@ -141,24 +180,26 @@ public class TransportService {
     public final class PreparedTransport {
         private final TransportRequest request;
         private final List<SourcePackage> sources;
+        private final List<SelectedArtifact> ordered;
         private final boolean preflight;
         private final int limit;
 
         private PreparedTransport(TransportRequest request, List<SourcePackage> sources, boolean preflight, int limit) {
             this.request = request;
             this.sources = List.copyOf(sources);
+            this.ordered = sources.stream().flatMap(source -> source.artifacts().stream())
+                    .sorted(Comparator.comparingInt(SelectedArtifact::stageOrder)).toList();
             this.preflight = preflight;
             this.limit = limit;
         }
 
         public TransportRun newRun(TemplateRef template, Consumer<TransportResponse> history) {
             var packages = new ArrayList<TransportPackage>();
-            var items = new ArrayList<TransportRun.Item>();
             for (var source : sources) {
-                String packageId = source.selection().packageId();
-                packages.add(new TransportPackage(packageId, source.metadata().name(), TargetPackageStatus.NOT_CHECKED));
-                for (String id : source.artifactIds()) items.add(new TransportRun.Item(packageId, id, Stage.WAITING, null));
+                packages.add(new TransportPackage(source.metadata().id(), source.metadata().name(), TargetPackageStatus.NOT_CHECKED));
             }
+            var items = ordered.stream().map(a -> new TransportRun.Item(a.packageId(), a.id(), Stage.WAITING, null, a.type()))
+                    .toList();
             return new TransportRun(clock, request, packages, items, template, history,
                     request.dryRun() ? previewBundles::complete : null);
         }
@@ -177,7 +218,7 @@ public class TransportService {
             for (int i = 0; i < sources.size(); i++) {
                 if (run.isShuttingDown()) return null;
                 var source = sources.get(i);
-                var target = targets.computeIfAbsent(source.selection().packageId(),
+                var target = targets.computeIfAbsent(source.metadata().id(),
                         id -> prepareTarget(run.id(), request, source.metadata()));
                 run.targetPrepared(i, target.status());
             }
@@ -187,29 +228,24 @@ public class TransportService {
             var slots = new Semaphore(limit);
             try (var batch = request.deploy() && !request.dryRun() ? deployment.newBatch(request.target().id()) : null;
                  var pool = Executors.newVirtualThreadPerTaskExecutor()) {
-                for (var source : sources) {
-                    String packageId = source.selection().packageId();
-                    var target = targets.get(packageId);
-                    for (String id : source.artifactIds()) {
-                        int index = pending.size();
-                        // Acquire in request order. A worker can keep waiting on its own virtual
-                        // thread after handing its processing slot to the next iFlow.
-                        var slot = new ProcessingSlot(slots);
-                        pending.add(CompletableFuture.runAsync(() -> {
-                            try (slot) {
-                                if (!run.startItem(index)) return;
-                                if (callerContext != null) MDC.setContextMap(callerContext);
-                                MDC.put("transportId", run.id());
-                                MDC.put("packageId", packageId);
-                                MDC.put("artifactId", id);
-                                var artifact = processSelected(run.id(), request, source, id, target, preflight,
-                                        stage -> run.stage(index, stage), batch, slot);
-                                run.completed(index, artifact);
-                            } finally {
-                                MDC.clear();
-                            }
-                        }, pool));
-                    }
+                for (var selected : ordered) {
+                    var target = targets.get(selected.packageId());
+                    int index = pending.size();
+                    var slot = new ProcessingSlot(slots);
+                    pending.add(CompletableFuture.runAsync(() -> {
+                        try (slot) {
+                            if (!run.startItem(index)) return;
+                            if (callerContext != null) MDC.setContextMap(callerContext);
+                            MDC.put("transportId", run.id());
+                            MDC.put("packageId", selected.packageId());
+                            MDC.put("artifactId", selected.id());
+                            var artifact = processSelected(run.id(), request, selected, target, preflight,
+                                    stage -> run.stage(index, stage), batch, slot);
+                            run.completed(index, artifact);
+                        } finally {
+                            MDC.clear();
+                        }
+                    }, pool));
                 }
             }
             if (Thread.currentThread().isInterrupted()) throw new CancellationException();
@@ -218,19 +254,30 @@ public class TransportService {
         }
     }
 
-    private ArtifactResult processSelected(String transportId, TransportRequest request, SourcePackage source,
-                                           String id, TargetPackage target, boolean preflight, Consumer<Stage> progress,
+    private ArtifactResult processSelected(String transportId, TransportRequest request, SelectedArtifact selected,
+                                           TargetPackage target, boolean preflight, Consumer<Stage> progress,
                                            DeployBatch batch, ProcessingSlot slot) {
-        String packageId = source.selection().packageId();
+        String id = selected.id();
         // Supplied artifacts keep source-stage failure precedence. Preflight rejects the entire package first.
         if (preflight && target.error() != null) {
             progress.accept(Stage.TARGET);
             event(transportId, id, Stage.TARGET, "started");
             event(transportId, id, Stage.TARGET, "failed");
-            return new ArtifactResult(packageId, id, null, TransportAction.NONE,
-                    List.of(), DeployStatus.NOT_REQUESTED, target.error(), target.grade());
+            return selected.failed(target.error(), target.grade());
         }
-        return process(transportId, request, packageId, id, source.artifacts(), target, progress, batch, slot);
+        event(transportId, id, Stage.LOOKUP, "started");
+        if (selected.source() == null) {
+            event(transportId, id, Stage.LOOKUP, "failed");
+            var deployStatus = request.dryRun() && request.deploy() ? DeployStatus.SKIPPED_DRY_RUN : DeployStatus.NOT_REQUESTED;
+            return new ArtifactResult(selected.packageId(), id, null, TransportAction.NONE, List.of(), deployStatus,
+                    new ArtifactError(Stage.LOOKUP.code, "LOOKUP: artifact absent from DEV package"),
+                    ArtifactGrade.FIX_REQUIRED, false, selected.type());
+        }
+        event(transportId, id, Stage.LOOKUP, "succeeded");
+        if (selected.type() != ArtifactType.INTEGRATION_FLOW) {
+            return processObject(transportId, request, selected, target, progress);
+        }
+        return process(transportId, request, selected.packageId(), id, selected.source(), target, progress, batch, slot);
     }
 
     private TargetPackage prepareTarget(String transportId, TransportRequest request, CpiPackage source) {
@@ -275,7 +322,7 @@ public class TransportService {
     }
 
     private ArtifactResult process(String transportId, TransportRequest request, String packageId, String id,
-                                   List<CpiArtifact> artifacts, TargetPackage target, Consumer<Stage> progress,
+                                   CpiArtifact artifact, TargetPackage target, Consumer<Stage> progress,
                                    DeployBatch batch, ProcessingSlot slot) {
         Stage stage = Stage.LOOKUP;
         TransportAction action = TransportAction.NONE;
@@ -288,49 +335,41 @@ public class TransportService {
         var deployFailure = DeployOutcome.DeployFailure.NONE;
         boolean exists = false;
         boolean reusedPreview = false;
-        event(transportId, id, stage, "started");
         try {
-            var artifact = artifacts.stream().filter(a -> id.equals(a.id())).findFirst();
-            if (artifact.isEmpty()) {
-                error = new ArtifactError(stage.code, "LOOKUP: artifact absent from DEV package");
-                grade = ArtifactGrade.FIX_REQUIRED;
+            String tenantId = request.source().id();
+            String version = artifact.version();
+            var cached = request.dryRun() ? Optional.<PreviewBundles.Bundle>empty()
+                    : previewBundles.find(request.previewId(), tenantId, id, version);
+            SourceReads reads;
+            if (cached.isPresent()) {
+                var bundle = cached.get();
+                reads = new SourceReads(bundle.zip(), bundle.configurations());
+                reusedPreview = true;
             } else {
-                event(transportId, id, stage, "succeeded");
-                String tenantId = request.source().id();
-                String version = artifact.get().version();
-                var cached = request.dryRun() ? Optional.<PreviewBundles.Bundle>empty()
-                        : previewBundles.find(request.previewId(), tenantId, id, version);
-                SourceReads reads;
-                if (cached.isPresent()) {
-                    var bundle = cached.get();
-                    reads = new SourceReads(bundle.zip(), bundle.configurations());
-                    reusedPreview = true;
-                } else {
-                    progress.accept(Stage.DOWNLOAD);
-                    reads = readSources(transportId, tenantId, id);
-                }
-                var source = reads.configurations();
-                stage = request.dryRun() ? Stage.UPLOAD : Stage.TARGET;
-                event(transportId, id, stage, "started");
-                progress.accept(stage);
-                if (request.dryRun()) {
-                    items = source;
-                    previewBundles.put(transportId, tenantId, id, version, reads.zip(), items);
-                } else if (target.error() != null) {
-                    error = target.error();
-                    grade = target.grade();
-                } else {
-                    exists = api.artifactExists(request.target().id(), id);
-                    stage = next(transportId, id, stage, Stage.UPLOAD, progress);
-                    String content = Base64.getEncoder().encodeToString(reads.zip());
-                    if (exists) api.updateArtifact(request.target().id(), id, artifact.get().name(), content);
-                    else api.createArtifact(request.target().id(), artifact.get().name(), id, packageId, content);
-                    action = exists ? TransportAction.UPDATED : TransportAction.CREATED;
-                    items = source.stream()
-                            .map(item -> new ConfigurationItem(item.key(), item.value(), item.dataType(),
-                                    ConfigurationStatus.BUNDLED))
-                            .toList();
-                }
+                progress.accept(Stage.DOWNLOAD);
+                reads = readSources(transportId, tenantId, id);
+            }
+            var source = reads.configurations();
+            stage = request.dryRun() ? Stage.UPLOAD : Stage.TARGET;
+            event(transportId, id, stage, "started");
+            progress.accept(stage);
+            if (request.dryRun()) {
+                items = source;
+                previewBundles.put(transportId, tenantId, id, version, reads.zip(), items);
+            } else if (target.error() != null) {
+                error = target.error();
+                grade = target.grade();
+            } else {
+                exists = api.artifactExists(request.target().id(), id);
+                stage = next(transportId, id, stage, Stage.UPLOAD, progress);
+                String content = Base64.getEncoder().encodeToString(reads.zip());
+                if (exists) api.updateArtifact(request.target().id(), id, artifact.name(), content);
+                else api.createArtifact(request.target().id(), artifact.name(), id, packageId, content);
+                action = exists ? TransportAction.UPDATED : TransportAction.CREATED;
+                items = source.stream()
+                        .map(item -> new ConfigurationItem(item.key(), item.value(), item.dataType(),
+                                ConfigurationStatus.BUNDLED))
+                        .toList();
             }
             if (error == null) {
                 event(transportId, id, stage, request.dryRun() ? "SKIPPED_DRY_RUN" : "succeeded");
@@ -391,6 +430,77 @@ public class TransportService {
         }
         event(transportId, id, stage, error == null ? successResult : "failed " + error.code(), logFields);
         return new ArtifactResult(packageId, id, null, action, items, deployStatus, error, grade, reusedPreview);
+    }
+
+    private ArtifactResult processObject(String transportId, TransportRequest request, SelectedArtifact selected,
+                                         TargetPackage target, Consumer<Stage> progress) {
+        String id = selected.id();
+        var type = selected.type();
+        Stage stage = Stage.DOWNLOAD;
+        progress.accept(stage);
+        event(transportId, id, stage, "started");
+        try {
+            byte[] zip = objectZip(request.source().id(), id, type);
+            stage = next(transportId, id, stage, Stage.TARGET, progress);
+            if (target.error() != null) {
+                event(transportId, id, stage, "failed");
+                return selected.failed(target.error(), target.grade());
+            }
+            String tenant = request.target().id();
+            boolean exists = api.artifactExists(tenant, id, type);
+            TransportAction action = TransportAction.CREATED;
+            if (exists) action = type == ArtifactType.VALUE_MAPPING ? TransportAction.REPLACED : TransportAction.UPDATED;
+            if (request.dryRun()) {
+                event(transportId, id, stage, "succeeded");
+                return selected.result(action, null, ArtifactGrade.SUCCESS);
+            }
+
+            stage = next(transportId, id, stage, Stage.UPLOAD, progress);
+            String content = Base64.getEncoder().encodeToString(zip);
+            ArtifactResult result;
+            if (action == TransportAction.REPLACED) {
+                result = replaceValueMapping(tenant, selected, content);
+            } else {
+                if (exists) api.updateArtifactContent(tenant, id, type, content);
+                else createObject(tenant, selected, content);
+                result = selected.result(action, null, ArtifactGrade.SUCCESS);
+            }
+            if (result.error() == null) event(transportId, id, stage, "succeeded");
+            else event(transportId, id, stage, "failed", " code=" + result.error().code());
+            return result;
+        } catch (RuntimeException failure) {
+            event(transportId, id, stage, "failed", " code=" + stage.code);
+            return selected.failed(new ArtifactError(stage.code, stage + ": " + failureDescription(failure)),
+                    callFailureGrade(failure));
+        }
+    }
+
+    private byte[] objectZip(String tenant, String id, ArtifactType type) {
+        byte[] zip = api.downloadArtifact(tenant, id, type);
+        if (zip == null || zip.length == 0) throw new CpiCallException(null, "Empty CPI artifact content");
+        return zip;
+    }
+
+    private void createObject(String tenant, SelectedArtifact selected, String content) {
+        api.createArtifact(tenant, selected.source().name(), selected.id(), selected.packageId(), content, selected.type());
+    }
+
+    private ArtifactResult replaceValueMapping(String tenant, SelectedArtifact selected, String content) {
+        byte[] backup = objectZip(tenant, selected.id(), selected.type());
+        api.deleteArtifact(tenant, selected.id(), selected.type());
+        try {
+            createObject(tenant, selected, content);
+        } catch (RuntimeException createFailure) {
+            try {
+                createObject(tenant, selected, Base64.getEncoder().encodeToString(backup));
+            } catch (RuntimeException restoreFailure) {
+                return selected.failed(new ArtifactError("VALUE_MAPPING_LOST",
+                        "대상에서 밸류 매핑이 지워졌고 되살리지 못했습니다. CPI에서 직접 확인하세요"), ArtifactGrade.FIX_REQUIRED);
+            }
+            return selected.failed(new ArtifactError(Stage.UPLOAD.code,
+                    "UPLOAD: " + failureDescription(createFailure) + ". 이전 버전으로 되살렸습니다"), callFailureGrade(createFailure));
+        }
+        return selected.result(TransportAction.REPLACED, null, ArtifactGrade.SUCCESS);
     }
 
     private record SourceReads(byte[] zip, List<ConfigurationItem> configurations) {}

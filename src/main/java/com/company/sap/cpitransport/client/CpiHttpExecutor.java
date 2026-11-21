@@ -70,10 +70,15 @@ public class CpiHttpExecutor {
     }
 
     public ResponseEntity<byte[]> execute(String environment, HttpMethod method, String path, byte[] body, boolean acceptJson) {
+        return execute(environment, method, path, body, acceptJson, true);
+    }
+
+    ResponseEntity<byte[]> execute(String environment, HttpMethod method, String path, byte[] body,
+                                   boolean acceptJson, boolean retryTransient) {
         if (!path.startsWith("/") || path.startsWith("//")) {
             throw new IllegalArgumentException("CPI path must be relative to the configured API");
         }
-        return send(environment, method, path, body, acceptJson, false);
+        return send(environment, method, path, body, acceptJson, false, false, retryTransient ? retry.maxAttempts() : 1);
     }
 
     URI apiUrl(String environment) {
@@ -100,7 +105,7 @@ public class CpiHttpExecutor {
     private ResponseEntity<byte[]> send(String environment, HttpMethod method, String path,
                                          byte[] body, boolean acceptJson, boolean fetch, boolean originRelative,
                                          int maxAttempts) {
-        boolean write = HttpMethod.POST.equals(method) || HttpMethod.PUT.equals(method);
+        boolean write = HttpMethod.POST.equals(method) || HttpMethod.PUT.equals(method) || HttpMethod.DELETE.equals(method);
         boolean refreshedAuth = false;
         boolean refreshedCsrf = false;
         int transientFailures = 0;
