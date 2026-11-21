@@ -26,15 +26,16 @@ public final class TransportRun {
             Instant startedAt, Instant finishedAt, int total, int done, TenantRef sourceTenant,
             TenantRef targetTenant, List<TransportPackage> packages, List<Item> items, TransportResponse result) {
         TransportResponse response(JobStatus terminal, Instant end, List<ArtifactResult> completed,
-                                   List<Item> terminalItems, TemplateRef template) {
+                                   List<Item> terminalItems, TemplateRef template, String retryOf) {
             int successes = (int) completed.stream().filter(r -> r.status() == ArtifactStatus.SUCCESS).count();
             int fixRequired = (int) completed.stream().filter(r -> r.grade() == ArtifactGrade.FIX_REQUIRED).count();
             int retryable = (int) completed.stream().filter(r -> r.grade() == ArtifactGrade.RETRYABLE).count();
-            int skipped = (int) terminalItems.stream().filter(item -> item.stage() == Stage.SKIPPED).count();
+            var skipped = terminalItems.stream().filter(item -> item.stage() == Stage.SKIPPED)
+                    .map(item -> new TransportResponse.SkippedItem(item.packageId(), item.artifactId())).toList();
             var summary = new TransportSummary(completed.size(), successes, completed.size() - successes,
-                    fixRequired, retryable, skipped);
+                    fixRequired, retryable, skipped.size());
             return new TransportResponse(jobId, packages, dryRun, deploy, startedAt, end, summary, completed,
-                    sourceTenant, targetTenant, template, terminal);
+                    sourceTenant, targetTenant, template, terminal, skipped, retryOf);
         }
     }
 
@@ -97,7 +98,8 @@ public final class TransportRun {
     private CompletableFuture<Void> save() {
         if (persist == null) return CompletableFuture.completedFuture(null);
         List<ArtifactResult> completed = status == JobStatus.RUNNING ? completedResults() : List.of();
-        return persist.apply(new TransportJobStore.SavedJob(snapshot(), id, template, completed, cancelRequested));
+        return persist.apply(new TransportJobStore.SavedJob(snapshot(), id, template, completed,
+                cancelRequested, request.retryOf()));
     }
     private List<ArtifactResult> completedResults() {
         return Arrays.stream(results).filter(Objects::nonNull).toList();
@@ -186,7 +188,8 @@ public final class TransportRun {
     }
     private CompletableFuture<Void> finish(JobStatus terminal) {
         if (completePreview != null) completePreview.accept(id);
-        result = snapshot().response(history == null ? null : terminal, clock.instant(), completedResults(), items, template);
+        result = snapshot().response(history == null ? null : terminal, clock.instant(), completedResults(),
+                items, template, request.retryOf());
         status = terminal;
         if (history != null) {
             try {

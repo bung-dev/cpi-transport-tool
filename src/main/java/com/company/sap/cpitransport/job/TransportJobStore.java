@@ -36,7 +36,7 @@ public class TransportJobStore {
     private long lastWrite;
 
     record SavedJob(@JsonIgnoreProperties("result") TransportRun.Snapshot progress, String transportId,
-                    TemplateRef template, List<ArtifactResult> completedResults, Boolean cancelRequested) {
+                    TemplateRef template, List<ArtifactResult> completedResults, Boolean cancelRequested, String retryOf) {
         void validate() {
             Objects.requireNonNull(progress.jobId());
             Objects.requireNonNull(progress.status());
@@ -64,7 +64,7 @@ public class TransportJobStore {
                 if (result == null) {
                     items = items.stream().map(item -> item.stage() == Stage.DONE ? item : item.at(Stage.SKIPPED, null))
                             .toList();
-                    result = progress.response(JobStatus.INTERRUPTED, clock.instant(), completedResults, items, template);
+                    result = progress.response(JobStatus.INTERRUPTED, clock.instant(), completedResults, items, template, retryOf);
                     try {
                         history.append(result);
                     } catch (RuntimeException failure) {
@@ -81,7 +81,7 @@ public class TransportJobStore {
             var snapshot = new TransportRun.Snapshot(progress.jobId(), status, progress.dryRun(), progress.deploy(),
                     progress.startedAt(), finishedAt, items.size(), items.size(), progress.sourceTenant(),
                     progress.targetTenant(), packages, items, result);
-            return new SavedJob(snapshot, transportId, template, List.of(), cancelRequested);
+            return new SavedJob(snapshot, transportId, template, List.of(), cancelRequested, retryOf);
         }
 
         private static List<TransportRun.Item> terminalItems(List<TransportRun.Item> items, List<ArtifactResult> results) {

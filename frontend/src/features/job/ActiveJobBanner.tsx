@@ -1,18 +1,20 @@
-import { useEffect, useState } from 'react';
+import { createContext, useEffect, useState } from 'react';
 import { getActiveTransportJob } from '../../api/client';
 import { JOB_ALREADY_RUNNING } from '../../api/errors';
 import type { ActiveJob } from '../../api/types';
 import { jobHref } from '../../app/routes';
 
+export const ActiveJobContext = createContext<ActiveJob | null | undefined>(undefined);
+
 export function useActiveJob() {
-  const [job, setJob] = useState<ActiveJob>();
+  const [job, setJob] = useState<ActiveJob | null>();
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
       const active = await getActiveTransportJob().catch(() => undefined);
       if (stopped) return;
-      setJob(active);
+      setJob(active ?? null);
       timer = setTimeout(poll, 2000);
     }
     void poll();

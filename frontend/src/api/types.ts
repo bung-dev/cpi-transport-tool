@@ -55,6 +55,8 @@ export interface TransportPackage {
 
 export interface TransportResponse {
   jobStatus?: FinishedJobStatus;
+  skipped?: { packageId: string; artifactId: string }[];
+  retryOf?: string;
   sourceTenant?: TenantRef;
   targetTenant?: TenantRef;
   /** 템플릿으로 실행한 경우 실행 당시의 템플릿 id·이름. 템플릿 없이 실행했으면 필드가 없다(REQ-424·425). */

@@ -5,8 +5,11 @@ import com.company.sap.cpitransport.model.*;
 import com.company.sap.cpitransport.service.EnvironmentGuard;
 import com.company.sap.cpitransport.template.TemplateService;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
 
 @Component
 public class TransportRequestParser {
@@ -22,7 +25,43 @@ public class TransportRequestParser {
         this.templates = templates;
     }
 
+    TransportRequest retryRequest(TransportResponse original) {
+        var idsByPackage = new HashMap<String, List<String>>();
+        for (var result : original.results()) {
+            if (result.status() == ArtifactStatus.FAILED) {
+                idsByPackage.computeIfAbsent(result.packageId(), key -> new ArrayList<>()).add(result.artifactId());
+            }
+        }
+        if (original.skipped() != null) {
+            for (var item : original.skipped()) {
+                idsByPackage.computeIfAbsent(item.packageId(), key -> new ArrayList<>()).add(item.artifactId());
+            }
+        }
+
+        var body = JsonNodeFactory.instance.objectNode();
+        body.put("deploy", original.deploy());
+        if (original.sourceTenant() != null) body.put("sourceTenantId", original.sourceTenant().id());
+        if (original.targetTenant() != null) body.put("targetTenantId", original.targetTenant().id());
+        var packages = body.putArray("packages");
+        var create = body.putArray("createPackages");
+        for (var pkg : original.packages()) {
+            var ids = idsByPackage.get(pkg.packageId());
+            if (ids == null) continue;
+            var selected = packages.addObject().put("packageId", pkg.packageId()).putArray("artifactIds");
+            ids.forEach(selected::add);
+            if (pkg.targetPackage() == TargetPackageStatus.CREATE_FAILED || pkg.targetPackage() == TargetPackageStatus.NOT_FOUND) {
+                create.add(pkg.packageId());
+            }
+        }
+        if (packages.isEmpty()) throw new ErrorResponse.ApiException(ErrorResponse.Code.NOTHING_TO_RETRY);
+        return parse(body, original.transportId()).request();
+    }
+
     Parsed parse(JsonNode body) {
+        return parse(body, null);
+    }
+
+    private Parsed parse(JsonNode body, String retryOf) {
         if (!body.isObject()) invalid();
         var packages = new ArrayList<PackageSelection>();
         if (body.has("packages")) {
@@ -63,7 +102,7 @@ public class TransportRequestParser {
         if (!dryRun) missing.addAll(guard.missingKeys(targetId));
         if (!missing.isEmpty()) throw new EnvironmentNotConfiguredException(missing);
         return new Parsed(new TransportRequest(packages, createPackages, dryRun, deploy, source, target,
-                dryRun || previewId == null ? null : previewId.asString()), template);
+                dryRun || previewId == null ? null : previewId.asString(), retryOf), template);
     }
 
     private static PackageSelection selection(JsonNode body) {

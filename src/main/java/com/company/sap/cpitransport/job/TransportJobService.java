@@ -53,6 +53,17 @@ public class TransportJobService {
         }
     }
 
+    public TransportResponse retrySource(String transportId) {
+        synchronized (this) {
+            var run = running.get(transportId);
+            if (run != null && run.active() != null) throw new AlreadyRunning(transportId);
+        }
+        var original = history.findAll().stream().filter(row -> transportId.equals(row.transportId()))
+                .findFirst().orElseThrow(() -> new ErrorResponse.ApiException(ErrorResponse.Code.TRANSPORT_NOT_FOUND));
+        if (original.dryRun()) throw new ErrorResponse.ApiException(ErrorResponse.Code.RETRY_NOT_ALLOWED);
+        return original;
+    }
+
     public TransportRun.Snapshot snapshot(String id) {
         return store.require(id);
     }
