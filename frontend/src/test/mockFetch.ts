@@ -14,6 +14,8 @@ export const VERSION = { version: '0.1.0', commit: 'abc1234', buildTime: '2026-1
  * 20261120-versioning REQ-004: 'GET /version'을 등록하지 않으면 VERSION을 돌려주고 반환하는 fn의 호출 기록에 넣지 않는다
  * (기존 테스트의 요청 목록·횟수 단언이 footer 요청에 흔들리지 않게). 등록하면 다른 경로처럼 기록된다.
  */
+const NEW_TYPE_LIST = /^GET \/packages\/[^?]+\/artifacts\?tenantId=[^&]+&type=(SCRIPT_COLLECTION|MESSAGE_MAPPING|VALUE_MAPPING)$/;
+
 export function mockApi(routes: Record<string, Handler>) {
   const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const key = `${init?.method ?? 'GET'} ${String(input)}`;
@@ -29,6 +31,9 @@ export function mockApi(routes: Record<string, Handler>) {
   const fetchStub = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const key = `${init?.method ?? 'GET'} ${String(input)}`;
     if (key === 'GET /version' && !routes['GET /version']) return json(VERSION);
+    // 20261121-package-objects S5(REQ-1002): 아티팩트 단계는 새 종류 목록(`...&type=SCRIPT_COLLECTION` 등)도 읽는다.
+    // 등록하지 않은 새 종류 목록은 빈 목록이고 호출 기록에 넣지 않는다(기존 테스트의 호출 수가 흔들리지 않게). 등록하면 기록된다.
+    if (!routes[key] && NEW_TYPE_LIST.test(key)) return json([]);
     if (!routes[key]) {
       if (key === 'GET /transport/jobs/active') return new Response(null, { status: 204 });
       if (key === 'POST /transport/jobs' && routes['POST /transport']) {

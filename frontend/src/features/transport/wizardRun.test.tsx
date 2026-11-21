@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TenantsResponse, TenantStatusResponse, TransportRequest } from '../../api/types';
 import { ARTIFACTS, PACKAGES, json, mockApi, respondTo } from '../../test/mockFetch';
 import { baseRoutes, renderAt, routeGroup, tpl, type TemplateFixture } from '../../test/appRoutes';
-import { artifactRow, currentStep, postBodies, stepButton, toArtifacts } from '../../test/wizard';
+import { artifactRow, currentStep, postBodies, stepButton, toArtifacts, NO_TYPES } from '../../test/wizard';
 
 // S3b REQ-423 미리보기와 실제 이관, 그리고 "바뀌지 않는 규칙"(ADR-002·008·016·018, REQ-319) 단언을 새 마법사에서 다시 확인한다.
 afterEach(() => vi.unstubAllGlobals());
@@ -93,7 +93,7 @@ describe('REQ-423 미리보기', () => {
     const region = await previewOne();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(postBodies(fn)).toEqual([
-      { packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'] }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
+      { packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'], ...NO_TYPES }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
     ]);
     expect(currentStep()).toBe('미리보기');
     expect(within(region).getByText('이관 ID').nextElementSibling).toHaveTextContent('t-dry');
@@ -158,7 +158,7 @@ describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '실제 이관 확인' })).toBeNull());
     // 대상에 있는 패키지뿐이면 createPackages 키를 보내지 않는다
     expect(postBodies(fn)[1]).toEqual({
-      packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'] }], dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD',
+      packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'], ...NO_TYPES }], dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD',
       // 20261121-perf-retry REQ-902: 미리보기 뒤 실제 이관은 그 미리보기 ID를 보낸다.
       previewId: 't-dry',
     });

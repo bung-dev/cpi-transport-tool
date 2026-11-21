@@ -5,7 +5,7 @@ import type { TransportRequest } from '../../api/types';
 import { ARTIFACTS, PACKAGES, json, mockApi, respondTo } from '../../test/mockFetch';
 import { baseRoutes, renderAt } from '../../test/appRoutes';
 import {
-  currentStep, findPackageCheckbox, findPackageSection, packageCheckbox, packageSection, postBodies, startManual, stepButton,
+  currentStep, findPackageCheckbox, findPackageSection, packageCheckbox, packageSection, postBodies, startManual, stepButton, NO_TYPES,
 } from '../../test/wizard';
 
 // 20261118 S3 REQ-620 패키지 여러 개 선택, REQ-621 아티팩트 패키지별 묶음, REQ-622 확인창의 대상 패키지 상태.
@@ -125,7 +125,7 @@ describe('REQ-620 패키지 여러 개 선택', () => {
     await screen.findByRole('region', { name: '이관 결과' });
     // 패키지 단계에서 바로 미리보기: 패키지마다 artifactIds 없이(패키지 전체)
     expect(postBodies(fn)).toEqual([{
-      packages: [{ packageId: 'PkgTransportDemo' }, { packageId: 'PkgFaultDemo' }, { packageId: 'PkgNotInPrd' }],
+      packages: [{ packageId: 'PkgTransportDemo', ...NO_TYPES }, { packageId: 'PkgFaultDemo', ...NO_TYPES }, { packageId: 'PkgNotInPrd', ...NO_TYPES }],
       dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD',
     }]);
   });
@@ -192,7 +192,7 @@ describe('REQ-621 아티팩트 패키지별 묶음', () => {
     await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('region', { name: '이관 결과' });
     expect(postBodies(fn)).toEqual([{
-      packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'] }],
+      packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'], ...NO_TYPES }],
       dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD',
     }]);
   });
@@ -210,7 +210,7 @@ describe('REQ-621 아티팩트 패키지별 묶음', () => {
     expect(screen.getByRole('button', { name: '미리보기 실행' })).toBeEnabled();
     await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('region', { name: '이관 결과' });
-    expect(postBodies(fn)[0].packages).toEqual([{ packageId: 'PkgTransportDemo' }, { packageId: 'PkgFaultDemo' }]);
+    expect(postBodies(fn)[0].packages).toEqual([{ packageId: 'PkgTransportDemo', ...NO_TYPES }, { packageId: 'PkgFaultDemo', ...NO_TYPES }]);
     expect(stepButton('아티팩트')).toHaveTextContent('전체');
   });
 
@@ -251,7 +251,7 @@ describe('REQ-621 아티팩트 패키지별 묶음', () => {
     await within(packageSection('PkgTransportDemo')).findByRole('grid', { name: '이관할 아티팩트' });
     await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('region', { name: '이관 결과' });
-    expect(postBodies(fn)[0].packages).toEqual([{ packageId: 'PkgTransportDemo' }]);
+    expect(postBodies(fn)[0].packages).toEqual([{ packageId: 'PkgTransportDemo', ...NO_TYPES }]);
   });
 });
 
@@ -283,7 +283,7 @@ describe('REQ-622 확인창의 대상 패키지 상태', () => {
     await waitFor(() => expect(postBodies(fn)).toHaveLength(2));
     expect(postBodies(fn)[0]).not.toHaveProperty('createPackages');
     expect(postBodies(fn)[1]).toEqual({
-      packages: [{ packageId: 'PkgTransportDemo' }, { packageId: 'PkgNotInPrd' }],
+      packages: [{ packageId: 'PkgTransportDemo', ...NO_TYPES }, { packageId: 'PkgNotInPrd', ...NO_TYPES }],
       createPackages: ['PkgNotInPrd'],
       dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD',
       // 20261121-perf-retry REQ-902: 미리보기 뒤 실제 이관은 그 미리보기 ID를 보낸다.

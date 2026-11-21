@@ -63,7 +63,8 @@ public final class LocalCpiStubs {
                 .willReturn(okJson(JSON.writeValueAsString(Map.of("access_token", token, "token_type", "bearer", "expires_in", 3600)))));
         server.stubFor(any(urlPathMatching(ROOT + ".*")).atPriority(1)
                 .withHeader("Authorization", notMatching("Bearer " + token)).willReturn(aResponse().withStatus(401)));
-        for (String method : List.of("POST", "PUT")) {
+        // 20261121-package-objects REQ-1004: DELETE(밸류 매핑 삭제 후 다시 만듦)에도 CSRF 토큰이 필요하다.
+        for (String method : List.of("POST", "PUT", "DELETE")) {
             server.stubFor(request(method, urlPathMatching(ROOT + ".*")).atPriority(2)
                     .withHeader("X-CSRF-Token", notMatching(csrf))
                     .willReturn(aResponse().withStatus(403).withHeader("X-CSRF-Token", "Required")));
@@ -110,13 +111,16 @@ public final class LocalCpiStubs {
         // REQ-605, REQ-606: SAP 제공(구성 전용) 패키지는 Mode가 편집 불가라 목록에서 숨는다. ID로 직접 읽으면 보인다.
         var sapPackage = packageMetadata("PkgSapStandard", "SAP Standard Content", "READ_ONLY");
         var devList = new ArrayList<>(packages);
+        devList.addAll(OBJECT_PACKAGES);
         devList.add(sapPackage);
         getJson(dev, ROOT + "IntegrationPackages", results(devList));
         getJson(dev, ROOT + "IntegrationPackages('PkgSapStandard')", data(sapPackage));
         getJson(dev, ROOT + "IntegrationPackages('PkgSapStandard')/IntegrationDesigntimeArtifacts", results(List.of()));
         // PRD도 패키지 목록을 돌려준다(대상에 없는 PkgNotInPrd·PkgCreateFail 제외). 연결 확인(IntegrationPackages?$top=1)이 OK가 되어야
         // 대상 연결 확인 실패 때 실제 이관을 막는 규칙(REQ-430·423, 2026-11-16 사람 결정) 아래에서 화면 실제 이관을 검증할 수 있다.
-        getJson(prd, ROOT + "IntegrationPackages", results(packages.stream().filter(p -> !NOT_IN_PRD.contains(p.get("Id"))).toList()));
+        var prdList = new ArrayList<>(packages.stream().filter(p -> !NOT_IN_PRD.contains(p.get("Id"))).toList());
+        prdList.addAll(OBJECT_PACKAGES);
+        getJson(prd, ROOT + "IntegrationPackages", results(prdList));
         // REQ-606: 승인하면 PkgNotInPrd는 만들어지고(201), PkgCreateFail은 만들기가 실패한다(500).
         prd.stubFor(post(urlPathEqualTo(ROOT + "IntegrationPackages")).atPriority(8).willReturn(created()));
         prd.stubFor(post(urlPathEqualTo(ROOT + "IntegrationPackages"))
@@ -161,6 +165,71 @@ public final class LocalCpiStubs {
         first.remove("IF_Order_Sync");
         once(prd, "runtime-list", RuntimeListStub.list(), RuntimeListStub.list(),
                 okJson(RuntimeListStub.body(first)), okJson(RuntimeListStub.body(statuses)));
+        seedObjects();
+    }
+
+    // 20261121-package-objects(REQ-1001~1005): iFlow 밖 오브젝트(스크립트 컬렉션·메시지 매핑·밸류 매핑)가 있는 패키지 둘.
+    // 기존 패키지는 새 종류 목록 매핑이 없어 404(= 빈 목록)라 지금 테스트의 호출 수가 바뀌지 않는다. 두 패키지 모두 iFlow는 0개다.
+    // - PkgObjectDemo: 정상. SC·MM은 대상에 없어 만들고(201), VM_Object_Codes는 대상에 있어 삭제 후 다시 만든다. 배포는 모두 SUCCESS.
+    // - PkgObjectFault: 메시지 매핑 목록 500. SC_Fault_DeployFail 배포 상태 FAIL. VM_Fault_Recreate는 다시 만들기(원본 zip POST)가
+    //   500이고 되살리기(대상 zip POST)는 성공. VM_Fault_Lost는 다시 만들기·되살리기 모두 500.
+    private static final List<Map<String, String>> OBJECT_PACKAGES = List.of(
+            packageMetadata("PkgObjectDemo", "Object Demo", null), packageMetadata("PkgObjectFault", "Object Fault Demo", null));
+    private static final Map<String, Map<String, List<String>>> OBJECTS = Map.of(
+            "PkgObjectDemo", Map.of("ScriptCollection", List.of("SC_Object_Scripts"), "MessageMapping", List.of("MM_Object_Order"),
+                    "ValueMapping", List.of("VM_Object_Codes")),
+            "PkgObjectFault", Map.of("ScriptCollection", List.of("SC_Fault_DeployFail"),
+                    "ValueMapping", List.of("VM_Fault_Recreate", "VM_Fault_Lost")));
+    private static final Set<String> IN_PRD = Set.of("VM_Object_Codes", "VM_Fault_Recreate", "VM_Fault_Lost");
+    private static String object(String segment, String id) {
+        return ROOT + segment + "DesigntimeArtifacts(Id='" + id + "',Version='active')";
+    }
+    private void seedObjects() throws IOException {
+        for (var pkg : OBJECT_PACKAGES) {
+            String id = pkg.get("Id");
+            String path = ROOT + "IntegrationPackages('" + id + "')";
+            getJson(dev, path, data(pkg));
+            getJson(prd, path, data(pkg));
+            getJson(dev, path + "/IntegrationDesigntimeArtifacts", results(List.of()));
+            if (id.equals("PkgObjectFault")) dev.stubFor(get(urlPathEqualTo(path + "/MessageMappingDesigntimeArtifacts")).willReturn(serverError()));
+            for (var entry : OBJECTS.get(id).entrySet()) {
+                String segment = entry.getKey();
+                getJson(dev, path + "/" + segment + "DesigntimeArtifacts", results(entry.getValue().stream()
+                        .map(o -> Map.of("Id", o, "Name", o, "Version", "1.0.0", "PackageId", id)).toList()));
+                for (String o : entry.getValue()) seedObject(segment, o);
+            }
+        }
+    }
+    private void seedObject(String segment, String id) throws IOException {
+        byte[] source = objectZip(id, "dev");
+        dev.stubFor(get(urlPathEqualTo(object(segment, id) + "/$value"))
+                .willReturn(aResponse().withHeader("Content-Type", "application/zip").withBody(source)));
+        String collection = ROOT + segment + "DesigntimeArtifacts";
+        prd.stubFor(post(urlPathEqualTo(collection)).atPriority(8).willReturn(created()));
+        if (IN_PRD.contains(id)) {
+            getJson(prd, object(segment, id), data(Map.of("Id", id, "Name", id, "Version", "1.0.0")));
+            prd.stubFor(get(urlPathEqualTo(object(segment, id) + "/$value"))
+                    .willReturn(aResponse().withHeader("Content-Type", "application/zip").withBody(objectZip(id, "prd"))));
+            prd.stubFor(delete(urlPathEqualTo(object(segment, id))).willReturn(ok()));
+        }
+        var byId = post(urlPathEqualTo(collection)).withRequestBody(matchingJsonPath("$.Id", equalTo(id)));
+        if (id.equals("VM_Fault_Lost")) prd.stubFor(byId.willReturn(serverError()));
+        if (id.equals("VM_Fault_Recreate")) prd.stubFor(byId.withRequestBody(matchingJsonPath("$.ArtifactContent",
+                equalTo(Base64.getEncoder().encodeToString(source)))).willReturn(serverError()));
+        String task = "task-" + id;
+        prd.stubFor(post(urlPathEqualTo(ROOT + "Deploy" + segment + "DesigntimeArtifact"))
+                .withQueryParam("Id", equalTo("'" + id + "'")).withQueryParam("Version", equalTo("'active'"))
+                .willReturn(aResponse().withStatus(202).withHeader("Content-Type", "text/plain").withBody(task)));
+        getJson(prd, ROOT + "BuildAndDeployStatus(TaskId='" + task + "')", data(Map.of("TaskId", task,
+                "Status", id.equals("SC_Fault_DeployFail") ? "FAIL" : "SUCCESS")));
+    }
+    private static byte[] objectZip(String id, String env) throws IOException {
+        var bytes = new ByteArrayOutputStream();
+        try (var out = new ZipOutputStream(bytes)) {
+            entry(out, "META-INF/MANIFEST.MF", ("Manifest-Version: 1.0\nBundle-SymbolicName: " + id + "\n").getBytes(StandardCharsets.UTF_8));
+            entry(out, "src/main/resources/" + id + ".txt", ("local fixture " + env + "\n").getBytes(StandardCharsets.UTF_8));
+        }
+        return bytes.toByteArray();
     }
     private static MappingBuilder upload(String id) {
         return post(urlPathEqualTo(ROOT + "IntegrationDesigntimeArtifacts")).withRequestBody(matchingJsonPath("$.Id", equalTo(id)));

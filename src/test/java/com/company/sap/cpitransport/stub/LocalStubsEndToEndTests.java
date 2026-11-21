@@ -160,7 +160,7 @@ class LocalStubsEndToEndTests {
         assertThat(list.statusCode()).isEqualTo(200);
         var ids = new ArrayList<String>();
         JSON.readTree(list.body()).forEach(node -> ids.add(node.path("id").asString()));
-        assertThat(ids).containsExactly("PkgTransportDemo", "PkgFaultDemo", "PkgNotInPrd", "PkgCreateFail");
+        assertThat(ids).containsExactly("PkgTransportDemo", "PkgFaultDemo", "PkgNotInPrd", "PkgCreateFail", "PkgObjectDemo", "PkgObjectFault");
         assertThat(get(port, "/packages/PkgSapStandard/artifacts?tenantId=DEV").statusCode()).isEqualTo(200);
     }
     @Test

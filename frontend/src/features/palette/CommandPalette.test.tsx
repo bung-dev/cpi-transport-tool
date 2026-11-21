@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Tenant, TenantsResponse, TenantStatusResponse } from '../../api/types';
 import { ARTIFACTS, json, mockApi, PACKAGES, respondTo } from '../../test/mockFetch';
 import { baseRoutes, navLink, renderAt, routeGroup, tpl } from '../../test/appRoutes';
-import { artifactRow, currentStep, findArtifactGrid, postBodies, startManual, stepButton, toArtifacts } from '../../test/wizard';
+import { artifactRow, currentStep, findArtifactGrid, postBodies, startManual, stepButton, toArtifacts, NO_TYPES } from '../../test/wizard';
 
 // REQ-411 ⌘K 팔레트
 afterEach(() => vi.unstubAllGlobals());
@@ -314,7 +314,7 @@ describe('REQ-411 마법사 동작 (S3b)', () => {
     expect(await screen.findByRole('region', { name: '이관 결과' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(postBodies(fn)).toEqual([
-      { packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Order_Sync'] }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
+      { packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Order_Sync'], ...NO_TYPES }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
     ]);
   });
 
