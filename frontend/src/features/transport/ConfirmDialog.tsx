@@ -9,6 +9,7 @@ import { Switch } from '../../components/ui/Switch';
 import { ActiveJobNotice } from '../job/ActiveJobBanner';
 
 interface Props {
+  previewId?: string;
   targetName?: string;
   packages: TransportPackage[];
   targetTenantId: string;
@@ -28,7 +29,7 @@ interface Props {
 }
 
 // REQ-005 AC-3, REQ-009 AC-1: 실제 이관 확인 대화상자(role=dialog, aria-modal).
-export function ConfirmDialog({ packages, targetTenantId, artifactCount, deploy, onDeployChange, routeText, busy, activeJobId, onConfirm, onCancel, fallbackFocusRef, targetName = 'PRD' }: Props) {
+export function ConfirmDialog({ previewId, packages, targetTenantId, artifactCount, deploy, onDeployChange, routeText, busy, activeJobId, onConfirm, onCancel, fallbackFocusRef, targetName = 'PRD' }: Props) {
   const titleId = useId();
   const ids = packages.map(p => p.packageId);
   const { state, retry } = useRemote(() => getTargetPackageStatus(targetTenantId, ids), JSON.stringify([targetTenantId, ids]));
@@ -92,6 +93,7 @@ export function ConfirmDialog({ packages, targetTenantId, artifactCount, deploy,
           실제 이관 확인
         </h2>
         <Callout tone="warning">{`${targetName}에 업로드합니다. 되돌릴 수 없습니다`}</Callout>
+        {previewId && <p className="mt-3 text-sm">미리보기 뒤 CPI에서 '저장'만 한 수정은 버전이 같아 반영되지 않을 수 있습니다. 그럴 때는 미리보기를 다시 실행하세요</p>}
         <dl className="mt-3.5 grid gap-2">
           {routeText !== undefined && <SummaryRow label="경로">{routeText}</SummaryRow>}
           <SummaryRow label="아티팩트 수">{artifactCount}</SummaryRow>

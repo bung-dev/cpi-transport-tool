@@ -27,6 +27,7 @@ export interface ArtifactError {
 export interface ArtifactResult {
   packageId?: string;
   artifactId: string;
+  reusedPreview?: boolean;
   status: ArtifactStatus;
   grade?: 'SUCCESS' | 'FIX_REQUIRED' | 'RETRYABLE' | 'SKIPPED' | null;
   action: TransportAction;
@@ -107,6 +108,7 @@ export interface TransportJob extends ActiveJob {
 }
 
 export interface TransportRequest {
+  previewId?: string;
   sourceTenantId?: string;
   targetTenantId?: string;
   packages: { packageId: string; artifactIds?: string[] }[];

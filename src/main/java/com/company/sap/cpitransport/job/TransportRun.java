@@ -47,6 +47,7 @@ public final class TransportRun {
     private final ArtifactResult[] results;
     private final TemplateRef template;
     private final Consumer<TransportResponse> history;
+    private final Consumer<String> completePreview;
     private JobStatus status = JobStatus.RUNNING;
     private boolean cancelRequested;
     private boolean shuttingDown;
@@ -56,6 +57,13 @@ public final class TransportRun {
 
     public TransportRun(Clock clock, TransportRequest request, List<TransportPackage> packages,
                         List<Item> items, TemplateRef template, Consumer<TransportResponse> history) {
+        this(clock, request, packages, items, template, history, null);
+    }
+
+    public TransportRun(Clock clock, TransportRequest request, List<TransportPackage> packages,
+                        List<Item> items, TemplateRef template, Consumer<TransportResponse> history,
+                        Consumer<String> completePreview) {
+        this.completePreview = completePreview;
         this.clock = clock;
         this.startedAt = clock.instant();
         this.request = request;
@@ -177,6 +185,7 @@ public final class TransportRun {
         saved.join();
     }
     private CompletableFuture<Void> finish(JobStatus terminal) {
+        if (completePreview != null) completePreview.accept(id);
         result = snapshot().response(history == null ? null : terminal, clock.instant(), completedResults(), items, template);
         status = terminal;
         if (history != null) {

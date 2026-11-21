@@ -27,6 +27,7 @@ public class TransportService {
     private final ConfigurationCopier configurations;
     private final DeployService deployment;
     private final Clock clock;
+    private final PreviewBundles previewBundles;
     private final Supplier<ConcurrencySettings> settings;
 
     public TransportService(CpiApiClient api, ConfigurationCopier configurations,
@@ -36,12 +37,18 @@ public class TransportService {
 
     @Autowired
     TransportService(CpiApiClient api, ConfigurationCopier configurations,
-                     DeployService deployment, Clock clock, SettingsService settings) {
-        this(api, configurations, deployment, clock, settings::current);
+                     DeployService deployment, Clock clock, SettingsService settings, PreviewBundles previewBundles) {
+        this(api, configurations, deployment, clock, settings::current, previewBundles);
     }
 
     public TransportService(CpiApiClient api, ConfigurationCopier configurations,
                             DeployService deployment, Clock clock, Supplier<ConcurrencySettings> settings) {
+        this(api, configurations, deployment, clock, settings, new PreviewBundles(clock));
+    }
+
+    private TransportService(CpiApiClient api, ConfigurationCopier configurations, DeployService deployment,
+                             Clock clock, Supplier<ConcurrencySettings> settings, PreviewBundles previewBundles) {
+        this.previewBundles = previewBundles;
         this.settings = settings;
         this.api = api;
         this.configurations = configurations;
@@ -152,11 +159,17 @@ public class TransportService {
                 packages.add(new TransportPackage(packageId, source.metadata().name(), TargetPackageStatus.NOT_CHECKED));
                 for (String id : source.artifactIds()) items.add(new TransportRun.Item(packageId, id, Stage.WAITING, null));
             }
-            return new TransportRun(clock, request, packages, items, template, history);
+            return new TransportRun(clock, request, packages, items, template, history,
+                    request.dryRun() ? previewBundles::complete : null);
         }
 
         private TransportResponse executeSynchronously() {
-            return execute(newRun(null, null));
+            var run = newRun(null, null);
+            try {
+                return execute(run);
+            } finally {
+                if (request.dryRun()) previewBundles.discardPending(run.id());
+            }
         }
 
         public TransportResponse execute(TransportRun run) {
@@ -274,6 +287,7 @@ public class TransportService {
         String successResult = "succeeded";
         var deployFailure = DeployOutcome.DeployFailure.NONE;
         boolean exists = false;
+        boolean reusedPreview = false;
         event(transportId, id, stage, "started");
         try {
             var artifact = artifacts.stream().filter(a -> id.equals(a.id())).findFirst();
@@ -282,14 +296,26 @@ public class TransportService {
                 grade = ArtifactGrade.FIX_REQUIRED;
             } else {
                 event(transportId, id, stage, "succeeded");
-                progress.accept(Stage.DOWNLOAD);
-                var reads = readSources(transportId, request.source().id(), id);
+                String tenantId = request.source().id();
+                String version = artifact.get().version();
+                var cached = request.dryRun() ? Optional.<PreviewBundles.Bundle>empty()
+                        : previewBundles.find(request.previewId(), tenantId, id, version);
+                SourceReads reads;
+                if (cached.isPresent()) {
+                    var bundle = cached.get();
+                    reads = new SourceReads(bundle.zip(), bundle.configurations());
+                    reusedPreview = true;
+                } else {
+                    progress.accept(Stage.DOWNLOAD);
+                    reads = readSources(transportId, tenantId, id);
+                }
                 var source = reads.configurations();
                 stage = request.dryRun() ? Stage.UPLOAD : Stage.TARGET;
                 event(transportId, id, stage, "started");
                 progress.accept(stage);
                 if (request.dryRun()) {
                     items = source;
+                    previewBundles.put(transportId, tenantId, id, version, reads.zip(), items);
                 } else if (target.error() != null) {
                     error = target.error();
                     grade = target.grade();
@@ -364,7 +390,7 @@ public class TransportService {
             }
         }
         event(transportId, id, stage, error == null ? successResult : "failed " + error.code(), logFields);
-        return new ArtifactResult(packageId, id, null, action, items, deployStatus, error, grade);
+        return new ArtifactResult(packageId, id, null, action, items, deployStatus, error, grade, reusedPreview);
     }
 
     private record SourceReads(byte[] zip, List<ConfigurationItem> configurations) {}

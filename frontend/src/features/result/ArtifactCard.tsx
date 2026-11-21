@@ -60,6 +60,7 @@ export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
           {failed && r.grade === 'FIX_REQUIRED' && <Badge tone="danger">고쳐야 함</Badge>}
           {failed && r.grade === 'RETRYABLE' && <Badge tone="warning">다시 시도 가능</Badge>}
           <LabeledBadge label="동작" kind="transportAction" value={r.action} />
+          {r.reusedPreview === true && <Badge tone="info">미리보기 묶음 사용</Badge>}
           <LabeledBadge label="배포" kind="deployStatus" value={r.deployStatus} />
         </div>
         {!expanded && (

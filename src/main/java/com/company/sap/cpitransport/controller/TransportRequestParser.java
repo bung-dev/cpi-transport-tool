@@ -35,6 +35,8 @@ public class TransportRequestParser {
         var packageIds = new java.util.HashSet<String>();
         for (var selected : packages) if (!packageIds.add(selected.packageId())) invalid();
         boolean dryRun = flag(body, "dryRun");
+        var previewId = body.get("previewId");
+        if (previewId != null && !previewId.isString()) invalid();
         var createPackages = new ArrayList<String>();
         if (body.has("createPackages")) {
             var create = body.get("createPackages");
@@ -60,7 +62,8 @@ public class TransportRequestParser {
         var missing = new ArrayList<>(guard.missingKeys(sourceId));
         if (!dryRun) missing.addAll(guard.missingKeys(targetId));
         if (!missing.isEmpty()) throw new EnvironmentNotConfiguredException(missing);
-        return new Parsed(new TransportRequest(packages, createPackages, dryRun, deploy, source, target), template);
+        return new Parsed(new TransportRequest(packages, createPackages, dryRun, deploy, source, target,
+                dryRun || previewId == null ? null : previewId.asString()), template);
     }
 
     private static PackageSelection selection(JsonNode body) {
