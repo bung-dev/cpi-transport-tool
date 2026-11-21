@@ -82,19 +82,24 @@ public class CpiHttpExecutor {
     }
 
     ResponseEntity<byte[]> executePage(String environment, String path) {
+        return executePage(environment, path, true);
+    }
+
+    ResponseEntity<byte[]> executePage(String environment, String path, boolean retryTransient) {
         if (!path.startsWith("/") || path.startsWith("//")) {
             throw new IllegalArgumentException("CPI path must be relative to the configured API");
         }
-        return send(environment, HttpMethod.GET, path, null, true, false, true);
+        return send(environment, HttpMethod.GET, path, null, true, false, true, retryTransient ? retry.maxAttempts() : 1);
     }
 
     private ResponseEntity<byte[]> send(String environment, HttpMethod method, String path,
                                          byte[] body, boolean acceptJson, boolean fetch) {
-        return send(environment, method, path, body, acceptJson, fetch, false);
+        return send(environment, method, path, body, acceptJson, fetch, false, retry.maxAttempts());
     }
 
     private ResponseEntity<byte[]> send(String environment, HttpMethod method, String path,
-                                         byte[] body, boolean acceptJson, boolean fetch, boolean originRelative) {
+                                         byte[] body, boolean acceptJson, boolean fetch, boolean originRelative,
+                                         int maxAttempts) {
         boolean write = HttpMethod.POST.equals(method) || HttpMethod.PUT.equals(method);
         boolean refreshedAuth = false;
         boolean refreshedCsrf = false;
@@ -141,7 +146,7 @@ public class CpiHttpExecutor {
                 response = request.exchange((req, res) -> new ResponseEntity<>(
                         res.getBody().readAllBytes(), res.getHeaders(), res.getStatusCode()));
             } catch (ResourceAccessException failure) {
-                if (++transientFailures >= retry.maxAttempts()) throw new CpiCallException(null, "CPI IO failure");
+                if (++transientFailures >= maxAttempts) throw new CpiCallException(null, "CPI IO failure");
                 pause(delay);
                 delay = nextDelay(delay, transientFailures);
                 continue;
@@ -163,7 +168,7 @@ public class CpiHttpExecutor {
                 continue;
             }
             if ((status == 429 || status >= 500 && status <= 599)
-                    && ++transientFailures < retry.maxAttempts()) {
+                    && ++transientFailures < maxAttempts) {
                 // AI-NOTE: Auth/CSRF replays do not reset the transient-failure budget. (근거: REQ-003 AC-3, run 20260928-cpi-transport)
                 pause(delay);
                 delay = nextDelay(delay, transientFailures);
