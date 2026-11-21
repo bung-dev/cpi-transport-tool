@@ -174,9 +174,11 @@ class LockHintWireMockTests {
         assertThat(hinted.error().message()).isEqualTo(UPLOAD_400 + ". " + HINT);
 
         assertThat(hintedPrd).isEqualTo(plainPrd);
-        assertThat(hintedDev).isEqualTo(plainDev);
+        // 20261121-perf-retry REQ-903: 원본의 내려받기·구성 값 읽기는 동시에 나가 순서가 정해지지 않는다(요청 집합만 비교).
+        assertThat(hintedDev).containsExactlyInAnyOrderElementsOf(plainDev);
         assertThat(hintedPrd).containsExactly("POST /token", "GET " + PACKAGE, "GET " + path("A"), "GET /api/v1/", "PUT " + path("A"));
-        assertThat(hintedDev).containsExactly("POST /token", "GET " + path("A") + "/$value", "GET " + path("A") + "/Configurations");
+        assertThat(hintedDev).first().isEqualTo("POST /token");
+        assertThat(hintedDev).containsExactlyInAnyOrder("POST /token", "GET " + path("A") + "/$value", "GET " + path("A") + "/Configurations");
         // 락 해제·다른 버전 업로드·추가 조회 요청이 없다: 쓰기는 갱신 PUT 1건, 버전은 'active'뿐, 메서드 덮어쓰기 헤더 없음.
         assertThat(hintedPrd).filteredOn(r -> !r.startsWith("GET ") && !r.equals("POST /token")).containsExactly("PUT " + path("A"));
         assertThat(hintedPrd).allMatch(r -> !r.contains("Version=") || r.contains("Version='active'"))
