@@ -205,7 +205,9 @@ class TransportControllerTests {
         assertThat(root.at("/summary/succeeded").asInt()).isEqualTo(1);
         assertThat(root.at("/summary/failed").asInt()).isEqualTo(1);
         var result = root.at("/results/0");
-        assertThat(result.propertyNames()).containsExactlyInAnyOrder("packageId", "artifactId", "status", "action", "configurations", "deployStatus", "error");
+        // 20261121-package-objects REQ-1003: 결과에 오브젝트 종류(type)가 항상 있다.
+        assertThat(result.propertyNames()).containsExactlyInAnyOrder("type", "packageId", "artifactId", "status", "action", "configurations", "deployStatus", "error");
+        assertThat(result.get("type").asString()).isEqualTo("INTEGRATION_FLOW");
         assertThat(result.get("status").asString()).isEqualTo("SUCCESS");
         assertThat(result.get("error").isNull()).isTrue();
         assertThat(root.at("/results/1/status").asString()).isEqualTo("FAILED");

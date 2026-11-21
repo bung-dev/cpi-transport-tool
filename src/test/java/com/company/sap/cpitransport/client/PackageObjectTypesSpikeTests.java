@@ -108,18 +108,18 @@ class PackageObjectTypesSpikeTests {
     }
 
     @Test
-    @DisplayName("DELETE는 실행기가 CSRF 토큰을 붙이지 않아 실패한다(밸류 매핑 갱신 = 삭제 후 생성에 필요)")
-    void deleteFailsBecauseExecutorSendsNoCsrfToken() {
+    @DisplayName("DELETE에도 실행기가 CSRF 토큰을 붙이고 Required면 한 번 새로 받는다(20261121-package-objects REQ-1004로 바뀜)")
+    void deleteSendsCsrfTokenAndRefreshesOnce() {
         String path = ROOT + "/ValueMappingDesigntimeArtifacts(Id='DummyVm',Version='active')";
-        server.stubFor(delete(urlEqualTo(path)).willReturn(aResponse().withStatus(403)
-                .withHeader("X-CSRF-Token", "Required")));
-        server.stubFor(delete(urlEqualTo(path)).withHeader("X-CSRF-Token", equalTo("dummy-csrf-0001"))
-                .atPriority(1).willReturn(aResponse().withStatus(200)));
+        server.stubFor(delete(urlEqualTo(path)).inScenario("csrf").whenScenarioStateIs(com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED)
+                .willReturn(aResponse().withStatus(403).withHeader("X-CSRF-Token", "Required")).willSetStateTo("refreshed"));
+        server.stubFor(delete(urlEqualTo(path)).inScenario("csrf").whenScenarioStateIs("refreshed")
+                .willReturn(aResponse().withStatus(200)));
 
-        assertThatThrownBy(() -> executor.execute("DEV", HttpMethod.DELETE, path.substring("/cpi".length()), null, true))
-                .isInstanceOfSatisfying(CpiCallException.class, failure -> assertThat(failure.httpStatus()).isEqualTo(403));
-        server.verify(1, deleteRequestedFor(urlEqualTo(path)).withoutHeader("X-CSRF-Token"));
-        server.verify(0, getRequestedFor(urlEqualTo(ROOT + "/")));
+        var response = executor.execute("DEV", HttpMethod.DELETE, path.substring("/cpi".length()), null, true);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        server.verify(2, deleteRequestedFor(urlEqualTo(path)).withHeader("X-CSRF-Token", equalTo("dummy-csrf-0001")));
+        server.verify(2, getRequestedFor(urlEqualTo(ROOT + "/")));
     }
 
     @Test
