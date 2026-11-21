@@ -289,17 +289,21 @@ public class TransportService {
                     ArtifactGrade.FIX_REQUIRED, false, selected.type());
         }
         event(transportId, id, Stage.LOOKUP, "succeeded");
-        if (selected.type() != ArtifactType.INTEGRATION_FLOW) {
-            var transfer = processObject(transportId, request, selected, target, progress);
-            if (!request.deploy()) return transfer;
-            if (request.dryRun()) {
-                return selected.result(transfer.action(), DeployStatus.SKIPPED_DRY_RUN, transfer.error(), transfer.grade());
-            }
-            if (transfer.error() != null) return transfer;
-            progress.accept(Stage.DEPLOY);
-            return deployObject(transportId, request.target().id(), selected, transfer.action(), slot);
+        var cached = request.dryRun() ? Optional.<PreviewBundles.Bundle>empty()
+                : previewBundles.find(request.previewId(), request.source().id(), selected.type(), id, selected.source().version());
+        if (selected.type() == ArtifactType.INTEGRATION_FLOW) {
+            return process(transportId, request, selected.packageId(), id, selected.source(), target, progress, batch, slot, cached);
         }
-        return process(transportId, request, selected.packageId(), id, selected.source(), target, progress, batch, slot);
+
+        var result = processObject(transportId, request, selected, target, progress, cached);
+        if (request.deploy() && request.dryRun()) {
+            return selected.result(result.action(), DeployStatus.SKIPPED_DRY_RUN, result.error(), result.grade());
+        }
+        if (request.deploy() && result.error() == null) {
+            progress.accept(Stage.DEPLOY);
+            result = deployObject(transportId, request.target().id(), selected, result.action(), slot);
+        }
+        return cached.isPresent() ? result.withReusedPreview() : result;
     }
 
     private TargetPackage prepareTarget(String transportId, TransportRequest request, CpiPackage source) {
@@ -345,7 +349,7 @@ public class TransportService {
 
     private ArtifactResult process(String transportId, TransportRequest request, String packageId, String id,
                                    CpiArtifact artifact, TargetPackage target, Consumer<Stage> progress,
-                                   DeployBatch batch, ProcessingSlot slot) {
+                                   DeployBatch batch, ProcessingSlot slot, Optional<PreviewBundles.Bundle> cached) {
         Stage stage = Stage.LOOKUP;
         TransportAction action = TransportAction.NONE;
         DeployStatus deployStatus = request.dryRun() && request.deploy()
@@ -360,8 +364,6 @@ public class TransportService {
         try {
             String tenantId = request.source().id();
             String version = artifact.version();
-            var cached = request.dryRun() ? Optional.<PreviewBundles.Bundle>empty()
-                    : previewBundles.find(request.previewId(), tenantId, id, version);
             SourceReads reads;
             if (cached.isPresent()) {
                 var bundle = cached.get();
@@ -377,7 +379,7 @@ public class TransportService {
             progress.accept(stage);
             if (request.dryRun()) {
                 items = source;
-                previewBundles.put(transportId, tenantId, id, version, reads.zip(), items);
+                previewBundles.put(transportId, tenantId, ArtifactType.INTEGRATION_FLOW, id, version, reads.zip(), items);
             } else if (target.error() != null) {
                 error = target.error();
                 grade = target.grade();
@@ -455,15 +457,20 @@ public class TransportService {
     }
 
     private ArtifactResult processObject(String transportId, TransportRequest request, SelectedArtifact selected,
-                                         TargetPackage target, Consumer<Stage> progress) {
+                                         TargetPackage target, Consumer<Stage> progress, Optional<PreviewBundles.Bundle> cached) {
         String id = selected.id();
         var type = selected.type();
-        Stage stage = Stage.DOWNLOAD;
+        Stage stage = cached.isPresent() ? Stage.TARGET : Stage.DOWNLOAD;
         progress.accept(stage);
         event(transportId, id, stage, "started");
         try {
-            byte[] zip = objectZip(request.source().id(), id, type);
-            stage = next(transportId, id, stage, Stage.TARGET, progress);
+            byte[] zip;
+            if (cached.isPresent()) {
+                zip = cached.get().zip();
+            } else {
+                zip = objectZip(request.source().id(), id, type);
+                stage = next(transportId, id, stage, Stage.TARGET, progress);
+            }
             if (target.error() != null) {
                 event(transportId, id, stage, "failed");
                 return selected.failed(target.error(), target.grade());
@@ -473,6 +480,7 @@ public class TransportService {
             TransportAction action = TransportAction.CREATED;
             if (exists) action = type == ArtifactType.VALUE_MAPPING ? TransportAction.REPLACED : TransportAction.UPDATED;
             if (request.dryRun()) {
+                previewBundles.put(transportId, request.source().id(), type, id, selected.source().version(), zip, List.of());
                 event(transportId, id, stage, "succeeded");
                 return selected.result(action, null, ArtifactGrade.SUCCESS);
             }

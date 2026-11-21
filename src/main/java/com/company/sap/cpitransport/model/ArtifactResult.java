@@ -27,6 +27,9 @@ public record ArtifactResult(String packageId, String artifactId, ArtifactStatus
             List<ConfigurationItem> configurations, DeployStatus deployStatus, ArtifactError error) {
         this(null, artifactId, status, action, configurations, deployStatus, error);
     }
+    public ArtifactResult withReusedPreview() {
+        return new ArtifactResult(packageId, artifactId, status, action, configurations, deployStatus, error, grade, true, type);
+    }
     public ArtifactResult withPackageId(String packageId) {
         return new ArtifactResult(packageId, artifactId, status, action, configurations, deployStatus, error, grade, reusedPreview, type);
     }

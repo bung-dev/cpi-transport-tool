@@ -8,9 +8,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
 
 @Component
 public class TransportRequestParser {
@@ -27,15 +29,15 @@ public class TransportRequestParser {
     }
 
     TransportRequest retryRequest(TransportResponse original) {
-        var idsByPackage = new HashMap<String, List<String>>();
+        var selections = new HashMap<String, ObjectNode>();
         for (var result : original.results()) {
             if (result.status() == ArtifactStatus.FAILED) {
-                idsByPackage.computeIfAbsent(result.packageId(), key -> new ArrayList<>()).add(result.artifactId());
+                addRetryItem(selections, result.packageId(), result.type(), result.artifactId());
             }
         }
         if (original.skipped() != null) {
             for (var item : original.skipped()) {
-                idsByPackage.computeIfAbsent(item.packageId(), key -> new ArrayList<>()).add(item.artifactId());
+                addRetryItem(selections, item.packageId(), item.type(), item.artifactId());
             }
         }
 
@@ -46,10 +48,9 @@ public class TransportRequestParser {
         var packages = body.putArray("packages");
         var create = body.putArray("createPackages");
         for (var pkg : original.packages()) {
-            var ids = idsByPackage.get(pkg.packageId());
-            if (ids == null) continue;
-            var selected = packages.addObject().put("packageId", pkg.packageId()).putArray("artifactIds");
-            ids.forEach(selected::add);
+            var selected = selections.get(pkg.packageId());
+            if (selected == null) continue;
+            packages.add(selected);
             var targetStatus = pkg.targetPackage();
             if (targetStatus == TargetPackageStatus.CREATE_FAILED || targetStatus == TargetPackageStatus.NOT_FOUND
                     || targetStatus == TargetPackageStatus.NOT_CHECKED) {
@@ -58,6 +59,21 @@ public class TransportRequestParser {
         }
         if (packages.isEmpty()) throw new ErrorResponse.ApiException(ErrorResponse.Code.NOTHING_TO_RETRY);
         return parse(body, original.transportId()).request();
+    }
+
+    private static void addRetryItem(Map<String, ObjectNode> selections, String packageId, ArtifactType type, String id) {
+        var selection = selections.computeIfAbsent(packageId, key -> {
+            var node = JsonNodeFactory.instance.objectNode().put("packageId", key);
+            node.putArray("artifactIds");
+            return node;
+        });
+        String field = switch (type) {
+            case INTEGRATION_FLOW -> "artifactIds";
+            case SCRIPT_COLLECTION -> "scriptCollectionIds";
+            case MESSAGE_MAPPING -> "messageMappingIds";
+            case VALUE_MAPPING -> "valueMappingIds";
+        };
+        selection.withArrayProperty(field).add(id);
     }
 
     Parsed parse(JsonNode body) {
