@@ -476,7 +476,8 @@ public class TransportService {
                 return selected.failed(target.error(), target.grade());
             }
             String tenant = request.target().id();
-            boolean exists = api.artifactExists(tenant, id, type);
+            var existing = api.findArtifact(tenant, id, type);
+            boolean exists = existing.isPresent();
             TransportAction action = TransportAction.CREATED;
             if (exists) action = type == ArtifactType.VALUE_MAPPING ? TransportAction.REPLACED : TransportAction.UPDATED;
             if (request.dryRun()) {
@@ -489,10 +490,11 @@ public class TransportService {
             String content = Base64.getEncoder().encodeToString(zip);
             ArtifactResult result;
             if (action == TransportAction.REPLACED) {
-                result = replaceValueMapping(tenant, selected, content);
+                String restoreName = existing.map(CpiApiClient.ArtifactMetadata::name).orElse(selected.source().name());
+                result = replaceValueMapping(tenant, selected, content, restoreName);
             } else {
                 if (exists) api.updateArtifactContent(tenant, id, type, content);
-                else createObject(tenant, selected, content);
+                else createObject(tenant, selected, selected.source().name(), content);
                 result = selected.result(action, null, ArtifactGrade.SUCCESS);
             }
             if (result.error() == null) event(transportId, id, stage, "succeeded");
@@ -533,18 +535,18 @@ public class TransportService {
         return zip;
     }
 
-    private void createObject(String tenant, SelectedArtifact selected, String content) {
-        api.createArtifact(tenant, selected.source().name(), selected.id(), selected.packageId(), content, selected.type());
+    private void createObject(String tenant, SelectedArtifact selected, String name, String content) {
+        api.createArtifact(tenant, name, selected.id(), selected.packageId(), content, selected.type());
     }
 
-    private ArtifactResult replaceValueMapping(String tenant, SelectedArtifact selected, String content) {
+    private ArtifactResult replaceValueMapping(String tenant, SelectedArtifact selected, String content, String restoreName) {
         byte[] backup = objectZip(tenant, selected.id(), selected.type());
         api.deleteArtifact(tenant, selected.id(), selected.type());
         try {
-            createObject(tenant, selected, content);
+            createObject(tenant, selected, selected.source().name(), content);
         } catch (RuntimeException createFailure) {
             try {
-                createObject(tenant, selected, Base64.getEncoder().encodeToString(backup));
+                createObject(tenant, selected, restoreName, Base64.getEncoder().encodeToString(backup));
             } catch (RuntimeException restoreFailure) {
                 return selected.failed(new ArtifactError("VALUE_MAPPING_LOST",
                         "대상에서 밸류 매핑이 지워졌고 되살리지 못했습니다. CPI에서 직접 확인하세요"), ArtifactGrade.FIX_REQUIRED);

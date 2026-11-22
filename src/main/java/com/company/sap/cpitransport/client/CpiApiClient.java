@@ -75,7 +75,16 @@ public class CpiApiClient {
     }
 
     public boolean artifactExists(String environment, String id, ArtifactType type) {
-        return optional(environment, artifactPath(id, type)).isPresent();
+        return findArtifact(environment, id, type).isPresent();
+    }
+
+    public record ArtifactMetadata(String name) {}
+
+    public Optional<ArtifactMetadata> findArtifact(String environment, String id, ArtifactType type) {
+        return optional(environment, artifactPath(id, type)).map(node -> {
+            var name = node.path("Name");
+            return new ArtifactMetadata(name.isString() ? name.asString() : null);
+        });
     }
 
     public byte[] downloadArtifact(String environment, String id) {
