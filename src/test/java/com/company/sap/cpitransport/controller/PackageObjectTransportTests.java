@@ -230,6 +230,35 @@ class PackageObjectTransportTests {
     }
 
     @Test
+    @DisplayName("REQ-1004 실패: 되살리기 POST의 Name은 대상에 있던 밸류 매핑의 Name이고, 다시 만들기 POST는 원본 Name이다(대상 응답에 Name이 없으면 원본 Name)")
+    void restoreUsesTargetName() throws Exception {
+        prd.stubFor(get(urlEqualTo(entity(VM, "VM1"))).willReturn(okJson("{\"d\":{\"Id\":\"VM1\",\"Name\":\"Target VM1\",\"Version\":\"1.0.0\"}}")));
+        prd.stubFor(get(urlEqualTo(entity(VM, "VM1") + "/$value")).willReturn(ok().withBody("tgt-VM1")));
+        targetExists(VM, "VM2");
+        for (String id : List.of("VM1", "VM2")) {
+            prd.stubFor(com.github.tomakehurst.wiremock.client.WireMock.post(urlEqualTo(collection(VM)))
+                    .withRequestBody(matchingJsonPath("$.Id", equalTo(id)))
+                    .withRequestBody(matchingJsonPath("$.ArtifactContent", equalTo(b64("src-" + id))))
+                    .willReturn(aResponse().withStatus(500)));
+            prd.stubFor(com.github.tomakehurst.wiremock.client.WireMock.post(urlEqualTo(collection(VM)))
+                    .withRequestBody(matchingJsonPath("$.Id", equalTo(id)))
+                    .withRequestBody(matchingJsonPath("$.ArtifactContent", equalTo(b64("tgt-" + id))))
+                    .willReturn(created()));
+        }
+        var response = transport("{\"packageId\":\"PKG\",\"artifactIds\":[],\"valueMappingIds\":[\"VM1\",\"VM2\"]}");
+        for (String id : List.of("VM1", "VM2")) {
+            assertThat(result(response, id).at("/error/message").asString()).contains("이전 버전으로 되살렸습니다");
+        }
+        prd.verify(1, postRequestedFor(urlEqualTo(collection(VM))).withRequestBody(equalToJson(
+                "{\"Name\":\"Name VM1\",\"Id\":\"VM1\",\"PackageId\":\"PKG\",\"ArtifactContent\":\"" + b64("src-VM1") + "\"}")));
+        prd.verify(1, postRequestedFor(urlEqualTo(collection(VM))).withRequestBody(equalToJson(
+                "{\"Name\":\"Target VM1\",\"Id\":\"VM1\",\"PackageId\":\"PKG\",\"ArtifactContent\":\"" + b64("tgt-VM1") + "\"}")));
+        // 대상 응답에 Name이 없으면 원본 Name으로 되살린다
+        prd.verify(1, postRequestedFor(urlEqualTo(collection(VM))).withRequestBody(equalToJson(
+                "{\"Name\":\"Name VM2\",\"Id\":\"VM2\",\"PackageId\":\"PKG\",\"ArtifactContent\":\"" + b64("tgt-VM2") + "\"}")));
+    }
+
+    @Test
     @DisplayName("REQ-1004 실패: 되살리기 POST도 실패하면 VALUE_MAPPING_LOST(고쳐야 함), 정해진 문구, 실행 로그에 그 Id")
     void reportsLostValueMapping(CapturedOutput output) throws Exception {
         targetExists(VM, "VM1");
