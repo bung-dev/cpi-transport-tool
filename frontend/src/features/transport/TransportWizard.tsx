@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } fr
 import { getPackages, getTemplates } from '../../api/client';
 import type { ArtifactSummary, ArtifactType, TransportTemplate } from '../../api/types';
 import { navigate } from '../../app/routes';
+import { TYPE_LABELS } from '../../lib/artifactTypes';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Callout';
@@ -60,6 +61,7 @@ export function TransportWizard({ wizard: w }: { wizard: Wizard }) {
           packages={w.preview.packages.map(p => ({ ...p, packageName: p.packageName ?? w.packages.find(selected => selected.id === p.packageId)?.name ?? null }))}
           targetTenantId={w.route.target}
           artifactCount={w.preview.summary.total}
+          replacedCount={w.preview.results.filter(r => r.action === 'REPLACED').length}
           deploy={w.confirm.deploy}
           onDeployChange={w.setConfirmDeploy}
           busy={w.busy}
@@ -269,10 +271,6 @@ function ArtifactList({ w, pkg }: { w: Wizard; pkg: ArtifactSummary }) {
     </Card>
   );
 }
-
-const TYPE_LABELS: Record<ArtifactType, string> = {
-  INTEGRATION_FLOW: 'iFlow', SCRIPT_COLLECTION: '스크립트 컬렉션', MESSAGE_MAPPING: '메시지 매핑', VALUE_MAPPING: '밸류 매핑',
-};
 
 function ArtifactGroup({ w, packageId, type }: { w: Wizard; packageId: string; type: ArtifactType }) {
   const titleId = useId();

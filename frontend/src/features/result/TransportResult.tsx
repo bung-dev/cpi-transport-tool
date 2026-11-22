@@ -1,11 +1,12 @@
 import { packageSummary } from '../../lib/packageSummary';
 import { StatusBadge } from '../../components/ui/StatusBadge';
-import { useId, useRef, useState, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { TransportHistoryEntry } from '../../api/types';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Switch } from '../../components/ui/Switch';
 import { formatTime } from '../../lib/formatTime';
+import { PROCESSING_STAGE, typeOf } from '../../lib/artifactTypes';
 import { RetryDialog } from './RetryDialog';
 import { ArtifactCard } from './ArtifactCard';
 import { deployOutcome } from './deployOutcome';
@@ -27,17 +28,20 @@ export function TransportResult({ result, onOpenReal, activeJobId }: Props) {
   const { realDisabled, notice } = useReadOnlyState();
   const summary = result.summary;
   const outcome = deployOutcome(result);
+  const orderedResults = useMemo(() => [...result.results].sort(
+    (a, b) => PROCESSING_STAGE[typeOf(a)] - PROCESSING_STAGE[typeOf(b)],
+  ), [result.results]);
 
   // 접기·펼치기와 "문제 항목만 보기" 상태. 새 결과가 나타나면 그 결과의 처음 상태로 초기화한다(REQ-105 AC-5).
   // 렌더 중 이전 결과와 비교해 상태를 맞추는 방식이라 결과가 바뀐 같은 렌더에서 옛 상태가 한 번도 보이지 않는다.
   const [seen, setSeen] = useState(result);
-  const [expanded, setExpanded] = useState<boolean[]>(() => initialExpanded(result.results));
+  const [expanded, setExpanded] = useState<boolean[]>(() => initialExpanded(orderedResults));
   const [onlyProblems, setOnlyProblems] = useState(false);
   let expandedNow = expanded;
   let onlyNow = onlyProblems;
   if (seen !== result) {
     setSeen(result);
-    expandedNow = initialExpanded(result.results);
+    expandedNow = initialExpanded(orderedResults);
     onlyNow = false;
     setExpanded(expandedNow);
     setOnlyProblems(false);
@@ -49,7 +53,7 @@ export function TransportResult({ result, onOpenReal, activeJobId }: Props) {
   const retryCount = failedArtifacts + (result.skipped?.length ?? 0);
   const hasProblemArtifact = result.results.some(isProblemArtifact);
   const hasResults = result.results.length > 0;
-  const setAll = (value: boolean) => setExpanded(result.results.map(() => value));
+  const setAll = (value: boolean) => setExpanded(orderedResults.map(() => value));
   // 탐색 목록에서 고른 아티팩트의 카드 요소(인덱스 → 카드를 감싼 요소)
   const cardRefs = useRef(new Map<number, HTMLDivElement>());
   const jumpTo = (i: number) => {
@@ -138,7 +142,7 @@ export function TransportResult({ result, onOpenReal, activeJobId }: Props) {
       <div className={`grid min-w-0 grid-cols-1 gap-4 ${hasResults ? 'lg:grid-cols-[220px_minmax(0,1fr)]' : ''}`}>
         {hasResults && <nav aria-label="결과 바로가기" className="min-w-0 self-start rounded-lg border border-hairline bg-canvas p-2">
           <ul className="flex flex-col gap-0.5">
-            {result.results.map((r, i) => {
+            {orderedResults.map((r, i) => {
               if (onlyNow && !isProblemArtifact(r)) return null;
               return (
                 <li key={`${r.artifactId}-${i}`}>
@@ -164,7 +168,7 @@ export function TransportResult({ result, onOpenReal, activeJobId }: Props) {
               </h3>
               {!result.dryRun && pkg.targetPackage && pkg.targetPackage !== 'NOT_CHECKED' &&
                 <div><StatusBadge kind="targetPackage" value={pkg.targetPackage} /></div>}
-              {result.results.map((r, i) => {
+              {orderedResults.map((r, i) => {
                 if ((r.packageId ?? result.packages[0]?.packageId) !== pkg.packageId) return null;
                 // 켜진 동안에는 문제 아티팩트의 카드만 남고 모두 펼쳐진 채 고정된다. 끄면 켜기 직전 상태(expanded)로 돌아간다.
                 if (onlyNow && !isProblemArtifact(r)) return null;

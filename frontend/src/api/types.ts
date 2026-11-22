@@ -9,7 +9,7 @@ export interface ArtifactSummary {
 
 export type ConfigurationStatus = 'PLANNED' | 'BUNDLED' | 'COPIED' | 'SKIPPED_EMPTY' | 'FAILED';
 export type ArtifactStatus = 'SUCCESS' | 'FAILED';
-export type TransportAction = 'CREATED' | 'UPDATED' | 'NONE';
+export type TransportAction = 'CREATED' | 'UPDATED' | 'REPLACED' | 'NONE';
 export type DeployStatus = 'STARTED' | 'ERROR' | 'TIMEOUT' | 'NOT_REQUESTED' | 'SKIPPED_DRY_RUN';
 
 export interface ConfigurationItem {
@@ -27,6 +27,7 @@ export interface ArtifactError {
 }
 
 export interface ArtifactResult {
+  type?: ArtifactType;
   packageId?: string;
   artifactId: string;
   reusedPreview?: boolean;
@@ -57,7 +58,7 @@ export interface TransportPackage {
 
 export interface TransportResponse {
   jobStatus?: FinishedJobStatus;
-  skipped?: { packageId: string; artifactId: string }[];
+  skipped?: { packageId: string; artifactId: string; type?: ArtifactType }[];
   retryOf?: string;
   sourceTenant?: TenantRef;
   targetTenant?: TenantRef;
@@ -79,6 +80,7 @@ export type FinishedJobStatus = 'COMPLETED' | 'CANCELLED' | 'INTERRUPTED';
 export type JobStage = 'WAITING' | 'DOWNLOAD' | 'CONFIGURATION_READ' | 'TARGET' | 'UPLOAD' | 'DEPLOY' | 'DONE' | 'SKIPPED';
 
 export interface JobItem {
+  type?: ArtifactType;
   packageId: string;
   artifactId: string;
   stage: JobStage;

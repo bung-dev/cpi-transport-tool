@@ -7,11 +7,12 @@ import { ChevronDownIcon } from '../../components/ui/icons';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { Table, Td, Th, Tr } from '../../components/ui/Table';
 import type { StatusKind } from '../../design/statusBadges';
+import { TYPE_LABELS, typeOf } from '../../lib/artifactTypes';
 import { isProblemConfiguration, problemCount } from './problems';
 
 const orDash = (v: string | null): ReactNode => (v === null ? <span className="text-ink-tertiary">—</span> : v);
 
-/** 분류 이름(12px, ink-tertiary)이 앞에 붙은 상태 배지. 배지 글자는 API 값 원문이다. */
+/** 분류 이름(12px, ink-tertiary)이 앞에 붙은 상태 배지. */
 function LabeledBadge({ label, kind, value }: { label: string; kind: StatusKind; value: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -34,6 +35,7 @@ interface Props {
 export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
   const bodyId = useId();
   const failed = r.status === 'FAILED';
+  const type = typeOf(r);
   // REQ-512: 예전 이력에는 configurations가 없을 수 있다.
   const configurations = r.configurations ?? [];
   const rows = onlyProblems ? configurations.filter(isProblemConfiguration) : configurations;
@@ -56,6 +58,10 @@ export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
               {r.artifactId}
             </button>
           </h4>
+          <dl className="inline-flex items-baseline gap-1.5 text-xs">
+            <dt className="text-ink-tertiary">종류</dt>
+            <dd>{TYPE_LABELS[type]}</dd>
+          </dl>
           <LabeledBadge label="상태" kind="artifactStatus" value={r.status} />
           {failed && r.grade === 'FIX_REQUIRED' && <Badge tone="danger">고쳐야 함</Badge>}
           {failed && r.grade === 'RETRYABLE' && <Badge tone="warning">다시 시도 가능</Badge>}
@@ -65,7 +71,7 @@ export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
         </div>
         {!expanded && (
           <p className="text-xs text-ink-secondary">
-            Externalized Parameters {configurations.length}개 · 문제 {problemCount(r)}건
+            Externalized Parameters {type === 'INTEGRATION_FLOW' ? `${configurations.length}개 · 문제 ${problemCount(r)}건` : '해당 없음'}
           </p>
         )}
         {expanded && (
@@ -87,7 +93,9 @@ export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
             )}
             <div className="min-w-0">
               <h5 className="mb-1.5 text-xs font-semibold text-ink-secondary">Externalized Parameters</h5>
-              {configurations.length === 0 && !onlyProblems ? (
+              {type !== 'INTEGRATION_FLOW' ? (
+                <p className="text-sm text-ink-secondary">해당 없음</p>
+              ) : configurations.length === 0 && !onlyProblems ? (
                 <p className="text-sm text-ink-secondary">Externalized Parameters 없음</p>
               ) : rows.length === 0 ? (
                 <p className="text-sm text-ink-secondary">문제 항목 없음</p>
