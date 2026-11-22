@@ -11,18 +11,28 @@ export function useActiveJob() {
   const [job, setJob] = useState<ActiveJob | null>();
   useEffect(() => {
     let stopped = false;
-    let previousId: string | undefined;
+    const runningIds = new Set<string>();
+    const pendingLookups = new Set<string>();
     let timer: ReturnType<typeof setTimeout>;
+    async function checkMissingJob(id: string) {
+      // 조회 중 띠에 같은 ID가 다시 보이면 그 관찰은 다음 조회까지 남긴다.
+      runningIds.delete(id);
+      pendingLookups.add(id);
+      const detail = await getTransportJob(id).catch(() => undefined);
+      pendingLookups.delete(id);
+      if (stopped || !detail) return;
+      if (detail.status === 'RUNNING') runningIds.add(id);
+      else noticeJobFinished(detail);
+    }
+
     async function poll() {
       const active = await getActiveTransportJob().catch(() => undefined);
       if (stopped) return;
       setJob(active ?? null);
-      if (previousId && previousId !== active?.jobId) {
-        void getTransportJob(previousId).then(job => {
-          if (!stopped) noticeJobFinished(job);
-        }, () => undefined);
+      if (active) runningIds.add(active.jobId);
+      for (const id of runningIds) {
+        if (id !== active?.jobId && !pendingLookups.has(id)) void checkMissingJob(id);
       }
-      previousId = active?.jobId;
       timer = setTimeout(poll, 2000);
     }
     void poll();
