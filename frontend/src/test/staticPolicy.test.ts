@@ -45,8 +45,11 @@ describe('소스 정적 정책', () => {
     expect(offenders(new RegExp('VITE' + '_[A-Z]'))).toEqual([]);
   });
 
-  it('REQ-012 AC-3: localStorage/sessionStorage를 쓰지 않는다', () => {
-    expect(offenders(new RegExp('local' + 'Storage'))).toEqual([]);
+  // 20261122-completion-notice(사람 결정): 완료 알림 켬 여부(REQ-1103)만 이 브라우저에 둔다. 그 모듈 한 파일만 예외다.
+  // 이관 결과·이력은 여전히 브라우저 저장소에 두지 않는다.
+  const NOTICE = resolve(SRC, 'features/notice/completionNotice.ts');
+  it('REQ-012 AC-3: localStorage/sessionStorage를 쓰지 않는다(완료 알림 설정 모듈 한 파일 예외)', () => {
+    expect(offenders(new RegExp('local' + 'Storage')).filter((p) => resolve(p) !== NOTICE)).toEqual([]);
     expect(offenders(new RegExp('session' + 'Storage'))).toEqual([]);
   });
 });
