@@ -176,6 +176,21 @@ describe('REQ-1101·1102 진행 중 띠로 본 실제 이관', () => {
     await wait(300);
     expect(document.title).toBe(TITLE);
   }, 10000);
+
+  // 리뷰 1차 지적: active 조회가 잠깐 실패해 띠가 사라졌을 때 작업이 아직 진행 중이면, 그 작업을 계속 진행 중으로 본다.
+  it('REQ-1101: active 조회가 잠깐 실패한 사이 작업이 아직 진행 중이었으면, 다음 조회에서 띠가 사라질 때 다시 읽어 끝남을 알린다', async () => {
+    const fn = mockApi(baseRoutes({
+      'GET /transport/jobs/active': sequence(active('job-t'), () => json({ error: 'X', message: 'x' }, 500), noContent),
+      'GET /transport/jobs/job-t': sequence(() => json(job('job-t', 'RUNNING')), () => json(job('job-t', 'COMPLETED'))),
+    }));
+    renderAt('#/dashboard');
+    await screen.findByRole('status', { name: /실제 이관 진행 중/ }, { timeout: 3000 });
+    setVisibility('hidden');
+    await waitFor(() => expect(lookups(fn, 'job-t')).toBe(1), { timeout: 5000 });
+    expect(document.title).toBe(TITLE);
+    await waitFor(() => expect(document.title).toBe(`(완료) ${TITLE}`), { timeout: 5000 });
+    expect(lookups(fn, 'job-t')).toBe(2);
+  }, 15000);
 });
 
 describe('REQ-1101·1102 완료 화면으로 본 실제 이관', () => {
