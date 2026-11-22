@@ -87,7 +87,7 @@ describe('REQ-1101·1102 진행 중 띠로 본 실제 이관', () => {
     ['건너뜀이 있으면', 'COMPLETED', { total: 2, succeeded: 1, failed: 0, skipped: 1 }],
     ['취소됨이면', 'CANCELLED', { total: 2, succeeded: 1, failed: 0 }],
     ['중단됨이면', 'INTERRUPTED', { total: 2, succeeded: 1, failed: 0 }],
-  ] as const)('REQ-1102: %s 제목 앞 표시는 "(확인 필요) "다', async (_label, status, summary) => {
+  ] as [string, string, Summary][])('REQ-1102: %s 제목 앞 표시는 "(확인 필요) "다', async (_label, status, summary) => {
     const id = `job-c-${status}-${summary.failed}-${summary.skipped ?? 0}`;
     mockApi(baseRoutes({
       'GET /transport/jobs/active': sequence(active(id), noContent),
