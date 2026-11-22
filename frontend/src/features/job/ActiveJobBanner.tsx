@@ -1,8 +1,9 @@
 import { createContext, useEffect, useState } from 'react';
-import { getActiveTransportJob } from '../../api/client';
+import { getActiveTransportJob, getTransportJob } from '../../api/client';
 import { JOB_ALREADY_RUNNING } from '../../api/errors';
 import type { ActiveJob } from '../../api/types';
 import { jobHref } from '../../app/routes';
+import { noticeJobFinished } from '../notice/completionNotice';
 
 export const ActiveJobContext = createContext<ActiveJob | null | undefined>(undefined);
 
@@ -10,11 +11,18 @@ export function useActiveJob() {
   const [job, setJob] = useState<ActiveJob | null>();
   useEffect(() => {
     let stopped = false;
+    let previousId: string | undefined;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
       const active = await getActiveTransportJob().catch(() => undefined);
       if (stopped) return;
       setJob(active ?? null);
+      if (previousId && previousId !== active?.jobId) {
+        void getTransportJob(previousId).then(job => {
+          if (!stopped) noticeJobFinished(job);
+        }, () => undefined);
+      }
+      previousId = active?.jobId;
       timer = setTimeout(poll, 2000);
     }
     void poll();
