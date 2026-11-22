@@ -6,8 +6,10 @@ import { ErrorAlert } from '../../components/ErrorAlert';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { Switch } from '../../components/ui/Switch';
 import { TextInput } from '../../components/ui/TextInput';
 import { useRemote } from '../../lib/useRemote';
+import { readBrowserNoticeSetting, setBrowserNoticeEnabled } from '../notice/completionNotice';
 
 const fields = [
   ['previewConcurrency', '미리보기 동시 처리 개수'],
@@ -73,6 +75,34 @@ function SettingsForm({ initial }: { initial: Settings }) {
   );
 }
 
+function CompletionNoticeSetting() {
+  const [setting, setSetting] = useState(readBrowserNoticeSetting);
+  const [pending, setPending] = useState(false);
+
+  async function change(enabled: boolean) {
+    setPending(true);
+    try {
+      setSetting(await setBrowserNoticeEnabled(enabled));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Card role="region" aria-labelledby="completion-notice-heading" className="mt-5 max-w-lg"
+      title={<span id="completion-notice-heading">완료 알림</span>} titleAs="h2">
+      <Switch label="브라우저 알림"
+        description="이관이 끝났을 때 이 탭을 보고 있지 않으면 브라우저 알림을 띄웁니다. 이 브라우저에만 저장됩니다"
+        checked={setting === 'on'} disabled={pending || setting === 'unsupported'}
+        onChange={event => void change(event.target.checked)} />
+      {setting === 'blocked' && (
+        <p role="alert" className="mt-2 text-sm text-danger-fg">브라우저에서 알림이 차단되어 있습니다. 브라우저 사이트 설정에서 허용한 뒤 다시 켜세요</p>
+      )}
+      {setting === 'unsupported' && <p className="mt-2 text-sm text-ink-secondary">이 브라우저는 알림을 지원하지 않습니다</p>}
+    </Card>
+  );
+}
+
 export function SettingsScreen() {
   const { state, retry } = useRemote(getSettings, 'settings');
   return (
@@ -81,6 +111,7 @@ export function SettingsScreen() {
       {state.status === 'loading' && <p role="status">불러오는 중</p>}
       {state.status === 'error' && <ErrorAlert error={state.error} onRetry={retry} />}
       {state.status === 'ok' && <SettingsForm initial={state.data} />}
+      <CompletionNoticeSetting />
     </section>
   );
 }
