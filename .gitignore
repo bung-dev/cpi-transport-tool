@@ -205,3 +205,6 @@ changes/
 e2e/node_modules/
 e2e/.artifacts/
 e2e/test-results/
+
+# 조사 문서는 저장소에 올리지 않는다(로컬 보관)
+docs/research/
