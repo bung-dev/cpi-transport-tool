@@ -59,7 +59,7 @@ public class EncryptedTenantStore {
         } catch (NoSuchFileException missing) {
             return new Snapshot(StoreStatus.OK, List.of());
         } catch (IOException | GeneralSecurityException | RuntimeException ignored) {
-            // AI-NOTE: discard parser/crypto causes, which can expose credentials (REQ-305 AC-3).
+            // discard parser/crypto causes, which can expose credentials (REQ-305 AC-3).
             return unreadable();
         }
     }

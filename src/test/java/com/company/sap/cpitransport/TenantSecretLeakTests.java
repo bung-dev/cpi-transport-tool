@@ -70,7 +70,7 @@ class TenantSecretLeakTests {
     static void properties(DynamicPropertyRegistry values) {
         values.add("cpi.tenants.store-file", () -> directory.resolve("tenants.enc").toString());
         values.add("cpi.transport.history.file", () -> directory.resolve("history.jsonl").toString());
-        // AI-NOTE: isolate both initial tenants from the caller's configuration (REQ-305 AC-3).
+        // isolate both initial tenants from the caller's configuration (REQ-305 AC-3).
         for (String env : List.of("dev", "prd")) {
             for (String field : List.of("api-url", "token-url", "client-id", "client-secret")) {
                 values.add("cpi.environments." + env + "." + field, () -> "");
@@ -227,7 +227,7 @@ class TenantSecretLeakTests {
         request("GET", "/packages?tenantId=" + sourceId, null, 502);
         noLeaks(output);
 
-        // AI-NOTE: a different localhost spelling is a different host; never follow it with a token (REQ-305 AC-3).
+        // a different localhost spelling is a different host; never follow it with a token (REQ-305 AC-3).
         String next = "http://127.0.0.1:" + stubs.dev().port() + "/must-not-follow?value=" + sourceSecret;
         stubs.dev().stubFor(get(urlEqualTo("/api/v1/IntegrationPackages")).atPriority(0)
                 .willReturn(okJson(JSON.writeValueAsString(Map.of("d", Map.of("results", List.of(), "__next", next))))));

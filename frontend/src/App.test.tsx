@@ -102,7 +102,7 @@ describe('App', () => {
     for (const c of ['max-w-[1200px]', 'mx-auto', 'px-4', 'md:px-6']) {
       expect(inner.className, c).toContain(c);
     }
-    // 여백을 main 바깥 래퍼에 두지 않는다(내용 폭 1200 구조 금지, D-025)
+    // 여백을 main 바깥 래퍼에 두지 않는다(내용 폭 1200 구조 금지)
     expect((main.parentElement as HTMLElement).className).not.toContain('max-w-');
   });
 

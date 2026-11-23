@@ -44,12 +44,12 @@ export function ConfirmDialog({ previewId, packages, targetTenantId, artifactCou
 
   useEffect(() => {
     // 열기 전에 포커스가 있던 요소(이관 실행 버튼)를 기억했다가 닫힐 때 돌려준다.
-    // AI-NOTE: 포커스 복귀는 preventScroll로 한다. 닫히는 순간 결과가 나타나므로, 복귀가 화면을 스크롤하면 결과 영역의 시작이 뷰포트 밖으로 밀린다 (근거: REQ-105 AC-7, REQ-107 AC-5, D-018 ③)
+    // 포커스 복귀는 preventScroll로 한다. 닫히는 순간 결과가 나타나므로, 복귀가 화면을 스크롤하면 결과 영역의 시작이 뷰포트 밖으로 밀린다
     const opener = document.activeElement as HTMLElement | null;
     cancelRef.current?.focus();
     return () => {
       // 연 버튼이 그대로 있으면 그 버튼으로, 없어졌으면("이 구성으로 실제 이관"으로 열어 실제 이관 결과로 바뀐 경우) 실행 카드의 실행 버튼으로 돌려준다.
-      // 정리 함수는 DOM 갱신 뒤에 돌므로 opener.isConnected가 최종 상태를 말해 준다. 둘 다 스크롤하지 않는다(REQ-107 AC-5, D-018 ③).
+      // 정리 함수는 DOM 갱신 뒤에 돌므로 opener.isConnected가 최종 상태를 말해 준다. 둘 다 스크롤하지 않는다(REQ-107 AC-5).
       const target = opener?.isConnected ? opener : fallbackFocusRef?.current;
       target?.focus({ preventScroll: true });
     };
@@ -81,7 +81,7 @@ export function ConfirmDialog({ previewId, packages, targetTenantId, artifactCou
     }
   }
 
-  // AI-NOTE: 대화상자는 document.body에 포털로 그린다. 처음 이유는 옛 이관 탭의 sticky 실행 카드가 만든 쌓임 맥락 안에서 z-10이 결과 카드 위로 못 올라가던 것이었다. 지금 마법사에도 단계·결과 카드가 쌓임 맥락을 만들 수 있어 포털을 유지한다 (근거: REQ-107 AC-4, ADR-015)
+  // 대화상자는 document.body에 포털로 그린다. 처음 이유는 옛 이관 탭의 sticky 실행 카드가 만든 쌓임 맥락 안에서 z-10이 결과 카드 위로 못 올라가던 것이었다. 지금 마법사에도 단계·결과 카드가 쌓임 맥락을 만들 수 있어 포털을 유지한다
   return createPortal(
     <div className="fixed inset-0 z-10 flex animate-dialog-fade items-center justify-center bg-scrim p-4" onKeyDown={onKeyDown}>
       <div

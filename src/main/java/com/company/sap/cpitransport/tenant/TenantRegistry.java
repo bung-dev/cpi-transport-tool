@@ -119,14 +119,14 @@ public class TenantRegistry {
 
     public TenantView update(String id, Supplier<JsonNode> bodyReader) {
         TenantView view = updateStored(id, bodyReader);
-        // AI-NOTE: publish outside the registry monitor; cache fetches resolve tenants while locked (REQ-301 AC-4).
+        // publish outside the registry monitor; cache fetches resolve tenants while locked (REQ-301 AC-4).
         events.publishEvent(new TenantChangedEvent(id));
         return view;
     }
 
     private synchronized TenantView updateStored(String id, Supplier<JsonNode> bodyReader) {
         StoredTenant previous = mutable(id);
-        // AI-NOTE: defer reading PUT bodies until env/store/id checks (REQ-301 AC-4·AC-6).
+        // defer reading PUT bodies until env/store/id checks (REQ-301 AC-4·AC-6).
         JsonNode body = bodyReader.get();
         object(body);
         if (!body.has("name") && !body.has("serviceKey")) throw new ApiException(Code.INVALID_REQUEST);
@@ -174,7 +174,7 @@ public class TenantRegistry {
     private void persist(List<StoredTenant> next) {
         try { store.write(next); }
         catch (IllegalStateException ignored) {
-            // AI-NOTE: never propagate storage causes or content (REQ-305 AC-3).
+            // never propagate storage causes or content (REQ-305 AC-3).
             StoreStatus observed = store.read().status();
             status = observed == StoreStatus.NOT_CONFIGURED ? observed : StoreStatus.UNREADABLE;
             throw new ApiException(status == StoreStatus.NOT_CONFIGURED

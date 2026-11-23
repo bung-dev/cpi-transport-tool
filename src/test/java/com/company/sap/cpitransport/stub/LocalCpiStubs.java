@@ -284,7 +284,7 @@ public final class LocalCpiStubs {
     private static Map<String, String> parameter(String key, String value, String type) {
         return Map.of("ParameterKey", key, "ParameterValue", value, "DataType", type);
     }
-    // AI-NOTE: XML namespace URIs in fixtures identify BPMN/SAP vocabularies; they are never network targets. (근거: D-041, REQ-015 AC-4, run 20260928-cpi-transport)
+    // XML namespace URIs in fixtures identify BPMN/SAP vocabularies; they are never network targets.
     private static byte[] zip(String id) throws IOException {
         var bytes = new ByteArrayOutputStream();
         try (var out = new ZipOutputStream(bytes)) {

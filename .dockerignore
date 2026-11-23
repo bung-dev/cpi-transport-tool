@@ -1,4 +1,4 @@
-# .git은 커밋을 읽는 데 필요한 파일만 남긴다(Dockerfile 주석 참고, changes/20261120-versioning REQ-005)
+# .git은 커밋을 읽는 데 필요한 파일만 남긴다(Dockerfile 주석 참고)
 .git/*
 !.git/HEAD
 !.git/packed-refs

@@ -27,7 +27,7 @@ interface Props {
   /** 펼침 여부 */
   expanded: boolean;
   onToggle: () => void;
-  /** "문제 항목만 보기"가 켜진 동안: 구성 값 표에 문제 항목 행만 보이고 접기 버튼은 비활성이다(D-018 ②, D-019 ④). */
+  /** "문제 항목만 보기"가 켜진 동안: 구성 값 표에 문제 항목 행만 보이고 접기 버튼은 비활성이다. */
   onlyProblems: boolean;
 }
 
@@ -45,7 +45,7 @@ export function ArtifactCard({ r, expanded, onToggle, onlyProblems }: Props) {
       <div className="flex min-w-0 flex-col gap-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <h4 className="mr-auto min-w-0 font-mono text-sm font-semibold break-all">
-            {/* AI-NOTE: 접기·펼치기는 네이티브 button + aria-expanded다(Enter/Space는 브라우저가 처리). 전역 :focus-visible 외곽선을 지우지 않는다 (근거: REQ-105 AC-3, REQ-101 AC-7, wiki/decisions/ADR-012) */}
+            {/* 접기·펼치기는 네이티브 button + aria-expanded다(Enter/Space는 브라우저가 처리). 전역 :focus-visible 외곽선을 지우지 않는다 */}
             <button
               type="button"
               aria-expanded={expanded}

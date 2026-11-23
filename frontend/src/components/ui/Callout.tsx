@@ -3,7 +3,7 @@ import { AlertCircleIcon, InfoIcon, WarningIcon } from './icons';
 
 export type CalloutTone = 'danger' | 'warning' | 'info';
 
-// AI-NOTE: 색조별 클래스는 완성된 문자열로 적는다(조립 금지). 근거: wiki/decisions/ADR-010
+// 색조별 클래스는 완성된 문자열로 적는다(조립 금지).
 const TONES: Record<CalloutTone, { box: string; body: string; icon: ReactNode }> = {
   danger: { box: 'bg-danger-bg text-danger-fg', body: 'text-ink', icon: <AlertCircleIcon className="mt-0.5" /> },
   warning: { box: 'bg-warning-bg text-warning-fg', body: 'text-warning-fg', icon: <WarningIcon className="mt-0.5" /> },

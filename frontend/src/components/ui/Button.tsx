@@ -4,7 +4,7 @@ import { Spinner } from './Spinner';
 type Variant = 'primary' | 'secondary' | 'ghost';
 type Size = 'md' | 'sm';
 
-// AI-NOTE: 클래스는 완성된 문자열로만 적는다. Tailwind는 소스에 그대로 적힌 클래스만 만든다 (근거: wiki/decisions/ADR-010, REQ-103 AC-1)
+// 클래스는 완성된 문자열로만 적는다. Tailwind는 소스에 그대로 적힌 클래스만 만든다
 // hover·누름은 enabled: 로 걸어 비활성에서는 색이 바뀌지 않게 한다. 전환은 한 값(150ms)으로 통일한다 (REQ-101 AC-6).
 const base =
   'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium cursor-pointer transition duration-150 disabled:cursor-not-allowed disabled:shadow-none';

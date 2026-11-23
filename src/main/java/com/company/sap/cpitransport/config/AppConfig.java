@@ -20,13 +20,13 @@ public class AppConfig {
     @Bean
     public EncryptedTenantStore encryptedTenantStore(TenantProperties properties,
                                                     TenantStoreKeySource keySource, ObjectProvider<ObjectMapper> json) {
-        // AI-NOTE: binding-only contexts have no Jackson bean; retain that compatibility (REQ-301 AC-7).
+        // binding-only contexts have no Jackson bean; retain that compatibility (REQ-301 AC-7).
         return new EncryptedTenantStore(properties.storeFile(), keySource, json.getIfAvailable(ObjectMapper::new));
     }
 
     @Bean
     public TenantStoreKeySource tenantStoreKeySource() {
-        // AI-NOTE: REQ-301 AC-5 requires an environment-only key, never a Spring property.
+        // REQ-301 AC-5 requires an environment-only key, never a Spring property.
         return () -> Optional.ofNullable(System.getenv("CPI_TENANT_STORE_KEY"));
     }
 

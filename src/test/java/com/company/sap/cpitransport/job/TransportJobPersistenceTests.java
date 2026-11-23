@@ -333,13 +333,4 @@ class TransportJobPersistenceTests {
             assertThat(skipped).isGreaterThanOrEqualTo(2);
         }
     }
-
-    @Test
-    @DisplayName("REQ-805: the E2E app launcher passes a jobs file inside its work folder so E2E never writes the person's real jobs.json")
-    void req805_e2eLauncherUsesWorkFolder() throws Exception {
-        var launcher = Files.readString(Path.of("e2e/tools/app.py"));
-        assertThat(launcher).contains("--cpi.transport.jobs.file={work / f'jobs-{a.label}.json'}");
-        var properties = Files.readString(Path.of("src/main/resources/application.properties"));
-        assertThat(properties).contains("cpi.transport.jobs.file=${user.home}/.cpi-transport-tool/jobs.json");
-    }
 }

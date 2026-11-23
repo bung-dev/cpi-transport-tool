@@ -110,12 +110,12 @@ export function useWizard(visible = true, activeJobId?: string) {
   const { realDisabled, notice } = useReadOnlyState();
   const [stored, setData] = useState(() => initial(sourceTenantId, targetTenantId));
   let data = stored;
-  // AI-NOTE: 같은 틱의 연속 클릭은 상태 갱신(busy)만으로 막지 못한다. 동기 플래그로 중복 전송을 막는다 (근거: REQ-005 AC-4, REQ-423)
+  // 같은 틱의 연속 클릭은 상태 갱신(busy)만으로 막지 못한다. 동기 플래그로 중복 전송을 막는다
   const inFlight = useRef(false);
   // 선택·경로가 바뀌면 세대를 올려 진행 중이던 이전 요청의 응답을 버린다(REQ-308 AC-5).
   const generation = useRef(0);
 
-  // AI-NOTE: 팔레트·상태 칩 등 어디서든 TenantContext의 원본·대상이 바뀌면 같은 렌더에서 선택·결과·템플릿 연결을 비운다. 템플릿 적용은 route를 함께 바꿔 여기에 걸리지 않는다 (근거: REQ-420, REQ-308 AC-5)
+  // 팔레트·상태 칩 등 어디서든 TenantContext의 원본·대상이 바뀌면 같은 렌더에서 선택·결과·템플릿 연결을 비운다. 템플릿 적용은 route를 함께 바꿔 여기에 걸리지 않는다
   if (data.route.source !== sourceTenantId || data.route.target !== targetTenantId) {
     generation.current += 1;
     inFlight.current = false;
@@ -125,7 +125,7 @@ export function useWizard(visible = true, activeJobId?: string) {
     };
     setData(data);
   }
-  // AI-NOTE: 읽기 전용(켜짐·모름·조회 실패) 또는 대상 연결 확인 실패면 같은 렌더에서 확인창을 닫는다 (근거: REQ-423, REQ-430, REQ-302 AC-5)
+  // 읽기 전용(켜짐·모름·조회 실패) 또는 대상 연결 확인 실패면 같은 렌더에서 확인창을 닫는다
   if (realDisabled && data.confirm) {
     data = { ...data, confirm: null };
     setData(data);

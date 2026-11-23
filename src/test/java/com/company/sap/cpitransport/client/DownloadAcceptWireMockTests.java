@@ -39,7 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 // REQ-311: 번들 다운로드(`…/$value`) 요청은 명시적 Accept 값을, 나머지 CPI GET은 application/json을 보낸다.
 class DownloadAcceptWireMockTests {
-    // AI-NOTE: 이 값은 명세 REQ-311 AC-1이 정한 문자열이다. MediaType 목록 렌더링 결과와 달라질 수 있어 문자열로 고정한다.
+    // 이 값은 명세 REQ-311 AC-1이 정한 문자열이다. MediaType 목록 렌더링 결과와 달라질 수 있어 문자열로 고정한다.
     private static final String ZIP_ACCEPT = "application/zip, application/octet-stream, */*";
     private static final String ART = "/api/v1/IntegrationDesigntimeArtifacts(Id='IF_Order',Version='active')";
     private static final JsonMapper JSON = JsonMapper.builder().build();

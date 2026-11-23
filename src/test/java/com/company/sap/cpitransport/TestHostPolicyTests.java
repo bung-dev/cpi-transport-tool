@@ -16,9 +16,9 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class TestHostPolicyTests {
-    // AI-NOTE: REQ-015 AC-4 forbids connections, not identifier URIs. These exact BPMN namespace and
+    // REQ-015 AC-4 forbids connections, not identifier URIs. These exact BPMN namespace and
     // JAXP feature identifiers are never fetched; SecureXml disables external DTD/entity access.
-    // Domain-wide exemptions are forbidden. (근거: D-041, REQ-015 AC-4, run 20260928-cpi-transport)
+    // Domain-wide exemptions are forbidden. (근거: REQ-015 AC-4)
     private static final Set<String> IDENTIFIER_URIS = Set.of(
             "http://www.omg.org/spec/BPMN/20100524/MODEL",
             "http://apache.org/xml/features/disallow-doctype-decl");

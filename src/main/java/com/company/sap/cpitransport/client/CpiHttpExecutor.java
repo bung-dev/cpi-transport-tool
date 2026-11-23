@@ -124,7 +124,7 @@ public class CpiHttpExecutor {
             ResponseEntity<byte[]> response;
             try {
                 String base = connection.apiUrl().replaceAll("/+$", "");
-                // AI-NOTE: A next-page root path may be outside apiUrl's path prefix (REQ-304 AC-1).
+                // A next-page root path may be outside apiUrl's path prefix (REQ-304 AC-1).
                 if (originRelative) {
                     URI api = URI.create(base);
                     base = api.getScheme() + "://" + api.getRawAuthority();
@@ -132,9 +132,9 @@ public class CpiHttpExecutor {
                 var request = client.method(method).uri(URI.create(base + path))
                         .headers(headers -> {
                             headers.setBearerAuth(bearer);
-                            // AI-NOTE: 번들 다운로드(GET .../$value)는 acceptJson 값과 상관없이 아래 문자열을 그대로 보낸다.
+                            // 번들 다운로드(GET .../$value)는 acceptJson 값과 상관없이 아래 문자열을 그대로 보낸다.
                             // MediaType 목록 렌더링에 맡기면 값이 달라질 수 있다. 오류 상세(executeOnce)는 이 경로가 아니다.
-                            // (근거: REQ-311 AC-1, run 20261020-defect-fix)
+                            // (근거: REQ-311 AC-1)
                             if (!originRelative && HttpMethod.GET.equals(method)
                                     && path.split("\\?", 2)[0].endsWith("/$value")) {
                                 headers.set(HttpHeaders.ACCEPT, DOWNLOAD_ACCEPT);
@@ -156,7 +156,7 @@ public class CpiHttpExecutor {
                 delay = nextDelay(delay, transientFailures);
                 continue;
             } catch (RuntimeException failure) {
-                // AI-NOTE: URI/client diagnostics can contain credentials; never retain their cause. (근거: REQ-002 AC-6, run 20260928-cpi-transport)
+                // URI/client diagnostics can contain credentials; never retain their cause.
                 throw new CpiCallException(null, "CPI request failed");
             }
             int status = response.getStatusCode().value();
@@ -174,13 +174,13 @@ public class CpiHttpExecutor {
             }
             if ((status == 429 || status >= 500 && status <= 599)
                     && ++transientFailures < maxAttempts) {
-                // AI-NOTE: Auth/CSRF replays do not reset the transient-failure budget. (근거: REQ-003 AC-3, run 20260928-cpi-transport)
+                // Auth/CSRF replays do not reset the transient-failure budget.
                 pause(delay);
                 delay = nextDelay(delay, transientFailures);
                 continue;
             }
-            // AI-NOTE: 빈 본문 여부는 boolean으로만 넘기고 본문은 남기지 않는다(REQ-305 AC-3). CSRF 토큰 조회(fetch)는
-            // 자원 요청의 응답이 아니므로 false다(REQ-315 AC-2: 갱신 PUT 응답일 때만 락 안내, run 20261020-defect-fix).
+            // 빈 본문 여부는 boolean으로만 넘기고 본문은 남기지 않는다(REQ-305 AC-3). CSRF 토큰 조회(fetch)는
+            // 자원 요청의 응답이 아니므로 false다(REQ-315 AC-2: 갱신 PUT 응답일 때만 락 안내).
             boolean emptyBody = !fetch && (response.getBody() == null
                     || new String(response.getBody(), StandardCharsets.UTF_8).isBlank());
             throw new CpiCallException(status, summarize(response.getBody(), secrets, response.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE)),
@@ -188,7 +188,7 @@ public class CpiHttpExecutor {
         }
     }
 
-    // AI-NOTE: ErrorInformation must never use send's retry/auth replay path (REQ-309 AC-1).
+    // ErrorInformation must never use send's retry/auth replay path (REQ-309 AC-1).
     public OnceResponse executeOnce(String tenantId, String path) {
         if (!path.startsWith("/") || path.startsWith("//")) {
             throw new IllegalArgumentException("CPI path must be relative to the configured API");
@@ -203,7 +203,7 @@ public class CpiHttpExecutor {
                     .exchange((req, res) -> new OnceResponse(res.getStatusCode().value(),
                             res.getBody().readAllBytes(), secrets, connection.apiUrl(), connection.tokenUrl()));
         } catch (RuntimeException failure) {
-            // AI-NOTE: Discard diagnostics and causes, which may echo secrets (REQ-309 AC-3 / REQ-305 AC-3).
+            // Discard diagnostics and causes, which may echo secrets (REQ-309 AC-3 / REQ-305 AC-3).
             return new OnceResponse(0, null, List.of(), null, null);
         }
     }
@@ -272,14 +272,14 @@ public class CpiHttpExecutor {
             try {
                 ERROR_JSON.readTree(summary);
             } catch (RuntimeException failure) {
-                // AI-NOTE: Retain legacy untyped plain-text summaries, but never echo markup or
+                // Retain legacy untyped plain-text summaries, but never echo markup or
                 // a declared non-JSON response/parser diagnostic (REQ-304 AC-4; legacy REQ-002 AC-6).
                 if (contentType != null || summary.replace("\uFEFF", "").stripLeading().startsWith("<")) {
                     return "Invalid CPI OData response";
                 }
             }
         }
-        // AI-NOTE: Sanitize before truncation so a secret crossing character 200 cannot leak a prefix. (근거: REQ-002 AC-6, run 20260928-cpi-transport)
+        // Sanitize before truncation so a secret crossing character 200 cannot leak a prefix.
         summary = maskAuthentication(maskSecrets(summary, secrets)).replaceAll("[\\r\\n\\t]", " ");
         return summary.isBlank() ? "CPI request failed" : summary.substring(0, Math.min(200, summary.length()));
     }

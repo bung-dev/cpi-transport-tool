@@ -1,6 +1,6 @@
 import { useId, type InputHTMLAttributes, type ReactNode } from 'react';
 
-// AI-NOTE: role="switch"인 네이티브 checkbox를 appearance-none으로 그린다(트랙 36×20px, 손잡이는 after). 전역 :focus-visible 외곽선이 트랙에 그대로 보인다 (근거: REQ-103 AC-2, REQ-101 AC-7, wiki/decisions/ADR-012)
+// role="switch"인 네이티브 checkbox를 appearance-none으로 그린다(트랙 36×20px, 손잡이는 after). 전역 :focus-visible 외곽선이 트랙에 그대로 보인다
 const CONTROL_CLASS =
   'relative h-5 w-9 shrink-0 appearance-none rounded-full bg-control-border cursor-pointer transition duration-150 checked:bg-primary disabled:cursor-not-allowed disabled:opacity-50 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-canvas after:shadow-xs after:transition-transform after:duration-150 checked:after:translate-x-4';
 

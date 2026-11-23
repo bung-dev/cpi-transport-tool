@@ -8,7 +8,7 @@ interface Props {
   onChange: (ids: string[]) => void;
 }
 
-// AI-NOTE: 한 열 grid. 행 하나만 tabindex=0(로빙)이라 표의 Tab 진입점은 하나이고, 행 안에는 포커스 가능한 요소를 두지 않는다. 선택은 aria-selected와 보이는 ✓ 표시로 함께 나타낸다(색만으로 구분하지 않음) (근거: REQ-422, ADR-012, REQ-108 AC-3)
+// 한 열 grid. 행 하나만 tabindex=0(로빙)이라 표의 Tab 진입점은 하나이고, 행 안에는 포커스 가능한 요소를 두지 않는다. 선택은 aria-selected와 보이는 ✓ 표시로 함께 나타낸다(색만으로 구분하지 않음)
 export function ArtifactGrid({ artifacts, selectedIds, onChange }: Props) {
   const [focusIndex, setFocusIndex] = useState(0);
   const [anchor, setAnchor] = useState(0);

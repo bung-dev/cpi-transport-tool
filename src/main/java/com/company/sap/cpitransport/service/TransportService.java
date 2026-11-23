@@ -430,12 +430,12 @@ public class TransportService {
             } else {
                 grade = callFailureGrade(failure);
             }
-            // AI-NOTE: CPI bodies can echo unknown sensitive values; use a categorical summary. (근거: REQ-012 AC-3, run 20260928-cpi-transport)
+            // CPI bodies can echo unknown sensitive values; use a categorical summary.
             // REQ-309 permits only masked ErrorInformation in ArtifactError.detail; other failures remain categorical.
             String detail = failureDescription(failure);
-            // AI-NOTE: 갱신 PUT의 "400, 본문 없음"은 직전 run에서 편집 락 때 한 번 관찰한 형태일 뿐 락만의 신호가 아니다.
+            // 갱신 PUT의 "400, 본문 없음"은 직전 run에서 편집 락 때 한 번 관찰한 형태일 뿐 락만의 신호가 아니다.
             // 그래서 락을 감지·해제하지 않고 안내만 붙인다. 생성 POST·Configurations·DEPLOY·본문 있는 400에는 붙이지 않는다.
-            // (근거: REQ-315 AC-1·AC-2, 01_spec.md B2, run 20261020-defect-fix)
+            // (근거: REQ-315 AC-1·AC-2)
             if (stage == Stage.UPLOAD && exists && failure instanceof CpiCallException call
                     && Integer.valueOf(400).equals(call.httpStatus()) && call.hasEmptyBody()) {
                 detail += ". " + LOCK_HINT;

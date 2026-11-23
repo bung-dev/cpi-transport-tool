@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.*;
 /**
  * 탐색용(spike) 테스트: 패키지 안 iFlow 외 오브젝트(스크립트 컬렉션, 밸류 매핑, 메시지 매핑)와 패키지 통째 내려받기·가져오기를
  * 기존 CpiHttpExecutor로 부를 수 있는지 본다. 경로·본문 모양은 SAP 도움말(Integration Content)과 공개 도구(FlashPipe)를 따랐고
- * 값은 더미다. 실제 테넌트 동작을 증명하지 않는다(docs/research/package-object-types.md 참고).
+ * 값은 더미다. 실제 테넌트 동작을 증명하지 않는다.
  */
 class PackageObjectTypesSpikeTests {
     private static final String ROOT = "/cpi/api/v1";
