@@ -30,7 +30,7 @@ public class PackageQueryService {
                     .filter(p -> p.mode() == null || "EDIT_ALLOWED".equals(p.mode()))
                     .map(p -> new ArtifactSummary(p.id(), p.name(), p.version())).toList();
         } catch (CpiCallException failure) {
-            // AI-NOTE: Spring logs handler arguments/exceptions at TRACE/DEBUG. Upstream summaries
+            // Spring logs handler arguments/exceptions at TRACE/DEBUG. Upstream summaries
             // can contain unknown secrets; discard the summary and cause before MVC (REQ-305 AC-3).
             throw new ApiException(Code.CPI_UNAVAILABLE);
         }
@@ -61,7 +61,7 @@ public class PackageQueryService {
                     && !failure.isTokenStageFailure()) {
                 throw new ApiException(Code.PACKAGE_NOT_FOUND);
             }
-            // AI-NOTE: keep upstream response bodies out of Spring exception logs (REQ-305 AC-3).
+            // keep upstream response bodies out of Spring exception logs (REQ-305 AC-3).
             throw new ApiException(Code.CPI_UNAVAILABLE);
         }
     }

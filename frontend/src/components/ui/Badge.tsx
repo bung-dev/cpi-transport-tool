@@ -1,7 +1,7 @@
 import type { HTMLAttributes } from 'react';
 import type { StatusTone } from '../../design/statusBadges';
 
-// AI-NOTE: Tailwind는 소스에 완성된 문자열로 적힌 클래스만 만든다. `bg-${tone}-bg`처럼 조립하지 않고 상태별 클래스 전체를 적는다 (근거: wiki/decisions/ADR-010, REQ-101 AC-1)
+// Tailwind는 소스에 완성된 문자열로 적힌 클래스만 만든다. `bg-${tone}-bg`처럼 조립하지 않고 상태별 클래스 전체를 적는다
 const TONE_CLASSES: Record<StatusTone, { badge: string; dot: string }> = {
   success: { badge: 'bg-success-bg text-success-fg', dot: 'bg-success-fg' },
   warning: { badge: 'bg-warning-bg text-warning-fg', dot: 'bg-warning-fg' },

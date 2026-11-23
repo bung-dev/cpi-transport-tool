@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.*;
 /**
  * 탐색용(spike) 테스트: cTMS/Content Agent가 쓰는 Cloud Integration 경로
  * {@code <oauth.url>/api/1.0/transportmodule/Transport}를 기존 CpiHttpExecutor로 부를 수 있는지만 본다.
- * 이 경로의 요청·응답 형식은 SAP가 공개하지 않았다(docs/research/transport-module-api.md 참고).
+ * 이 경로의 요청·응답 형식은 SAP가 공개하지 않았다.
  * 스텁의 본문·상태는 가정이며, 실제 테넌트 동작을 증명하지 않는다.
  */
 class TransportModuleApiSpikeTests {

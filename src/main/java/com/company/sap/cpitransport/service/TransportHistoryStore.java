@@ -18,7 +18,7 @@ import tools.jackson.databind.SerializationFeature;
 @Service
 public class TransportHistoryStore {
     private static final Logger log = LoggerFactory.getLogger(TransportHistoryStore.class);
-    // AI-NOTE: A JVM-wide lock also covers multiple store instances and path aliases. (근거: REQ-011 AC-5, run 20260928-cpi-transport)
+    // A JVM-wide lock also covers multiple store instances and path aliases.
     private static final ReentrantLock LOCK = new ReentrantLock();
     private final Path file;
     private final ObjectMapper json;

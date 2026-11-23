@@ -19,7 +19,7 @@ interface ListProps {
 }
 
 // REQ-102 AC-2: 세그먼트 컨트롤 모양. 컨테이너에 overflow-hidden을 두지 않아 포커스 외곽선이 잘리지 않는다(REQ-101 AC-7).
-// AI-NOTE: 선택된 탭만 Tab 정지(tabIndex 0)이고 좌우 화살표로 이동한다. 이 키보드 동작은 ADR-012의 결정이다 (근거: REQ-009 AC-2, wiki/decisions/ADR-012)
+// 선택된 탭만 Tab 정지(tabIndex 0)이고 좌우 화살표로 이동한다. 이 키보드 동작은 ADR-012의 결정이다
 export function TabList({ idBase, tabs, activeId, onChange, label = '화면' }: ListProps) {
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
 

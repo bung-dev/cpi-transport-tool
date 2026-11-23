@@ -76,7 +76,7 @@ public class OAuthTokenProvider {
 
     private AccessToken requestToken(String environment) {
         var connection = tenants.find(environment).orElseThrow(() -> new ApiException(Code.TENANT_NOT_FOUND)).connection();
-        // AI-NOTE: Request-start time conservatively avoids extending validity by network latency. (근거: REQ-002 AC-4, run 20260928-cpi-transport)
+        // Request-start time conservatively avoids extending validity by network latency.
         var issuedAt = clock.instant();
         try {
             JsonNode body = client.post().uri(connection.tokenUrl())
@@ -100,7 +100,7 @@ public class OAuthTokenProvider {
         } catch (TokenRequestException | ResourceAccessException failure) {
             throw failure;
         } catch (RuntimeException failure) {
-            // AI-NOTE: Parser/URI errors may contain secrets; discard their messages and causes. (근거: REQ-002 AC-6, run 20260928-cpi-transport)
+            // Parser/URI errors may contain secrets; discard their messages and causes.
             throw new TokenRequestException(null);
         }
     }

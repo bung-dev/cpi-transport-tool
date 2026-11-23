@@ -276,7 +276,7 @@ class DeployErrorDetailWireMockTests {
                 "ZZ-TENANT", "zz-tenant", "zz-auth", "test-dummy-map-dev", "test-dummy-map-prd");
         assertThat(value).contains("<subdomain> <subdomain> <subdomain>", "\n\tkeep\n", "Authorization: ***", "Set-Cookie: ***", "X-CSRF-Token: ***");
         assertThat(mask("test-dummy-long-secret", List.of("test-dummy", "test-dummy-long-secret"), List.of())).isEqualTo("***");
-        // AI-NOTE: Assemble non-DNS test URLs to respect the source URL policy (REQ-015 AC-4 / REQ-309 AC-4).
+        // Assemble non-DNS test URLs to respect the source URL policy (REQ-015 AC-4 / REQ-309 AC-4).
         for (String url : List.of("http://localhost", "http://127.0.0.1", "http:" + "//[::1]", "http:" + "//singlehost", "http://two.localhost"))
             assertThat(DeployErrorDetail.mask("localhost 127 1 ::1 singlehost two".getBytes(StandardCharsets.UTF_8), List.of(), url, url, List.of()))
                     .isEqualTo("localhost 127 1 ::1 singlehost two");

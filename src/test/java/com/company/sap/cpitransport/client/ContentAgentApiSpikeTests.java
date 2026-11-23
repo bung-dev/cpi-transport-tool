@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.*;
  * 탐색용(spike) 테스트: SAP Content Agent Service 공개 API(Business Accelerator Hub "contentagentapi" 1.0.1)를
  * 기존 CpiHttpExecutor로 부를 수 있는지 본다. 경로·본문 모양은 Hub OpenAPI 명세를 따랐고 값은 더미다.
  * CAS 호스트(content-agent-engine.cfapps.<region>)를 "테넌트 연결"처럼 등록했다고 가정한다.
- * 실제 서비스 동작을 증명하지 않는다(docs/research/content-agent-api.md 참고).
+ * 실제 서비스 동작을 증명하지 않는다.
  */
 class ContentAgentApiSpikeTests {
     private WireMockServer server;

@@ -208,3 +208,10 @@ e2e/test-results/
 
 # 조사 문서는 저장소에 올리지 않는다(로컬 보관)
 docs/research/
+
+# 저장소에 올리지 않는 로컬 자료(테스트·샘플·문서 산출물)
+e2e/
+samples/
+docs/
+HELP.md
+CHANGELOG.md

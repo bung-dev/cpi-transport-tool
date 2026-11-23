@@ -52,7 +52,7 @@ public class TenantStatusService {
             views = views.stream().filter(t -> t.id().equals(tenantId)).toList();
             if (views.isEmpty()) throw new ApiException(Code.TENANT_NOT_FOUND, 400, "Tenant not found");
         }
-        // AI-NOTE: start all checks before joining to preserve order and parallelism (REQ-303 AC-3).
+        // start all checks before joining to preserve order and parallelism (REQ-303 AC-3).
         var results = views.stream().map(view -> {
             var entry = cache.compute(view.id(), (id, old) -> {
                 if (!refresh && old != null && clock.instant().isBefore(old.started().plusSeconds(60))) return old;
@@ -101,6 +101,6 @@ public class TenantStatusService {
                     });
         } catch (ResourceAccessException ignored) { return Check.UNREACHABLE; }
         catch (RuntimeException ignored) { return Check.ERROR; }
-        // AI-NOTE: discard failure messages, bodies and causes (REQ-305 AC-3).
+        // discard failure messages, bodies and causes (REQ-305 AC-3).
     }
 }

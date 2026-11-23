@@ -42,7 +42,7 @@ export function TenantForm({ tenantId, initialName = '', disabled = false, onSuc
       await onSuccess();
     } catch (e) { setError(toApiError(e)); }
     finally {
-      // AI-NOTE: 성공·실패(요청 전 JSON 검사, 서버 오류, 네트워크 오류, onSuccess 실패) 모두 서비스 키 입력과 파일 선택을 비운다. 이름은 실패 때 유지한다. 키를 고쳐 다시 붙여넣어야 하는 불편은 명세가 받아들인 대가다 (근거: REQ-318 AC-1·AC-2, 직전 REQ-305 AC-3·QA-102)
+      // 성공·실패(요청 전 JSON 검사, 서버 오류, 네트워크 오류, onSuccess 실패) 모두 서비스 키 입력과 파일 선택을 비운다. 이름은 실패 때 유지한다. 키를 고쳐 다시 붙여넣어야 하는 불편은 명세가 받아들인 대가다
       setText('');
       setSelectedFile(null);
       if (fileRef.current) fileRef.current.value = '';

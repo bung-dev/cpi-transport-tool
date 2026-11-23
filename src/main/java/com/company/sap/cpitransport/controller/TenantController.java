@@ -47,7 +47,7 @@ public class TenantController {
         return ResponseEntity.noContent().build();
     }
     private JsonNode body(HttpServletRequest request) {
-        // AI-NOTE: avoid Spring body converters and their TRACE logging (REQ-305 AC-3).
+        // avoid Spring body converters and their TRACE logging (REQ-305 AC-3).
         try {
             byte[] bytes = request.getInputStream().readNBytes(65_537);
             if (bytes.length > 65_536) throw new ApiException(Code.INVALID_REQUEST);

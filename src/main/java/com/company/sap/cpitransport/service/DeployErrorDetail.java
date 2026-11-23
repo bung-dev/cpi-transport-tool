@@ -19,7 +19,7 @@ public final class DeployErrorDetail {
         value = maskSubdomain(value, apiUrl);
         value = maskSubdomain(value, tokenUrl);
         value = CpiHttpExecutor.maskSecrets(value, sensitiveValues);
-        // AI-NOTE: Mask the whole body before code-point truncation (REQ-309 AC-4, D-089).
+        // Mask the whole body before code-point truncation (REQ-309 AC-4).
         return value.codePointCount(0, value.length()) > 4000
                 ? value.substring(0, value.offsetByCodePoints(0, 4000)) + "…(잘림)" : value;
     }

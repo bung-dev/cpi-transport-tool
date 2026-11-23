@@ -53,7 +53,7 @@ function setupApp(historyError = false) {
   return renderAt('#/transport');
 }
 
-// AI-NOTE: 키보드 접근 테스트는 병렬 전체 실행에서 호출마다 setTimeout 양보(delay 기본 0)가 쌓여 느려진다. 동작은 같고 양보만 없애려고 delay: null 인스턴스를 쓴다 (근거: REQ-313 AC-1, run 20261020-defect-fix)
+// 키보드 접근 테스트는 병렬 전체 실행에서 호출마다 setTimeout 양보(delay 기본 0)가 쌓여 느려진다. 동작은 같고 양보만 없애려고 delay: null 인스턴스를 쓴다
 const keyboardUser = () => userEvent.setup({ delay: null });
 type User = ReturnType<typeof keyboardUser>;
 
