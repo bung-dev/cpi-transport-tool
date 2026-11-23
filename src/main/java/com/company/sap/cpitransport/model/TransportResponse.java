@@ -12,7 +12,14 @@ public record TransportResponse(String transportId, List<TransportPackage> packa
         @JsonProperty("jobStatus") @JsonInclude(JsonInclude.Include.NON_NULL) JobStatus recordedJobStatus,
         @JsonInclude(JsonInclude.Include.NON_NULL) List<SkippedItem> skipped,
         @JsonInclude(JsonInclude.Include.NON_NULL) String retryOf) {
-    public record SkippedItem(String packageId, String artifactId) {}
+    public record SkippedItem(String packageId, String artifactId, ArtifactType type) {
+        public SkippedItem(String packageId, String artifactId) {
+            this(packageId, artifactId, ArtifactType.INTEGRATION_FLOW);
+        }
+        public SkippedItem {
+            if (type == null) type = ArtifactType.INTEGRATION_FLOW;
+        }
+    }
 
     public JobStatus jobStatus() {
         return recordedJobStatus == null ? JobStatus.COMPLETED : recordedJobStatus;

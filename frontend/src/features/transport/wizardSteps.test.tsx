@@ -5,7 +5,7 @@ import type { TenantsResponse, TenantStatusResponse, TransportRequest } from '..
 import { ARTIFACTS, PACKAGES, json, mockApi, respondTo } from '../../test/mockFetch';
 import { baseRoutes, renderAt, routeGroup, tpl, type TemplateFixture } from '../../test/appRoutes';
 import {
-  STEP_LABELS, currentStep, findArtifactGrid, postBodies, routeBar, startManual, stepButton, stepButtons, toArtifacts,
+  STEP_LABELS, currentStep, findArtifactGrid, postBodies, routeBar, startManual, stepButton, stepButtons, toArtifacts, NO_TYPES,
 } from '../../test/wizard';
 
 // S3b REQ-420(마법사 단계·경로)와 REQ-421(패키지 단계). 앱 전체를 #/transport로 그려 확인한다.
@@ -224,7 +224,7 @@ describe('REQ-420 템플릿으로 시작', () => {
     await userEvent.click(screen.getByRole('button', { name: '전체 아티팩트로 미리보기' }));
     await screen.findByRole('region', { name: '이관 결과' });
     expect(postBodies(fn)).toEqual([
-      { packages: [{ packageId: 'PkgTransportDemo' }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
+      { packages: [{ packageId: 'PkgTransportDemo', ...NO_TYPES }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
     ]);
   });
 
@@ -322,7 +322,7 @@ describe('REQ-421 패키지 단계', () => {
     expect(await screen.findByRole('region', { name: '이관 결과' })).toBeInTheDocument();
     expect(currentStep()).toBe('미리보기');
     // 전체 아티팩트: 패키지 항목에 artifactIds 키 없이 보낸다
-    expect(postBodies(fn)).toEqual([{ packages: [{ packageId: 'PkgTransportDemo' }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' }]);
+    expect(postBodies(fn)).toEqual([{ packages: [{ packageId: 'PkgTransportDemo', ...NO_TYPES }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' }]);
   });
 
   it('REQ-421: "다음"은 아티팩트 단계로 가서 고른 패키지의 아티팩트를 1회 조회한다', async () => {

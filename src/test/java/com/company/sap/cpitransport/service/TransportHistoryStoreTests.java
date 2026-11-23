@@ -105,7 +105,8 @@ class TransportHistoryStoreTests {
         var line = json.readTree(Files.readAllLines(file()).getFirst());
         assertThat(line).isEqualTo(json.valueToTree(saved));
         assertThat(line.at("/results/0").propertyNames())
-                .containsExactlyInAnyOrder("packageId", "artifactId", "status", "action", "configurations", "deployStatus", "error");
+                // 20261121-package-objects REQ-1003: 이력 결과에 오브젝트 종류(type)가 기록된다.
+                .containsExactlyInAnyOrder("type", "packageId", "artifactId", "status", "action", "configurations", "deployStatus", "error");
         assertThat(line.at("/results/0/configurations/0").propertyNames())
                 .containsExactlyInAnyOrder("key", "value", "dataType", "status");
         assertThat(line.at("/results/0/configurations/0/value").asString()).isEqualTo("dummy-dev-pass-history");

@@ -1,4 +1,6 @@
 // 백엔드 model/*.java의 테넌트 및 이관 응답 계약.
+export type ArtifactType = 'INTEGRATION_FLOW' | 'SCRIPT_COLLECTION' | 'MESSAGE_MAPPING' | 'VALUE_MAPPING';
+
 export interface ArtifactSummary {
   id: string;
   name: string;
@@ -7,7 +9,7 @@ export interface ArtifactSummary {
 
 export type ConfigurationStatus = 'PLANNED' | 'BUNDLED' | 'COPIED' | 'SKIPPED_EMPTY' | 'FAILED';
 export type ArtifactStatus = 'SUCCESS' | 'FAILED';
-export type TransportAction = 'CREATED' | 'UPDATED' | 'NONE';
+export type TransportAction = 'CREATED' | 'UPDATED' | 'REPLACED' | 'NONE';
 export type DeployStatus = 'STARTED' | 'ERROR' | 'TIMEOUT' | 'NOT_REQUESTED' | 'SKIPPED_DRY_RUN';
 
 export interface ConfigurationItem {
@@ -25,6 +27,7 @@ export interface ArtifactError {
 }
 
 export interface ArtifactResult {
+  type?: ArtifactType;
   packageId?: string;
   artifactId: string;
   reusedPreview?: boolean;
@@ -55,7 +58,7 @@ export interface TransportPackage {
 
 export interface TransportResponse {
   jobStatus?: FinishedJobStatus;
-  skipped?: { packageId: string; artifactId: string }[];
+  skipped?: { packageId: string; artifactId: string; type?: ArtifactType }[];
   retryOf?: string;
   sourceTenant?: TenantRef;
   targetTenant?: TenantRef;
@@ -77,6 +80,7 @@ export type FinishedJobStatus = 'COMPLETED' | 'CANCELLED' | 'INTERRUPTED';
 export type JobStage = 'WAITING' | 'DOWNLOAD' | 'CONFIGURATION_READ' | 'TARGET' | 'UPLOAD' | 'DEPLOY' | 'DONE' | 'SKIPPED';
 
 export interface JobItem {
+  type?: ArtifactType;
   packageId: string;
   artifactId: string;
   stage: JobStage;
@@ -113,7 +117,13 @@ export interface TransportRequest {
   previewId?: string;
   sourceTenantId?: string;
   targetTenantId?: string;
-  packages: { packageId: string; artifactIds?: string[] }[];
+  packages: {
+    packageId: string;
+    artifactIds?: string[];
+    scriptCollectionIds?: string[];
+    messageMappingIds?: string[];
+    valueMappingIds?: string[];
+  }[];
   createPackages?: string[];
   dryRun?: boolean;
   deploy?: boolean;

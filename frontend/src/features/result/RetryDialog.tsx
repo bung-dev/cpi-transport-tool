@@ -6,6 +6,7 @@ import { jobHref } from '../../app/routes';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
+import { PACKAGE_REFERENCE_NOTICE, TYPE_LABELS, typeOf } from '../../lib/artifactTypes';
 import { ActiveJobContext, ActiveJobNotice } from '../job/ActiveJobBanner';
 import { useTenants } from '../tenants/TenantContext';
 
@@ -40,17 +41,19 @@ export function RetryDialog({ result, onClose }: { result: TransportHistoryEntry
     <div className="flex min-w-0 flex-col gap-3 wrap-anywhere">
       <p>{result.sourceTenant?.name ?? result.sourceTenant?.id ?? 'DEV'} → {result.targetTenant?.name ?? result.targetTenant?.id ?? 'PRD'}</p>
       <p>{result.deploy ? '배포 켬' : '배포 끔'}</p>
+      <p className="text-sm">{PACKAGE_REFERENCE_NOTICE}</p>
       <ul aria-label="다시 이관할 iFlow" className="divide-y divide-hairline">
         {result.packages.flatMap(pkg => {
           const failed = failures.filter(item => (item.packageId ?? result.packages[0]?.packageId) === pkg.packageId)
-            .map(item => ({ id: item.artifactId, label: failureLabel(item.grade) }));
+            .map(item => ({ id: item.artifactId, type: typeOf(item), label: failureLabel(item.grade) }));
           const skipped = (result.skipped ?? []).filter(item => item.packageId === pkg.packageId)
-            .map(item => ({ id: item.artifactId, label: '건너뜀' }));
+            .map(item => ({ id: item.artifactId, type: typeOf(item), label: '건너뜀' }));
           return [...failed, ...skipped].map((item, index) =>
             <li key={`${pkg.packageId}-${index}`} className="flex flex-wrap items-baseline justify-between gap-x-3 py-2">
               <span className="min-w-0">
                 {result.packages.length > 1 && <span className="block text-xs text-ink-secondary">{pkg.packageId}</span>}
                 <span className="font-mono text-sm">{item.id}</span>
+                <span className="ml-2 text-xs text-ink-secondary">{TYPE_LABELS[item.type]}</span>
               </span>
               <span className="text-sm">{item.label}</span>
             </li>);

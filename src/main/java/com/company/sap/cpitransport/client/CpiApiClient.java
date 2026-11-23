@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
+import com.company.sap.cpitransport.model.ArtifactType;
 import com.company.sap.cpitransport.model.CpiArtifact;
 import com.company.sap.cpitransport.model.CpiConfiguration;
 import com.company.sap.cpitransport.model.CpiPackage;
@@ -51,27 +52,67 @@ public class CpiApiClient {
     }
 
     public List<CpiArtifact> listArtifacts(String environment, String packageId) {
-        // Preserve the HTTP 404 so callers can distinguish a missing package from an empty list.
-        return list(environment, "/IntegrationPackages('" + identifier(packageId)
-                + "')/IntegrationDesigntimeArtifacts",
-                node -> new CpiArtifact(field(node, "Id"), field(node, "Name"), field(node, "Version")));
+        return listArtifacts(environment, packageId, ArtifactType.INTEGRATION_FLOW);
+    }
+
+    public List<CpiArtifact> listArtifacts(String environment, String packageId, ArtifactType type) {
+        String path = "/IntegrationPackages('" + identifier(packageId) + "')/"
+                + collection(type);
+        try {
+            return list(environment, path,
+                    node -> new CpiArtifact(field(node, "Id"), field(node, "Name"), field(node, "Version")));
+        } catch (CpiCallException failure) {
+            if (type != ArtifactType.INTEGRATION_FLOW && !failure.isTokenStageFailure()
+                    && Integer.valueOf(404).equals(failure.httpStatus())) {
+                return List.of();
+            }
+            throw failure;
+        }
     }
 
     public boolean artifactExists(String environment, String id) {
-        return optional(environment, artifactPath(id)).isPresent();
+        return artifactExists(environment, id, ArtifactType.INTEGRATION_FLOW);
+    }
+
+    public boolean artifactExists(String environment, String id, ArtifactType type) {
+        return findArtifact(environment, id, type).isPresent();
+    }
+
+    public record ArtifactMetadata(String name) {}
+
+    public Optional<ArtifactMetadata> findArtifact(String environment, String id, ArtifactType type) {
+        return optional(environment, artifactPath(id, type)).map(node -> {
+            var name = node.path("Name");
+            return new ArtifactMetadata(name.isString() ? name.asString() : null);
+        });
     }
 
     public byte[] downloadArtifact(String environment, String id) {
-        return http.execute(environment, HttpMethod.GET, ROOT + artifactPath(id) + "/$value", null, false)
+        return downloadArtifact(environment, id, ArtifactType.INTEGRATION_FLOW);
+    }
+
+    public byte[] downloadArtifact(String environment, String id, ArtifactType type) {
+        return http.execute(environment, HttpMethod.GET, ROOT + artifactPath(id, type) + "/$value", null, false)
                 .getBody();
     }
 
     public void createArtifact(String environment, String name, String id, String packageId,
                                String base64) {
-        identifier(id);
-        identifier(packageId);
-        write(environment, HttpMethod.POST, "/IntegrationDesigntimeArtifacts",
-                Map.of("Name", name, "Id", id, "PackageId", packageId, "ArtifactContent", base64));
+        createArtifact(environment, name, id, packageId, base64, ArtifactType.INTEGRATION_FLOW);
+    }
+
+    public void createArtifact(String environment, String name, String id, String packageId, String base64,
+                               ArtifactType type) {
+        var body = Map.of("Name", name, "Id", identifier(id), "PackageId", identifier(packageId), "ArtifactContent", base64);
+        write(environment, HttpMethod.POST, "/" + collection(type), body, type == ArtifactType.INTEGRATION_FLOW);
+    }
+
+    public void updateArtifactContent(String environment, String id, ArtifactType type, String base64) {
+        write(environment, HttpMethod.PUT, artifactPath(id, type), Map.of("ArtifactContent", base64), false);
+    }
+
+    public void deleteArtifact(String environment, String id, ArtifactType type) {
+        write(environment, HttpMethod.DELETE, artifactPath(id, type), null, false);
     }
 
     public void updateArtifact(String environment, String id, String name, String base64) {
@@ -95,6 +136,23 @@ public class CpiApiClient {
     public void deploy(String environment, String id) {
         write(environment, HttpMethod.POST,
                 "/DeployIntegrationDesigntimeArtifact?Id='" + identifier(id) + "'&Version='active'", null);
+    }
+
+    public String deployObject(String environment, String id, ArtifactType type) {
+        String path = ROOT + "/Deploy" + type.odataPrefix() + "DesigntimeArtifact?Id='" + identifier(id) + "'&Version='active'";
+        byte[] body = http.execute(environment, HttpMethod.POST, path, null, false).getBody();
+        String task = body == null ? "" : new String(body, StandardCharsets.UTF_8).strip();
+        if (task.length() >= 2 && task.startsWith("\"") && task.endsWith("\"")) {
+            task = task.substring(1, task.length() - 1).strip();
+        }
+        return task;
+    }
+
+    public String getBuildAndDeployStatus(String environment, String task) {
+        String encoded = UriUtils.encode(task.replace("'", "''"), StandardCharsets.UTF_8);
+        String path = ROOT + "/BuildAndDeployStatus(TaskId='" + encoded + "')";
+        byte[] body = http.execute(environment, HttpMethod.GET, path, null, true, false).getBody();
+        return field(data(body), "Status");
     }
 
     public Optional<String> getRuntimeStatus(String environment, String id) {
@@ -142,7 +200,15 @@ public class CpiApiClient {
     public Optional<String> getRuntimeStatus(CpiEnvironment environment, String id) { return getRuntimeStatus(environment.name(), id); }
 
     private String artifactPath(String id) {
-        return "/IntegrationDesigntimeArtifacts(Id='" + identifier(id) + "',Version='active')";
+        return artifactPath(id, ArtifactType.INTEGRATION_FLOW);
+    }
+
+    private String artifactPath(String id, ArtifactType type) {
+        return "/" + collection(type) + "(Id='" + identifier(id) + "',Version='active')";
+    }
+
+    private String collection(ArtifactType type) {
+        return type.odataPrefix() + "DesigntimeArtifacts";
     }
 
     private String identifier(String id) {
@@ -296,7 +362,12 @@ public class CpiApiClient {
     }
 
     private void write(String environment, HttpMethod method, String path, Map<String, String> body) {
+        write(environment, method, path, body, true);
+    }
+
+    private void write(String environment, HttpMethod method, String path, Map<String, String> body,
+                       boolean retryTransient) {
         http.execute(environment, method, ROOT + path,
-                body == null ? null : mapper.writeValueAsBytes(body), true);
+                body == null ? null : mapper.writeValueAsBytes(body), true, retryTransient);
     }
 }

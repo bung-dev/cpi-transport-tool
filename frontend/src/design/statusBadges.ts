@@ -29,6 +29,7 @@ export const STATUS_BADGE_TONES: Record<StatusKind, Record<string, StatusTone>> 
   transportAction: {
     CREATED: 'info',
     UPDATED: 'accent',
+    REPLACED: 'warning',
     NONE: 'neutral',
   },
 };
@@ -49,6 +50,7 @@ const CONFIGURATION_LABELS: Record<string, string> = {
 const TARGET_PACKAGE_LABELS: Record<string, string> = { EXISTING: '있음', CREATED: '새로 만듦', CREATE_FAILED: '생성 실패', NOT_FOUND: '대상에 없음', CHECK_FAILED: '확인 실패' };
 
 export function badgeLabel(kind: StatusKind, value: string): string {
+  if (kind === 'transportAction' && value === 'REPLACED') return '삭제 후 다시 만듦';
   if (kind === 'targetPackage' && Object.hasOwn(TARGET_PACKAGE_LABELS, value)) return TARGET_PACKAGE_LABELS[value];
   return kind === 'configurationStatus' && Object.hasOwn(CONFIGURATION_LABELS, value)
     ? CONFIGURATION_LABELS[value]

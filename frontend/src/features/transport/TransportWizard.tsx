@@ -1,9 +1,11 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { getPackages, getTemplates } from '../../api/client';
-import type { ArtifactSummary, TransportTemplate } from '../../api/types';
+import type { ArtifactSummary, ArtifactType, TransportTemplate } from '../../api/types';
 import { navigate } from '../../app/routes';
+import { TYPE_LABELS } from '../../lib/artifactTypes';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Button } from '../../components/ui/Button';
+import { Callout } from '../../components/ui/Callout';
 import { Card } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { SearchIcon } from '../../components/ui/icons';
@@ -22,7 +24,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { PreviewProgress } from './PreviewProgress';
 import { REGISTER_TENANT_FIRST, hasNoTenants } from './noTenants';
 import { RouteDialog } from './RouteDialog';
-import { TOO_MANY_ARTIFACTS, type Wizard, type WizardStep } from './useWizard';
+import { ARTIFACT_TYPES, artifactCounts, TOO_MANY_ARTIFACTS, type Wizard, type WizardStep } from './useWizard';
 
 const STEPS: { step: WizardStep; label: string }[] = [
   { step: 'template', label: '템플릿' },
@@ -59,6 +61,7 @@ export function TransportWizard({ wizard: w }: { wizard: Wizard }) {
           packages={w.preview.packages.map(p => ({ ...p, packageName: p.packageName ?? w.packages.find(selected => selected.id === p.packageId)?.name ?? null }))}
           targetTenantId={w.route.target}
           artifactCount={w.preview.summary.total}
+          replacedCount={w.preview.results.filter(r => r.action === 'REPLACED').length}
           deploy={w.confirm.deploy}
           onDeployChange={w.setConfirmDeploy}
           busy={w.busy}
@@ -253,22 +256,52 @@ function ArtifactStep({ w }: { w: Wizard }) {
 
 function ArtifactList({ w, pkg }: { w: Wizard; pkg: ArtifactSummary }) {
   const titleId = useId();
-  const state = w.artifacts[pkg.id];
-  const ready = state?.status === 'ok' ? state : null;
+  const lists = w.artifacts[pkg.id];
+  const { total, selected } = artifactCounts(lists);
+  const empty = total === 0 && ARTIFACT_TYPES.every(type => lists?.[type]?.status === 'ok');
   return (
     <Card role="region" aria-labelledby={titleId}
       title={<span id={titleId} className="break-all">{pkg.name} <span className="font-mono break-all">{pkg.id}</span></span>}
-      meta={ready ? `${ready.selected.length}개 선택 / 전체 ${ready.items.length}개` : undefined}
-      actions={ready && <>
-        <Button size="sm" onClick={() => w.setArtifactIds(pkg.id, ready.items.map(a => a.id))}>전체 선택</Button>
-        <Button size="sm" onClick={() => w.setArtifactIds(pkg.id, [])}>선택 해제</Button>
-      </>}
+      meta={lists?.INTEGRATION_FLOW?.status === 'error' && !total ? undefined : `${selected}개 선택 / 전체 ${total}개`}
     >
-      {(!state || state.status === 'loading') && <ListSkeleton />}
-      {state?.status === 'error' && <ErrorAlert error={state.error} onRetry={() => void w.loadArtifacts(pkg.id, true)} />}
-      {ready && (ready.items.length === 0 ? <EmptyState title="아티팩트가 없습니다" />
-        : <div className="max-h-[420px] min-w-0 overflow-y-auto"><ArtifactGrid artifacts={ready.items} selectedIds={ready.selected} onChange={ids => w.setArtifactIds(pkg.id, ids)} /></div>)}
+      {empty && <EmptyState title="아티팩트가 없습니다" />}
+      <div className="flex min-w-0 flex-col gap-4">
+        {ARTIFACT_TYPES.map(type => <ArtifactGroup key={type} w={w} packageId={pkg.id} type={type} />)}
+      </div>
     </Card>
+  );
+}
+
+function ArtifactGroup({ w, packageId, type }: { w: Wizard; packageId: string; type: ArtifactType }) {
+  const titleId = useId();
+  const state = w.artifacts[packageId]?.[type];
+  const retry = () => void w.loadArtifacts(packageId, type, true);
+  const select = (ids: string[]) => w.setArtifactIds(packageId, type, ids);
+  const hasItems = state?.status === 'ok' && state.items.length > 0;
+  return (
+    <div role="group" aria-labelledby={titleId} className="min-w-0 border-t border-hairline pt-3">
+      <div className="mb-1 flex min-w-0 flex-wrap items-center gap-2">
+        <h4 id={titleId} className="text-sm font-semibold">{TYPE_LABELS[type]}</h4>
+        {hasItems && <>
+          <span className="text-xs text-ink-tertiary">{`선택 ${state.selected.length}/${state.items.length}`}</span>
+          <div className="ml-auto flex flex-wrap gap-1.5">
+            <Button size="sm" onClick={() => select(state.items.map(a => a.id))}>전체 선택</Button>
+            <Button size="sm" onClick={() => select([])}>선택 해제</Button>
+          </div>
+        </>}
+      </div>
+      {(!state || state.status === 'loading') && <ListSkeleton />}
+      {state?.status === 'error' && (type === 'INTEGRATION_FLOW'
+        ? <ErrorAlert error={state.error} onRetry={retry} />
+        : <Callout tone="danger" role="alert" title="목록을 읽지 못했습니다">
+            <Button size="sm" onClick={retry}>다시 읽기</Button>
+          </Callout>)}
+      {state?.status === 'ok' && (hasItems
+        ? <div className="max-h-[420px] min-w-0 overflow-y-auto">
+            <ArtifactGrid artifacts={state.items} selectedIds={state.selected} onChange={select} />
+          </div>
+        : <p className="text-sm text-ink-secondary">없음</p>)}
+    </div>
   );
 }
 

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TenantsResponse, TenantStatusResponse, TransportRequest } from '../../api/types';
 import { ARTIFACTS, PACKAGES, json, mockApi, respondTo } from '../../test/mockFetch';
 import { baseRoutes, renderAt, routeGroup, tpl, type TemplateFixture } from '../../test/appRoutes';
-import { artifactRow, currentStep, postBodies, stepButton, toArtifacts } from '../../test/wizard';
+import { artifactRow, currentStep, postBodies, stepButton, toArtifacts, NO_TYPES } from '../../test/wizard';
 
 // S3b REQ-423 미리보기와 실제 이관, 그리고 "바뀌지 않는 규칙"(ADR-002·008·016·018, REQ-319) 단언을 새 마법사에서 다시 확인한다.
 afterEach(() => vi.unstubAllGlobals());
@@ -24,6 +24,8 @@ const TENANTS: TenantsResponse = {
 const status = (readOnly: boolean): TenantStatusResponse => ({ readOnly, tenants: TENANTS.tenants.map((t) => ({ ...t, check: 'OK' as const })) });
 const respond = (body: Pick<TransportRequest, 'packages' | 'dryRun' | 'deploy'>) => respondTo(body);
 const ONE = { packages: [{ packageId: 'PkgTransportDemo' }] };
+// 20261121-package-objects REQ-1003: 화면이 보내는 요청 본문에는 새 종류 Id 목록이 항상 있다(응답을 만드는 ONE과 구분)
+const ONE_SENT = { packages: [{ packageId: 'PkgTransportDemo', ...NO_TYPES }] };
 const T_PKG = tpl({ id: 'tp-1', name: '개발에서 운영', sourceTenantId: 'DEV', targetTenantId: 'PRD' });
 
 type Routes = Parameters<typeof mockApi>[0];
@@ -93,7 +95,7 @@ describe('REQ-423 미리보기', () => {
     const region = await previewOne();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(postBodies(fn)).toEqual([
-      { packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'] }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
+      { packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'], ...NO_TYPES }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
     ]);
     expect(currentStep()).toBe('미리보기');
     expect(within(region).getByText('이관 ID').nextElementSibling).toHaveTextContent('t-dry');
@@ -123,9 +125,9 @@ describe('REQ-423 미리보기', () => {
     await userEvent.click(await runButton());
     await waitFor(() => expect(postBodies(fn)).toHaveLength(2));
     expect(postBodies(fn)).toEqual([
-      { ...ONE, dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
+      { ...ONE_SENT, dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1' },
       // 20261121-perf-retry REQ-902: 미리보기 뒤 실제 이관은 그 미리보기 ID를 보낸다.
-      { ...ONE, dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1', previewId: 't-dry' },
+      { ...ONE_SENT, dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD', templateId: 'tp-1', previewId: 't-dry' },
     ]);
   });
 });
@@ -158,7 +160,7 @@ describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '실제 이관 확인' })).toBeNull());
     // 대상에 있는 패키지뿐이면 createPackages 키를 보내지 않는다
     expect(postBodies(fn)[1]).toEqual({
-      packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'] }], dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD',
+      packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'], ...NO_TYPES }], dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD',
       // 20261121-perf-retry REQ-902: 미리보기 뒤 실제 이관은 그 미리보기 ID를 보낸다.
       previewId: 't-dry',
     });
@@ -339,7 +341,7 @@ describe('REQ-423 요청 오류 (ADR-016)', () => {
     const bodies = postBodies(fn);
     expect(bodies).toHaveLength(2);
     expect(bodies[0]).toMatchObject({ templateId: 'tp-1', dryRun: true });
-    expect(bodies[1]).toEqual({ ...ONE, dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
+    expect(bodies[1]).toEqual({ ...ONE_SENT, dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' });
     expect(stepButton('템플릿')).not.toHaveTextContent('개발에서 운영');
   });
 });

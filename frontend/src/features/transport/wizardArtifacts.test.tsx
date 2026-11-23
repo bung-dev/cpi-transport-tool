@@ -5,7 +5,7 @@ import type { TransportRequest } from '../../api/types';
 import { PACKAGES, json, mockApi, respondTo } from '../../test/mockFetch';
 import { baseRoutes, renderAt } from '../../test/appRoutes';
 import {
-  artifactGrid, artifactRow, artifactRows, currentStep, postBodies, selectedIds, startManual, stepButton, toArtifacts,
+  artifactGrid, artifactRow, artifactRows, currentStep, postBodies, selectedIds, startManual, stepButton, toArtifacts, NO_TYPES,
 } from '../../test/wizard';
 
 // S3b REQ-422 아티팩트 선택 표. 한 열 grid(aria-multiselectable), 행마다 aria-selected, Tab 진입점은 하나(ADR-012).
@@ -162,7 +162,7 @@ describe('REQ-422 요청과 제한', () => {
     await runPreview();
     await screen.findByRole('region', { name: '이관 결과' });
     expect(postBodies(fn)).toEqual([
-      { packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['A1', 'A3'] }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
+      { packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['A1', 'A3'], ...NO_TYPES }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
     ]);
     expect(stepButton('아티팩트')).toHaveTextContent('2 / 4');
   });
@@ -172,7 +172,7 @@ describe('REQ-422 요청과 제한', () => {
     await toArtifacts();
     await runPreview();
     await screen.findByRole('region', { name: '이관 결과' });
-    expect(postBodies(fn)).toEqual([{ packages: [{ packageId: 'PkgTransportDemo' }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' }]);
+    expect(postBodies(fn)).toEqual([{ packages: [{ packageId: 'PkgTransportDemo', ...NO_TYPES }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' }]);
     expect(stepButton('아티팩트')).toHaveTextContent('전체');
   });
 
@@ -298,7 +298,7 @@ describe('REQ-304 실제 모양의 값', () => {
     await runPreview();
     await screen.findByRole('region', { name: '이관 결과' });
     expect(postBodies(fn)).toEqual([
-      { packages: [{ packageId: 'Pkg' }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
+      { packages: [{ packageId: 'Pkg', ...NO_TYPES }], dryRun: true, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD' },
     ]);
   });
 });

@@ -15,9 +15,15 @@ import org.slf4j.LoggerFactory;
 public final class TransportRun {
     private static final Logger log = LoggerFactory.getLogger(TransportRun.class);
 
-    public record Item(String packageId, String artifactId, Stage stage, ArtifactStatus status) {
+    public record Item(String packageId, String artifactId, Stage stage, ArtifactStatus status, ArtifactType type) {
+        public Item(String packageId, String artifactId, Stage stage, ArtifactStatus status) {
+            this(packageId, artifactId, stage, status, ArtifactType.INTEGRATION_FLOW);
+        }
+        public Item {
+            if (type == null) type = ArtifactType.INTEGRATION_FLOW;
+        }
         Item at(Stage stage, ArtifactStatus status) {
-            return new Item(packageId, artifactId, stage, status);
+            return new Item(packageId, artifactId, stage, status, type);
         }
     }
     public record Started(String jobId, JobStatus status, boolean dryRun, int total) {}
@@ -31,7 +37,7 @@ public final class TransportRun {
             int fixRequired = (int) completed.stream().filter(r -> r.grade() == ArtifactGrade.FIX_REQUIRED).count();
             int retryable = (int) completed.stream().filter(r -> r.grade() == ArtifactGrade.RETRYABLE).count();
             var skipped = terminalItems.stream().filter(item -> item.stage() == Stage.SKIPPED)
-                    .map(item -> new TransportResponse.SkippedItem(item.packageId(), item.artifactId())).toList();
+                    .map(item -> new TransportResponse.SkippedItem(item.packageId(), item.artifactId(), item.type())).toList();
             var summary = new TransportSummary(completed.size(), successes, completed.size() - successes,
                     fixRequired, retryable, skipped.size());
             return new TransportResponse(jobId, packages, dryRun, deploy, startedAt, end, summary, completed,

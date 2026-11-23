@@ -1,5 +1,5 @@
 import { ApiRequestError, networkError, parseErrorBody, unknownError } from './errors';
-import type { ArtifactSummary, TransportHistoryEntry, TransportRequest, TransportResponse, Tenant, TenantsResponse, TenantStatusResponse } from './types';
+import type { ArtifactSummary, ArtifactType, TransportHistoryEntry, TransportRequest, TransportResponse, Tenant, TenantsResponse, TenantStatusResponse } from './types';
 import type { TransportTemplate, TemplateInput, AuditCategory, AuditEntry } from './types';
 import type { DashboardResponse, Settings, VersionResponse } from './types';
 import type { ActiveJob, JobStarted, TransportJob } from './types';
@@ -33,8 +33,11 @@ export function getPackages(tenantId?: string): Promise<ArtifactSummary[]> {
   return request(`/packages${tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : ''}`);
 }
 
-export function getArtifacts(packageId: string, tenantId?: string): Promise<ArtifactSummary[]> {
-  return request(`/packages/${encodeURIComponent(packageId)}/artifacts${tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : ''}`);
+export function getArtifacts(packageId: string, tenantId?: string, type?: ArtifactType): Promise<ArtifactSummary[]> {
+  const params = [];
+  if (tenantId) params.push(`tenantId=${encodeURIComponent(tenantId)}`);
+  if (type) params.push(`type=${type}`);
+  return request(`/packages/${encodeURIComponent(packageId)}/artifacts${params.length ? '?' + params.join('&') : ''}`);
 }
 
 export function getTargetPackageStatus(tenantId: string, packageIds: string[]): Promise<{ packageId: string; exists: boolean }[]> {

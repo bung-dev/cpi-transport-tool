@@ -5,6 +5,7 @@ import com.company.sap.cpitransport.model.ErrorResponse.Code;
 import org.springframework.web.bind.annotation.RequestParam;
 import java.util.List;
 import com.company.sap.cpitransport.model.ArtifactSummary;
+import com.company.sap.cpitransport.model.ArtifactType;
 import com.company.sap.cpitransport.service.PackageQueryService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,12 +37,23 @@ public class PackageController {
 
     public List<ArtifactSummary> artifacts(String packageId) { return artifacts(packageId, "DEV"); }
 
+    public List<ArtifactSummary> artifacts(String packageId, String tenantId) {
+        return artifacts(packageId, tenantId, null);
+    }
+
     @GetMapping("/packages/{packageId}/artifacts")
     public List<ArtifactSummary> artifacts(@PathVariable("packageId") String packageId,
-            @RequestParam(value = "tenantId", defaultValue = "DEV") String tenantId) {
+            @RequestParam(value = "tenantId", defaultValue = "DEV") String tenantId,
+            @RequestParam(value = "type", required = false) String type) {
         if (!packageId.matches("^[A-Za-z0-9_.-]{1,100}$")) {
             throw new ApiException(Code.INVALID_REQUEST);
         }
-        return service.artifacts(tenantId, packageId);
+        ArtifactType artifactType;
+        try {
+            artifactType = type == null ? ArtifactType.INTEGRATION_FLOW : ArtifactType.valueOf(type);
+        } catch (IllegalArgumentException invalidType) {
+            throw new ApiException(Code.INVALID_REQUEST);
+        }
+        return service.artifacts(tenantId, packageId, artifactType);
     }
 }

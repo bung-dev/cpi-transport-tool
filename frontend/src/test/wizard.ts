@@ -52,3 +52,17 @@ export const postBodies = (fn: ReturnType<typeof mockApi>) =>
   fn.mock.calls
     .filter(([url, init]) => init?.method === 'POST' && url === '/transport')
     .map(([, init]) => JSON.parse(init?.body as string));
+
+// 20261121-package-objects S5(REQ-1002·1003):
+// - 아티팩트 단계의 패키지 region 안에 종류별 묶음 role=group 4개가 이 순서로 있다. 접근 이름은 TYPE_GROUPS의 글자 그대로다.
+// - 묶음마다(목록이 있으면) grid "이관할 아티팩트", 버튼 "전체 선택"·"선택 해제", 글자 "선택 n/m". 빈 종류는 글자 "없음".
+// - 새 종류 목록 실패는 그 묶음 안 role=alert("목록을 읽지 못했습니다")와 버튼 "다시 읽기". 읽는 중은 그 묶음 안 role=status.
+// - 새 종류 목록 URL은 `/packages/{id}/artifacts?tenantId={원본}&type={종류}`이고, iFlow 목록 URL은 지금 그대로(type 없음)다.
+// - 이관 요청의 패키지 선택에는 새 종류 Id 목록 3개가 항상 있다(고른 것 없으면 []). NO_TYPES는 셋 다 빈 목록.
+export const TYPE_GROUPS = ['iFlow', '스크립트 컬렉션', '메시지 매핑', '밸류 매핑'] as const;
+export type TypeGroup = (typeof TYPE_GROUPS)[number];
+export const NO_TYPES = { scriptCollectionIds: [], messageMappingIds: [], valueMappingIds: [] };
+export const typeListUrl = (packageId: string, type: 'SCRIPT_COLLECTION' | 'MESSAGE_MAPPING' | 'VALUE_MAPPING', tenantId = 'DEV') =>
+  `/packages/${packageId}/artifacts?tenantId=${tenantId}&type=${type}`;
+/** 패키지 region 안의 종류 묶음 */
+export const typeGroup = (section: HTMLElement, name: TypeGroup) => within(section).getByRole('group', { name });

@@ -4,6 +4,7 @@ import java.util.List;
 import com.company.sap.cpitransport.client.CpiApiClient;
 import com.company.sap.cpitransport.client.CpiCallException;
 import com.company.sap.cpitransport.model.ArtifactSummary;
+import com.company.sap.cpitransport.model.ArtifactType;
 import com.company.sap.cpitransport.model.EnvironmentNotConfiguredException;
 import com.company.sap.cpitransport.model.ErrorResponse.ApiException;
 import com.company.sap.cpitransport.model.ErrorResponse.Code;
@@ -40,12 +41,19 @@ public class PackageQueryService {
     }
 
     public List<ArtifactSummary> artifacts(String tenantId, String packageId) {
+        return artifacts(tenantId, packageId, ArtifactType.INTEGRATION_FLOW);
+    }
+
+    public List<ArtifactSummary> artifacts(String tenantId, String packageId, ArtifactType type) {
         requireTenant(tenantId);
         try {
             if (client.getPackage(tenantId, packageId).isEmpty()) {
                 throw new ApiException(Code.PACKAGE_NOT_FOUND);
             }
-            return client.listArtifacts(tenantId, packageId).stream()
+            var artifacts = type == ArtifactType.INTEGRATION_FLOW
+                    ? client.listArtifacts(tenantId, packageId)
+                    : client.listArtifacts(tenantId, packageId, type);
+            return artifacts.stream()
                     .map(a -> new ArtifactSummary(a.id(), a.name(), a.version())).toList();
         } catch (CpiCallException failure) {
             // A token-endpoint 404 is an authentication failure, not a missing package.

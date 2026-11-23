@@ -1,5 +1,6 @@
 package com.company.sap.cpitransport.service;
 
+import com.company.sap.cpitransport.model.ArtifactType;
 import com.company.sap.cpitransport.model.ConfigurationItem;
 import java.time.Clock;
 import java.time.Duration;
@@ -32,7 +33,7 @@ public class PreviewBundles {
         expiry.allowCoreThreadTimeOut(true);
     }
 
-    private record Key(String tenantId, String artifactId, String version) {}
+    private record Key(String tenantId, ArtifactType type, String artifactId, String version) {}
     private record Preview(Instant expiresAt, Map<Key, Bundle> artifacts, ScheduledFuture<?> eviction) {}
     public record Bundle(byte[] zip, List<ConfigurationItem> configurations) {
         public Bundle {
@@ -44,10 +45,15 @@ public class PreviewBundles {
 
     public void put(String previewId, String sourceTenantId, String artifactId, String version,
                     byte[] zip, List<ConfigurationItem> configurations) {
+        put(previewId, sourceTenantId, ArtifactType.INTEGRATION_FLOW, artifactId, version, zip, configurations);
+    }
+
+    public void put(String previewId, String sourceTenantId, ArtifactType type, String artifactId, String version,
+                    byte[] zip, List<ConfigurationItem> configurations) {
         var bundle = new Bundle(zip, configurations);
         synchronized (this) {
             pending.computeIfAbsent(previewId, unused -> new HashMap<>())
-                    .put(new Key(sourceTenantId, artifactId, version), bundle);
+                    .put(new Key(sourceTenantId, type, artifactId, version), bundle);
         }
     }
 
@@ -65,7 +71,12 @@ public class PreviewBundles {
         if (completed.size() > MAX_PREVIEWS) evict(completed.firstEntry().getKey());
     }
 
-    public synchronized Optional<Bundle> find(String previewId, String sourceTenantId, String artifactId, String version) {
+    public Optional<Bundle> find(String previewId, String sourceTenantId, String artifactId, String version) {
+        return find(previewId, sourceTenantId, ArtifactType.INTEGRATION_FLOW, artifactId, version);
+    }
+
+    public synchronized Optional<Bundle> find(String previewId, String sourceTenantId, ArtifactType type,
+                                              String artifactId, String version) {
         if (previewId == null || version == null || version.isBlank()) return Optional.empty();
         var preview = completed.get(previewId);
         if (preview == null) return Optional.empty();
@@ -73,7 +84,7 @@ public class PreviewBundles {
             evict(previewId);
             return Optional.empty();
         }
-        return Optional.ofNullable(preview.artifacts().get(new Key(sourceTenantId, artifactId, version)));
+        return Optional.ofNullable(preview.artifacts().get(new Key(sourceTenantId, type, artifactId, version)));
     }
 
     private synchronized void evict(String previewId) {

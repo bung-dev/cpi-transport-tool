@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TenantsResponse, TenantStatusResponse, TransportRequest, TransportResponse } from '../../api/types';
 import { ARTIFACTS, PACKAGES, json, mockApi } from '../../test/mockFetch';
 import { baseRoutes, navLink, renderAt, tpl } from '../../test/appRoutes';
-import { currentStep, findArtifactGrid, findPackageSection, postBodies, routeBar, stepButton } from '../../test/wizard';
+import { currentStep, findArtifactGrid, findPackageSection, postBodies, routeBar, stepButton, NO_TYPES } from '../../test/wizard';
 
 // S4 REQ-430 대시보드. 앱 전체를 #/dashboard로 그려 확인한다.
 // 데이터: GET /dashboard(?templateId=)의 nodes·edges·queue·today, GET /templates(이름·필터·0개 판단),
@@ -148,7 +148,7 @@ describe('REQ-430 대시보드', () => {
     expect(postBodies(fn)).toEqual([]);
     await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('region', { name: '이관 결과' });
-    expect(postBodies(fn)).toEqual([{ packages: [{ packageId: 'PkgTransportDemo' }], dryRun: true, deploy: false, sourceTenantId: 'QAS', targetTenantId: 'PRD', templateId: 'tp-qp' }]);
+    expect(postBodies(fn)).toEqual([{ packages: [{ packageId: 'PkgTransportDemo', ...NO_TYPES }], dryRun: true, deploy: false, sourceTenantId: 'QAS', targetTenantId: 'PRD', templateId: 'tp-qp' }]);
   });
 
   it('REQ-612: "전달"로 연 새 이관에서 패키지 단계로 가면 그 패키지가 선택돼 있고 패키지를 더 골라 함께 미리보기할 수 있다(템플릿 연결 유지)', async () => {
@@ -175,7 +175,7 @@ describe('REQ-430 대시보드', () => {
     await userEvent.click(screen.getByRole('button', { name: '미리보기 실행' }));
     await screen.findByRole('region', { name: '이관 결과' });
     expect(postBodies(fn)).toEqual([{
-      packages: [{ packageId: 'PkgTransportDemo' }, { packageId: 'PkgFaultDemo' }],
+      packages: [{ packageId: 'PkgTransportDemo', ...NO_TYPES }, { packageId: 'PkgFaultDemo', ...NO_TYPES }],
       dryRun: true, deploy: false, sourceTenantId: 'QAS', targetTenantId: 'PRD', templateId: 'tp-qp',
     }]);
   });
