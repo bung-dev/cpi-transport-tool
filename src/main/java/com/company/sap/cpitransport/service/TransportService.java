@@ -1,12 +1,15 @@
 package com.company.sap.cpitransport.service;
 
 import com.company.sap.cpitransport.client.*;
+import com.company.sap.cpitransport.job.TransportRun;
 import com.company.sap.cpitransport.model.*;
 import com.company.sap.cpitransport.settings.SettingsService;
 import java.time.Clock;
 import java.util.*;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +47,12 @@ public class TransportService {
         this.clock = clock;
     }
 
-    private record SourcePackage(PackageSelection selection, CpiPackage metadata, List<CpiArtifact> artifacts) {}
+    private record SourcePackage(PackageSelection selection, CpiPackage metadata, List<CpiArtifact> artifacts) {
+        List<String> artifactIds() {
+            var selected = selection.artifactIds();
+            return selected == null || selected.isEmpty() ? artifacts.stream().map(CpiArtifact::id).toList() : selected;
+        }
+    }
     private record TargetPackage(TargetPackageStatus status, ArtifactError error) {}
 
     public TransportResponse execute(TransportRequest request) {
@@ -54,11 +62,15 @@ public class TransportService {
             sources.add(new SourcePackage(selected, new CpiPackage(selected.packageId(), null, null),
                     api.listArtifacts(request.source().id(), selected.packageId())));
         }
-        return execute(request, sources, false, limit);
+        return new PreparedTransport(request, sources, false, limit).executeSynchronously();
     }
 
     // Request validation and environment checks are performed by the controller.
     public TransportResponse preflightAndExecute(TransportRequest request) {
+        return prepare(request).executeSynchronously();
+    }
+
+    public PreparedTransport prepare(TransportRequest request) {
         int limit = concurrency(request);
         var sources = new ArrayList<SourcePackage>();
         try {
@@ -79,14 +91,14 @@ public class TransportService {
             }
             throw new ErrorResponse.ApiException(ErrorResponse.Code.CPI_UNAVAILABLE);
         }
-        return execute(request, sources, true, limit);
+        return new PreparedTransport(request, sources, true, limit);
     }
 
     public TransportResponse execute(TransportRequest request, List<CpiArtifact> artifacts) {
         if (request.packages().size() != 1) throw new IllegalArgumentException("One package required for supplied artifacts");
         var selected = request.packages().getFirst();
-        return execute(request, List.of(new SourcePackage(selected,
-                new CpiPackage(selected.packageId(), null, null), artifacts)), false, concurrency(request));
+        return new PreparedTransport(request, List.of(new SourcePackage(selected,
+                new CpiPackage(selected.packageId(), null, null), artifacts)), false, concurrency(request)).executeSynchronously();
     }
 
     private int concurrency(TransportRequest request) {
@@ -94,59 +106,88 @@ public class TransportService {
         return request.dryRun() ? current.previewConcurrency() : current.transportConcurrency();
     }
 
-    private TransportResponse execute(TransportRequest request, List<SourcePackage> sources, boolean preflight, int limit) {
-        String transportId = UUID.randomUUID().toString();
-        var started = clock.instant();
-        var packages = new ArrayList<TransportPackage>();
-        var targets = new HashMap<String, TargetPackage>();
-        for (var source : sources) {
-            String packageId = source.selection().packageId();
-            var target = targets.computeIfAbsent(packageId, id -> prepareTarget(transportId, request, source.metadata()));
-            packages.add(new TransportPackage(packageId, source.metadata().name(), target.status()));
+    public final class PreparedTransport {
+        private final TransportRequest request;
+        private final List<SourcePackage> sources;
+        private final boolean preflight;
+        private final int limit;
+
+        private PreparedTransport(TransportRequest request, List<SourcePackage> sources, boolean preflight, int limit) {
+            this.request = request;
+            this.sources = List.copyOf(sources);
+            this.preflight = preflight;
+            this.limit = limit;
         }
 
-        List<ArtifactResult> results;
-        var callerContext = MDC.getCopyOfContextMap();
-        try (var pool = Executors.newFixedThreadPool(limit)) {
-            var pending = new ArrayList<CompletableFuture<ArtifactResult>>();
+        public TransportRun newRun(TemplateRef template, Consumer<TransportResponse> history) {
+            var packages = new ArrayList<TransportPackage>();
+            var items = new ArrayList<TransportRun.Item>();
             for (var source : sources) {
-                var selection = source.selection();
-                var target = targets.get(selection.packageId());
-                var ids = selection.artifactIds();
-                if (ids == null || ids.isEmpty()) ids = source.artifacts().stream().map(CpiArtifact::id).toList();
-                for (String id : ids) {
-                    pending.add(CompletableFuture.supplyAsync(() -> {
-                        try {
-                            if (callerContext != null) MDC.setContextMap(callerContext);
-                            MDC.put("transportId", transportId);
-                            MDC.put("packageId", selection.packageId());
-                            MDC.put("artifactId", id);
-                            return processSelected(transportId, request, source, id, target, preflight);
-                        } finally {
-                            MDC.clear();
-                        }
-                    }, pool));
+                String packageId = source.selection().packageId();
+                packages.add(new TransportPackage(packageId, source.metadata().name(), TargetPackageStatus.NOT_CHECKED));
+                for (String id : source.artifactIds()) items.add(new TransportRun.Item(packageId, id, Stage.WAITING, null));
+            }
+            return new TransportRun(clock, request, packages, items, template, history);
+        }
+
+        private TransportResponse executeSynchronously() {
+            return execute(newRun(null, null));
+        }
+
+        public TransportResponse execute(TransportRun run) {
+            var targets = new HashMap<String, TargetPackage>();
+            for (int i = 0; i < sources.size(); i++) {
+                if (run.isShuttingDown()) return null;
+                var source = sources.get(i);
+                var target = targets.computeIfAbsent(source.selection().packageId(),
+                        id -> prepareTarget(run.id(), request, source.metadata()));
+                run.targetPrepared(i, target.status());
+            }
+
+            var callerContext = MDC.getCopyOfContextMap();
+            var pending = new ArrayList<CompletableFuture<Void>>();
+            // Wait in pool.close() so a coordinator interrupt also interrupts the iFlow workers.
+            try (var pool = Executors.newFixedThreadPool(limit, Thread.ofVirtual().factory())) {
+                for (var source : sources) {
+                    String packageId = source.selection().packageId();
+                    var target = targets.get(packageId);
+                    for (String id : source.artifactIds()) {
+                        int index = pending.size();
+                        pending.add(CompletableFuture.runAsync(() -> {
+                            if (!run.startItem(index)) return;
+                            try {
+                                if (callerContext != null) MDC.setContextMap(callerContext);
+                                MDC.put("transportId", run.id());
+                                MDC.put("packageId", packageId);
+                                MDC.put("artifactId", id);
+                                var artifact = processSelected(run.id(), request, source, id, target, preflight,
+                                        stage -> run.stage(index, stage));
+                                run.completed(index, artifact);
+                            } finally {
+                                MDC.clear();
+                            }
+                        }, pool));
+                    }
                 }
             }
-            results = pending.stream().map(CompletableFuture::join).toList();
+            if (Thread.currentThread().isInterrupted()) throw new CancellationException();
+            pending.forEach(CompletableFuture::join);
+            return run.finish();
         }
-        int succeeded = (int) results.stream().filter(r -> r.status() == ArtifactStatus.SUCCESS).count();
-        return new TransportResponse(transportId, packages, request.dryRun(), request.deploy(),
-                started, clock.instant(), new TransportSummary(results.size(), succeeded, results.size() - succeeded),
-                results, request.source(), request.target(), null);
     }
 
     private ArtifactResult processSelected(String transportId, TransportRequest request, SourcePackage source,
-                                           String id, TargetPackage target, boolean preflight) {
+                                           String id, TargetPackage target, boolean preflight, Consumer<Stage> progress) {
         String packageId = source.selection().packageId();
         // Supplied artifacts keep source-stage failure precedence. Preflight rejects the entire package first.
         if (preflight && target.error() != null) {
+            progress.accept(Stage.TARGET);
             event(transportId, id, Stage.TARGET, "started");
             event(transportId, id, Stage.TARGET, "failed");
             return new ArtifactResult(packageId, id, null, TransportAction.NONE,
                     List.of(), DeployStatus.NOT_REQUESTED, target.error());
         }
-        return process(transportId, request, packageId, id, source.artifacts(), target.error()).withPackageId(packageId);
+        return process(transportId, request, packageId, id, source.artifacts(), target.error(), progress).withPackageId(packageId);
     }
 
     private TargetPackage prepareTarget(String transportId, TransportRequest request, CpiPackage source) {
@@ -179,7 +220,7 @@ public class TransportService {
     }
 
     private ArtifactResult process(String transportId, TransportRequest request, String packageId, String id,
-                                   List<CpiArtifact> artifacts, ArtifactError packageError) {
+                                   List<CpiArtifact> artifacts, ArtifactError packageError, Consumer<Stage> progress) {
         Stage stage = Stage.LOOKUP;
         TransportAction action = TransportAction.NONE;
         DeployStatus deployStatus = request.dryRun() && request.deploy()
@@ -195,18 +236,18 @@ public class TransportService {
             if (artifact.isEmpty()) {
                 error = new ArtifactError(stage.code, "LOOKUP: artifact absent from DEV package");
             } else {
-                stage = next(transportId, id, stage, Stage.DOWNLOAD);
+                stage = next(transportId, id, stage, Stage.DOWNLOAD, progress);
                 byte[] zip = api.downloadArtifact(request.source().id(), id);
-                stage = next(transportId, id, stage, Stage.CONFIGURATION_READ);
+                stage = next(transportId, id, stage, Stage.CONFIGURATION_READ, progress);
                 var source = configurations.read(request.source().id(), id);
-                stage = next(transportId, id, stage, request.dryRun() ? Stage.UPLOAD : Stage.TARGET);
+                stage = next(transportId, id, stage, request.dryRun() ? Stage.UPLOAD : Stage.TARGET, progress);
                 if (request.dryRun()) {
                     items = source;
                 } else if (packageError != null) {
                     error = packageError;
                 } else {
                     exists = api.artifactExists(request.target().id(), id);
-                    stage = next(transportId, id, stage, Stage.UPLOAD);
+                    stage = next(transportId, id, stage, Stage.UPLOAD, progress);
                     String content = Base64.getEncoder().encodeToString(zip);
                     if (exists) api.updateArtifact(request.target().id(), id, artifact.get().name(), content);
                     else api.createArtifact(request.target().id(), artifact.get().name(), id, packageId, content);
@@ -221,6 +262,7 @@ public class TransportService {
                     stage = Stage.DEPLOY;
                     event(transportId, id, stage, "started");
                     if (request.deploy() && !request.dryRun()) {
+                        progress.accept(stage);
                         var outcome = deployment.deployAndWaitOutcome(request.target().id(), id);
                         deployStatus = outcome.status();
                         deployFailure = outcome.failure();
@@ -268,9 +310,10 @@ public class TransportService {
         return new ArtifactResult(id, null, action, items, deployStatus, error);
     }
 
-    private Stage next(String transportId, String id, Stage previous, Stage next) {
+    private Stage next(String transportId, String id, Stage previous, Stage next, Consumer<Stage> progress) {
         event(transportId, id, previous, "succeeded");
         event(transportId, id, next, "started");
+        progress.accept(next);
         return next;
     }
 
@@ -287,7 +330,8 @@ public class TransportService {
                 MDC.get("packageId"), transportId, id, step, start ? "START" : "END", start ? "PENDING" : result, fields);
     }
 
-    private enum Stage {
+    public enum Stage {
+        WAITING(null), DONE(null), SKIPPED(null),
         LOOKUP("ARTIFACT_NOT_FOUND"), DOWNLOAD("DOWNLOAD_FAILED"),
         TARGET("TARGET_CHECK_FAILED"), UPLOAD("UPLOAD_FAILED"), CONFIGURATION_READ("CONFIGURATION_READ_FAILED"),
         DEPLOY("DEPLOY_FAILED");

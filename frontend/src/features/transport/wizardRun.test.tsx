@@ -149,7 +149,7 @@ describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
     expect(postBodies(fn)).toHaveLength(1);
   });
 
-  it('REQ-423: "실행"을 눌러야 미리보기와 같은 구성으로 dryRun: false를 보내고, 결과는 실제 이관 결과이며 "이 구성으로 실제 이관"이 없다', async () => {
+  it('REQ-423: "실행"을 눌러야 미리보기와 같은 구성으로 dryRun: false를 보내고, 결과는 작업 화면의 실제 이관 결과이며 "이 구성으로 실제 이관"이 없다', async () => {
     const fn = setup();
     const region = await previewOne();
     await userEvent.click(within(region).getByRole('button', { name: '이 구성으로 실제 이관' }));
@@ -159,10 +159,12 @@ describe('REQ-423 실제 이관 확인창 (ADR-008)', () => {
     expect(postBodies(fn)[1]).toEqual({
       packages: [{ packageId: 'PkgTransportDemo', artifactIds: ['IF_Customer_Push'] }], dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD',
     });
-    const real = await screen.findByRole('region', { name: '이관 결과' });
+    // 20261120-async-transport REQ-808: 실제 이관 결과는 마법사가 아니라 작업 화면(완료 화면)에 나온다.
+    await waitFor(() => expect(window.location.hash).toMatch(/^#\/job\?id=/));
+    const real = await screen.findByRole('region', { name: '이관 결과' }, { timeout: 3000 });
     await waitFor(() => expect(within(real).getByText('이관 ID').nextElementSibling).toHaveTextContent('t-real'));
-    expect(within(real).queryByRole('button', { name: '이 구성으로 실제 이관' })).toBeNull();
-    expect(currentStep()).toBe('실제 이관');
+    expect(screen.queryByRole('button', { name: '이 구성으로 실제 이관' })).toBeNull();
+    expect(screen.getByRole('heading', { name: '실제 이관 완료' })).toBeInTheDocument();
   });
 
   it('REQ-803: 실제 이관 단계 카드는 제목 "실제 이관", 설명 "미리보기한 패키지·아티팩트를 대상 테넌트에 업로드합니다.", 버튼 "실제 이관 실행"이고 테넌트 이름·경로를 넣지 않는다', async () => {

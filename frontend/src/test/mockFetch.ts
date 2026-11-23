@@ -21,9 +21,33 @@ export function mockApi(routes: Record<string, Handler>) {
     if (!h) throw new Error(`mock 없음: ${key}`);
     return h(init);
   });
-  // 전역 fetch 자체도 vi.fn이다(일부 테스트가 fetch.mock.calls를 URL로 걸러 읽는다).
-  const fetchStub = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    if (`${init?.method ?? 'GET'} ${String(input)}` === 'GET /version' && !routes['GET /version']) return Promise.resolve(json(VERSION));
+  // 20261120-async-transport: 화면은 이관을 작업 API(POST /transport/jobs → GET /transport/jobs/{id})로 실행한다.
+  // 작업 경로를 등록하지 않은 테스트는 등록된 'POST /transport' 핸들러로 바로 끝나는 작업을 흉내 낸다:
+  // 시작 요청은 'POST /transport'로 기록되고(postBodies 등 기존 단언 유지), 오류 응답은 그대로 돌려준다.
+  // 작업 조회와 'GET /transport/jobs/active'(등록 안 하면 204)는 호출 기록에 넣지 않는다.
+  const jobs = new Map<string, unknown>();
+  const fetchStub = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const key = `${init?.method ?? 'GET'} ${String(input)}`;
+    if (key === 'GET /version' && !routes['GET /version']) return json(VERSION);
+    if (!routes[key]) {
+      if (key === 'GET /transport/jobs/active') return new Response(null, { status: 204 });
+      if (key === 'POST /transport/jobs' && routes['POST /transport']) {
+        const response = await fn('/transport', init);
+        if (!response.ok) return response;
+        const result = await response.json();
+        const jobId = `job-${jobs.size + 1}`;
+        const items = (result.results ?? []).map((r: { packageId?: string; artifactId: string; status: string }) =>
+          ({ packageId: r.packageId ?? result.packages?.[0]?.packageId ?? null, artifactId: r.artifactId, stage: 'DONE', status: r.status }));
+        jobs.set(jobId, {
+          jobId, status: 'COMPLETED', dryRun: result.dryRun, deploy: result.deploy, startedAt: result.startedAt,
+          finishedAt: result.finishedAt, total: items.length, done: items.length, sourceTenant: result.sourceTenant ?? null,
+          targetTenant: result.targetTenant ?? null, packages: result.packages ?? [], items, result,
+        });
+        return json({ jobId, status: 'RUNNING', dryRun: result.dryRun, total: items.length }, 202);
+      }
+      const job = key.startsWith('GET /transport/jobs/') ? jobs.get(key.slice('GET /transport/jobs/'.length)) : undefined;
+      if (job) return json(job);
+    }
     return fn(input, init);
   });
   vi.stubGlobal('fetch', fetchStub);

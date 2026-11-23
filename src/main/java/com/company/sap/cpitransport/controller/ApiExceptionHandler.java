@@ -1,6 +1,7 @@
 package com.company.sap.cpitransport.controller;
 
 import com.company.sap.cpitransport.client.CpiCallException;
+import com.company.sap.cpitransport.job.TransportJobService.AlreadyRunning;
 import com.company.sap.cpitransport.model.EnvironmentNotConfiguredException;
 import com.company.sap.cpitransport.model.ErrorResponse;
 import com.company.sap.cpitransport.model.ErrorResponse.ApiException;
@@ -22,6 +23,12 @@ public class ApiExceptionHandler {
         return response(Code.CPI_UNAVAILABLE);
     }
 
+    @ExceptionHandler(AlreadyRunning.class)
+    public ResponseEntity<ErrorResponse> alreadyRunning(AlreadyRunning failure) {
+        return ResponseEntity.status(409).body(new ErrorResponse(failure.code().name(),
+                message(failure.code()), failure.jobId()));
+    }
+
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> api(ApiException failure) {
         if (failure.status() != null) {
@@ -35,11 +42,11 @@ public class ApiExceptionHandler {
         int status = switch (code) {
             case INVALID_REQUEST, INVALID_SERVICE_KEY, TEMPLATE_MISMATCH -> 400;
             case ENVIRONMENT_NOT_CONFIGURED -> 503;
-            case PACKAGE_NOT_FOUND, TENANT_NOT_FOUND, TEMPLATE_NOT_FOUND -> 404;
+            case PACKAGE_NOT_FOUND, TENANT_NOT_FOUND, TEMPLATE_NOT_FOUND, JOB_NOT_FOUND -> 404;
             case TEMPLATE_STORE_UNREADABLE, AUDIT_STORE_UNREADABLE -> 500;
             case CPI_UNAVAILABLE -> 502;
             case TEMPLATE_NAME_DUPLICATE, TENANT_NAME_DUPLICATE, TENANT_READ_ONLY, TENANT_STORE_NOT_CONFIGURED,
-                    TENANT_STORE_UNREADABLE, READ_ONLY_MODE -> 409;
+                    TENANT_STORE_UNREADABLE, READ_ONLY_MODE, JOB_ALREADY_RUNNING, JOB_NOT_RUNNING -> 409;
         };
         return ResponseEntity.status(status).body(new ErrorResponse(code.name(), message(code)));
     }
@@ -47,6 +54,9 @@ public class ApiExceptionHandler {
     private String message(Code code) {
         return switch (code) {
             case READ_ONLY_MODE -> "Read-only mode: real transport is disabled";
+            case JOB_NOT_FOUND -> "Job not found";
+            case JOB_NOT_RUNNING -> "Job is no longer running";
+            case JOB_ALREADY_RUNNING -> "A real transport job is already running";
             case INVALID_REQUEST -> "Invalid request";
             case ENVIRONMENT_NOT_CONFIGURED -> "Environment not configured";
             case PACKAGE_NOT_FOUND -> "Package not found";

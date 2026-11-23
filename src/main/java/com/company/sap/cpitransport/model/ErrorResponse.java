@@ -1,12 +1,16 @@
 package com.company.sap.cpitransport.model;
 
-public record ErrorResponse(String error, String message) {
+import com.fasterxml.jackson.annotation.JsonInclude;
+
+public record ErrorResponse(String error, String message, @JsonInclude(JsonInclude.Include.NON_NULL) String jobId) {
+    public ErrorResponse(String error, String message) { this(error, message, null); }
+
     public enum Code {
         INVALID_REQUEST, ENVIRONMENT_NOT_CONFIGURED,
         PACKAGE_NOT_FOUND, CPI_UNAVAILABLE, INVALID_SERVICE_KEY, TENANT_NAME_DUPLICATE,
         TENANT_NOT_FOUND, TENANT_READ_ONLY, TENANT_STORE_NOT_CONFIGURED, TENANT_STORE_UNREADABLE, READ_ONLY_MODE,
         TEMPLATE_NAME_DUPLICATE, TEMPLATE_NOT_FOUND, TEMPLATE_MISMATCH, TEMPLATE_STORE_UNREADABLE,
-        AUDIT_STORE_UNREADABLE
+        AUDIT_STORE_UNREADABLE, JOB_NOT_FOUND, JOB_ALREADY_RUNNING, JOB_NOT_RUNNING
     }
 
     public static class ApiException extends RuntimeException {

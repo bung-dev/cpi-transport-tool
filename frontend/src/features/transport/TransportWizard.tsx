@@ -14,10 +14,12 @@ import { packageSummary } from '../../lib/packageSummary';
 import { TextInput } from '../../components/ui/TextInput';
 import { useRemote } from '../../lib/useRemote';
 import { TransportResult } from '../result/TransportResult';
+import { ActiveJobNotice } from '../job/ActiveJobBanner';
 import { templateReason } from '../templates/TemplatesScreen';
 import { useReadOnlyState, useTenants } from '../tenants/TenantContext';
 import { ArtifactGrid } from './ArtifactGrid';
 import { ConfirmDialog } from './ConfirmDialog';
+import { PreviewProgress } from './PreviewProgress';
 import { REGISTER_TENANT_FIRST, hasNoTenants } from './noTenants';
 import { RouteDialog } from './RouteDialog';
 import { TOO_MANY_ARTIFACTS, type Wizard, type WizardStep } from './useWizard';
@@ -59,6 +61,7 @@ export function TransportWizard({ wizard: w }: { wizard: Wizard }) {
           deploy={w.confirm.deploy}
           onDeployChange={w.setConfirmDeploy}
           busy={w.busy}
+          activeJobId={w.confirm.conflictJobId ?? w.activeJobId}
           onConfirm={w.confirmReal}
           onCancel={w.cancelConfirm}
           fallbackFocusRef={realButton}
@@ -100,7 +103,7 @@ function StepBar({ w }: { w: Wizard }) {
 function RunStatus({ w }: { w: Wizard }) {
   return (
     <>
-      {w.busy && !w.confirm && <p role="status" className="text-sm text-ink-secondary">이관 실행 중</p>}
+      {w.busy && !w.previewJob && !w.confirm && <p role="status" className="text-sm text-ink-secondary">이관 실행 중</p>}
       {w.error && <ErrorAlert error={w.error} />}
       {w.templateFailure && (
         <div className="flex flex-wrap items-center gap-3">
@@ -271,7 +274,14 @@ function ArtifactList({ w, pkg }: { w: Wizard; pkg: ArtifactSummary }) {
 function PreviewStep({ w }: { w: Wizard }) {
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      {w.preview && <TransportResult result={w.preview} onOpenReal={w.openConfirm} />}
+      {!w.preview && <div className="flex justify-end">
+        <Button variant="primary" disabled={w.previewReason !== undefined} onClick={() => w.runPreview()}>미리보기 실행</Button>
+      </div>}
+      {w.previewJob && (w.previewJob.pollFailed
+        ? <ErrorAlert error={{ title: '진행 상황을 불러오지 못했습니다' }} onRetry={w.retryPreviewPoll} />
+        : <PreviewProgress job={w.previewJob} artifacts={w.artifacts} onCancel={w.cancelPreview} />)}
+      {w.previewCancelled && <p role="status" className="text-sm text-ink-secondary">미리보기를 취소했습니다</p>}
+      {w.preview && <TransportResult result={w.preview} onOpenReal={w.openConfirm} activeJobId={w.activeJobId} />}
       <RunStatus w={w} />
     </div>
   );
@@ -286,16 +296,17 @@ function RealStep({ w, buttonRef }: { w: Wizard; buttonRef: RefObject<HTMLButton
       <Card title="실제 이관">
         <div className="flex min-w-0 flex-col gap-3">
           <p className="text-sm text-ink-secondary">미리보기한 패키지·아티팩트를 대상 테넌트에 업로드합니다.</p>
-          {notice && <p id={noticeId} className="text-sm text-ink-secondary">{notice}</p>}
+          {(w.activeJobId || notice) && <p id={noticeId} className="text-sm text-ink-secondary">
+            {w.activeJobId ? <ActiveJobNotice jobId={w.activeJobId} /> : notice}
+          </p>}
           <div className="flex justify-end">
-            <Button ref={buttonRef} variant="primary" disabled={disabled} aria-describedby={notice ? noticeId : undefined}
+            <Button ref={buttonRef} variant="primary" disabled={disabled} aria-describedby={w.activeJobId || notice ? noticeId : undefined}
               onClick={() => { if (!disabled) w.openConfirm(); }}>
               실제 이관 실행
             </Button>
           </div>
         </div>
       </Card>
-      {w.real && <TransportResult result={w.real} />}
       <RunStatus w={w} />
     </div>
   );

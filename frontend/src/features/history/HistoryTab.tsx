@@ -64,7 +64,10 @@ function HistoryList({ query }: { query: string }) {
   // 템플릿 열의 "(삭제됨)" 판단에만 쓴다. 실패해도 오류를 보이지 않고 기록된 이름만 보인다(REQ-425).
   const { state: templates } = useRemote(getTemplates, 'templates');
   const liveTemplateIds = templates.status === 'ok' ? new Set(templates.data.map((t) => t.id)) : null;
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selectedRow, setSelected] = useState<number | null>(null);
+  const transportId = params.get('transportId');
+  const linkedRow = transportId && state.status === 'ok' ? state.data.findIndex(h => h.transportId === transportId) : -1;
+  const selected = selectedRow ?? (linkedRow >= 0 ? linkedRow : null);
   const backRef = useRef<HTMLButtonElement>(null);
   const rowButtons = useRef(new Map<number, HTMLButtonElement>());
   // 상세를 연 행. 목록으로 돌아왔을 때만 그 행에 포커스를 돌려주고, 새로고침·재진입 렌더에서는 포커스를 옮기지 않는다.
@@ -96,7 +99,13 @@ function HistoryList({ query }: { query: string }) {
         <PageHeader title="이관 이력" description="지난 이관 기록을 확인합니다." />
         <div className="flex flex-col gap-4 min-w-0">
           <div>
-            <Button ref={backRef} variant="ghost" onClick={() => setSelected(null)}>
+            <Button ref={backRef} variant="ghost" onClick={() => {
+              setSelected(null);
+              if (transportId) {
+                params.delete('transportId');
+                window.location.hash = params.size ? `#/history?${params}` : '#/history';
+              }
+            }}>
               <ArrowLeftIcon />
               목록으로
             </Button>
@@ -187,10 +196,12 @@ function HistoryList({ query }: { query: string }) {
                       </span>
                     </Td>
                     <Td className="whitespace-nowrap">
-                      {h.summary ? <span className="inline-flex items-center gap-2">
-                        <span className="tabular-nums">{`성공 ${h.summary.succeeded} / 전체 ${h.summary.total}`}</span>
-                        {h.summary.failed >= 1 && <Badge tone="danger">{`실패 ${h.summary.failed}`}</Badge>}
-                      </span> : '—'}
+                      <span className="inline-flex items-center gap-2">
+                        {h.summary ? <span className="tabular-nums">{`성공 ${h.summary.succeeded} / 전체 ${h.summary.total}`}</span> : '—'}
+                        {h.summary && h.summary.failed >= 1 && <Badge tone="danger">{`실패 ${h.summary.failed}`}</Badge>}
+                        {h.jobStatus === 'CANCELLED' && <Badge>취소됨</Badge>}
+                        {h.jobStatus === 'INTERRUPTED' && <Badge tone="warning">중단됨</Badge>}
+                      </span>
                     </Td>
                     <Td className="min-w-28">
                       <button

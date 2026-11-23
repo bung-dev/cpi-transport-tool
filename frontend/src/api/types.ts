@@ -49,6 +49,7 @@ export interface TransportPackage {
 }
 
 export interface TransportResponse {
+  jobStatus?: FinishedJobStatus;
   sourceTenant?: TenantRef;
   targetTenant?: TenantRef;
   /** 템플릿으로 실행한 경우 실행 당시의 템플릿 id·이름. 템플릿 없이 실행했으면 필드가 없다(REQ-424·425). */
@@ -64,6 +65,42 @@ export interface TransportResponse {
 }
 
 export type TransportHistoryEntry = Omit<TransportResponse, 'summary'> & { summary: TransportSummary | null };
+
+export type FinishedJobStatus = 'COMPLETED' | 'CANCELLED' | 'INTERRUPTED';
+export type JobStage = 'WAITING' | 'DOWNLOAD' | 'CONFIGURATION_READ' | 'TARGET' | 'UPLOAD' | 'DEPLOY' | 'DONE' | 'SKIPPED';
+
+export interface JobItem {
+  packageId: string;
+  artifactId: string;
+  stage: JobStage;
+  status: ArtifactStatus | null;
+}
+
+export interface JobStarted {
+  jobId: string;
+  status: 'RUNNING';
+  dryRun: boolean;
+  total: number;
+}
+
+export interface ActiveJob {
+  jobId: string;
+  total: number;
+  done: number;
+}
+
+export interface TransportJob extends ActiveJob {
+  status: 'RUNNING' | FinishedJobStatus;
+  dryRun: boolean;
+  deploy: boolean;
+  startedAt: string;
+  finishedAt: string | null;
+  sourceTenant: TenantRef;
+  targetTenant: TenantRef;
+  packages: TransportPackage[];
+  items: JobItem[];
+  result: TransportResponse | null;
+}
 
 export interface TransportRequest {
   sourceTenantId?: string;
