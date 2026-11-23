@@ -6,6 +6,7 @@ import { useReadOnlyState, useTenants } from '../tenants/TenantContext';
 import { hasNoTenants, REGISTER_TENANT_FIRST } from './noTenants';
 import { jobHref } from '../../app/routes';
 import { useJobPolling } from '../job/useJobPolling';
+import { noticeJobFinished } from '../notice/completionNotice';
 
 // 백엔드 검증(TransportController.java)과 같은 값
 export const MAX_ARTIFACTS = 100;
@@ -207,6 +208,7 @@ export function useWizard(visible = true, activeJobId?: string) {
   // 화면을 떠나거나 선택을 바꾸면 예약된 조회와 뒤늦게 도착한 응답을 함께 버린다.
   const pollingId = visible && !data.previewJob?.pollFailed ? data.previewJob?.jobId : undefined;
   useJobPolling(pollingId, job => {
+    if (pollingId === job.jobId && job.status !== 'RUNNING') noticeJobFinished(job);
     update(d => {
       if (!d.previewJob || d.previewJob.jobId !== job.jobId) return d;
       if (job.status === 'RUNNING') return { ...d, previewJob: { ...d.previewJob, done: job.done, total: job.total, items: job.items } };

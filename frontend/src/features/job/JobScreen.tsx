@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import { cancelTransportJob } from '../../api/client';
 import { ApiRequestError, toApiError, type ApiError } from '../../api/errors';
 import type { TransportJob } from '../../api/types';
@@ -10,6 +10,7 @@ import { ListSkeleton } from '../../components/ui/ListSkeleton';
 import { Modal } from '../../components/ui/Modal';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { TransportResult } from '../result/TransportResult';
+import { noticeJobFinished } from '../notice/completionNotice';
 import { JobItems, JobProgressBar } from './JobProgress';
 import { useJobPolling } from './useJobPolling';
 
@@ -34,7 +35,12 @@ function JobDetail({ id, onNew }: { id: string; onNew: () => void }) {
   const [confirm, setConfirm] = useState(false);
   const [cancelRequested, setCancelRequested] = useState(false);
   const [cancelError, setCancelError] = useState<ApiError>();
-  useJobPolling(failure ? undefined : id, setJob, () => setFailure('failed'), () => setFailure('missing'));
+  const sawRunning = useRef(false);
+  useJobPolling(failure ? undefined : id, next => {
+    if (next.status === 'RUNNING') sawRunning.current = true;
+    else if (sawRunning.current && !next.dryRun) noticeJobFinished(next);
+    setJob(next);
+  }, () => setFailure('failed'), () => setFailure('missing'));
 
   async function cancel() {
     if (cancelRequested) return;
