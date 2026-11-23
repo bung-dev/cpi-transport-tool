@@ -45,7 +45,7 @@ export function postTransport(body: TransportRequest): Promise<TransportResponse
   return postTransportRequest('/transport', body);
 }
 
-function postTransportRequest<T>(path: string, body: TransportRequest): Promise<T> {
+function postTransportRequest<T>(path: string, body: TransportRequest | { transportId: string }): Promise<T> {
   return request(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -55,6 +55,10 @@ function postTransportRequest<T>(path: string, body: TransportRequest): Promise<
 
 export function startTransportJob(body: TransportRequest): Promise<JobStarted> {
   return postTransportRequest('/transport/jobs', body);
+}
+
+export function retryTransport(transportId: string): Promise<JobStarted> {
+  return postTransportRequest('/transport/jobs/retry', { transportId });
 }
 
 export function getTransportJob(id: string): Promise<TransportJob> {

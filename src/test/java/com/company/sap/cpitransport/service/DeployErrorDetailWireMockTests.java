@@ -86,6 +86,11 @@ class DeployErrorDetailWireMockTests {
         stubs.dev().verify(0, getRequestedFor(urlPathMatching(".*ErrorInformation.*")));
         stubs.prd().verify(1, postRequestedFor(urlEqualTo("/oauth/token")));
     }
+    /** 20261121-perf-retry REQ-904: 상태 조회 실패는 이제 런타임 목록 조회 실패(연속 3번)다. RuntimeGet500일 때 목록을 500으로. */
+    private void runtimeListFailsFor(String id) {
+        if (id.equals("IF_Fault_RuntimeGet500")) stubs.prd().stubFor(com.company.sap.cpitransport.stub.RuntimeListStub.list()
+                .atPriority(0).willReturn(serverError()));
+    }
     private void noDetail() { stubs.prd().verify(0, getRequestedFor(urlPathMatching(".*ErrorInformation.*"))); }
     private void failed(ArtifactResult result) {
         assertThat(result.deployStatus()).isEqualTo(DeployStatus.ERROR);
@@ -135,6 +140,7 @@ class DeployErrorDetailWireMockTests {
     @ParameterizedTest(name = "REQ-309 AC-1 / REQ-309 AC-5 / REQ-309 AC-10: {0} never requests detail")
     @ValueSource(strings = {"IF_Fault_A", "IF_Fault_DeployTimeout", "IF_Fault_DeployPost500", "IF_Fault_RuntimeGet500"})
     void req309_ac1_noRequest(String id, CapturedOutput output) {
+        runtimeListFailsFor(id);
         var result = run(id, false, true).results().getFirst();
         noDetail();
         if (id.endsWith("500")) {
@@ -221,19 +227,24 @@ class DeployErrorDetailWireMockTests {
         var controller = new TransportController(transport(client), new EnvironmentGuard(connections), history, new ReadOnlyProperties(false));
         var mvc = MockMvcBuilders.standaloneSetup(controller).build();
         var result = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/transport")
-                .contentType("application/json").content("{\"packageId\":\"PkgFaultDemo\",\"artifactIds\":[\"" + ERROR_ID
-                        + "\",\"IF_Fault_A\"],\"dryRun\":false,\"deploy\":true}"))
+                // 20261121-perf-retry REQ-904: 배포 요청 뒤 자리를 비우므로 성공 iFlow를 먼저 두어, 상세 조회 중 토큰을 깨뜨리는 동안
+                // 다른 iFlow의 업로드가 겹치지 않게 한다. 결과는 ID로 찾는다.
+                .contentType("application/json").content("{\"packageId\":\"PkgFaultDemo\",\"artifactIds\":[\"IF_Fault_A\",\"" + ERROR_ID
+                        + "\"],\"dryRun\":false,\"deploy\":true}"))
                 .andExpect(status().isOk()).andReturn();
         var response = json.readValue(result.getResponse().getContentAsString(), TransportResponse.class);
-        failed(response.results().getFirst());
-        assertThat(response.results().getFirst().error().detail()).isNull();
-        assertThat(response.results().getFirst().error().detailHttpStatus()).isZero();
+        var errorResult = response.results().stream().filter(r -> r.artifactId().equals(ERROR_ID)).findFirst().orElseThrow();
+        var nextResult = response.results().stream().filter(r -> r.artifactId().equals("IF_Fault_A")).findFirst().orElseThrow();
+        failed(errorResult);
+        assertThat(errorResult.error().detail()).isNull();
+        assertThat(errorResult.error().detailHttpStatus()).isZero();
         assertThat(deployLine(output, ERROR_ID)).endsWith("phase=END result=FAILED deployFailure=RUNTIME_ERROR detailHttpStatus=0 detailLength=0");
-        assertThat(response.results().get(1).deployStatus()).isEqualTo(DeployStatus.STARTED);
+        assertThat(nextResult.deployStatus()).isEqualTo(DeployStatus.STARTED);
         assertThat(response.summary()).isEqualTo(new TransportSummary(2, 1, 1));
         assertThat(result.getResponse().getContentAsString()).contains("\"detailHttpStatus\":0").doesNotContain("test-dummy-sensitive-cause");
         stubs.prd().verify(mode.equals("timeout") ? 1 : 0, getRequestedFor(urlEqualTo(DETAIL)));
-        if (mode.equals("token")) stubs.prd().verify(3, postRequestedFor(urlEqualTo("/oauth/token")));
+        // 20261121-perf-retry: 성공 iFlow가 앞이라 상세 조회 뒤 토큰을 다시 받을 iFlow가 없다(처음 1번 + 상세 조회 중 실패 1번, 사람 승인 2026-11-21).
+        if (mode.equals("token")) stubs.prd().verify(2, postRequestedFor(urlEqualTo("/oauth/token")));
     }
 
     @ParameterizedTest(name = "REQ-309 AC-2 / REQ-309 AC-4 / REQ-309 AC-10: {0} Unicode code points masked before truncation")
@@ -373,6 +384,7 @@ class DeployErrorDetailWireMockTests {
     @ValueSource(strings = {"IF_Fault_DeployPost500", "IF_Fault_RuntimeGet500"})
     @DisplayName("REQ-309 AC-5: deployFailure=CALL_FAILED log omits detailHttpStatus and detailLength")
     void req314_callFailedLog(String id, CapturedOutput output) {
+        runtimeListFailsFor(id);
         var result = run(id, false, true).results().getFirst();
         failed(result);
         assertThat(result.error().detail()).isNull();

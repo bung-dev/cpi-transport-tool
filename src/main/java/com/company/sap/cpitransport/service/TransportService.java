@@ -8,7 +8,9 @@ import java.time.Clock;
 import java.util.*;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -25,6 +27,7 @@ public class TransportService {
     private final ConfigurationCopier configurations;
     private final DeployService deployment;
     private final Clock clock;
+    private final PreviewBundles previewBundles;
     private final Supplier<ConcurrencySettings> settings;
 
     public TransportService(CpiApiClient api, ConfigurationCopier configurations,
@@ -34,12 +37,18 @@ public class TransportService {
 
     @Autowired
     TransportService(CpiApiClient api, ConfigurationCopier configurations,
-                     DeployService deployment, Clock clock, SettingsService settings) {
-        this(api, configurations, deployment, clock, settings::current);
+                     DeployService deployment, Clock clock, SettingsService settings, PreviewBundles previewBundles) {
+        this(api, configurations, deployment, clock, settings::current, previewBundles);
     }
 
     public TransportService(CpiApiClient api, ConfigurationCopier configurations,
                             DeployService deployment, Clock clock, Supplier<ConcurrencySettings> settings) {
+        this(api, configurations, deployment, clock, settings, new PreviewBundles(clock));
+    }
+
+    private TransportService(CpiApiClient api, ConfigurationCopier configurations, DeployService deployment,
+                             Clock clock, Supplier<ConcurrencySettings> settings, PreviewBundles previewBundles) {
+        this.previewBundles = previewBundles;
         this.settings = settings;
         this.api = api;
         this.configurations = configurations;
@@ -53,7 +62,7 @@ public class TransportService {
             return selected == null || selected.isEmpty() ? artifacts.stream().map(CpiArtifact::id).toList() : selected;
         }
     }
-    private record TargetPackage(TargetPackageStatus status, ArtifactError error) {}
+    private record TargetPackage(TargetPackageStatus status, ArtifactError error, ArtifactGrade grade) {}
 
     public TransportResponse execute(TransportRequest request) {
         int limit = concurrency(request);
@@ -106,6 +115,29 @@ public class TransportService {
         return request.dryRun() ? current.previewConcurrency() : current.transportConcurrency();
     }
 
+    // Owned by one iFlow worker. Deployment acceptance can release its permit early.
+    private static final class ProcessingSlot implements AutoCloseable {
+        private final Semaphore permits;
+        private boolean released;
+
+        ProcessingSlot(Semaphore permits) {
+            this.permits = permits;
+            try {
+                permits.acquire();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new CancellationException();
+            }
+        }
+
+        @Override public void close() {
+            if (!released) {
+                released = true;
+                permits.release();
+            }
+        }
+    }
+
     public final class PreparedTransport {
         private final TransportRequest request;
         private final List<SourcePackage> sources;
@@ -127,11 +159,17 @@ public class TransportService {
                 packages.add(new TransportPackage(packageId, source.metadata().name(), TargetPackageStatus.NOT_CHECKED));
                 for (String id : source.artifactIds()) items.add(new TransportRun.Item(packageId, id, Stage.WAITING, null));
             }
-            return new TransportRun(clock, request, packages, items, template, history);
+            return new TransportRun(clock, request, packages, items, template, history,
+                    request.dryRun() ? previewBundles::complete : null);
         }
 
         private TransportResponse executeSynchronously() {
-            return execute(newRun(null, null));
+            var run = newRun(null, null);
+            try {
+                return execute(run);
+            } finally {
+                if (request.dryRun()) previewBundles.discardPending(run.id());
+            }
         }
 
         public TransportResponse execute(TransportRun run) {
@@ -146,22 +184,26 @@ public class TransportService {
 
             var callerContext = MDC.getCopyOfContextMap();
             var pending = new ArrayList<CompletableFuture<Void>>();
-            // Wait in pool.close() so a coordinator interrupt also interrupts the iFlow workers.
-            try (var pool = Executors.newFixedThreadPool(limit, Thread.ofVirtual().factory())) {
+            var slots = new Semaphore(limit);
+            try (var batch = request.deploy() && !request.dryRun() ? deployment.newBatch(request.target().id()) : null;
+                 var pool = Executors.newVirtualThreadPerTaskExecutor()) {
                 for (var source : sources) {
                     String packageId = source.selection().packageId();
                     var target = targets.get(packageId);
                     for (String id : source.artifactIds()) {
                         int index = pending.size();
+                        // Acquire in request order. A worker can keep waiting on its own virtual
+                        // thread after handing its processing slot to the next iFlow.
+                        var slot = new ProcessingSlot(slots);
                         pending.add(CompletableFuture.runAsync(() -> {
-                            if (!run.startItem(index)) return;
-                            try {
+                            try (slot) {
+                                if (!run.startItem(index)) return;
                                 if (callerContext != null) MDC.setContextMap(callerContext);
                                 MDC.put("transportId", run.id());
                                 MDC.put("packageId", packageId);
                                 MDC.put("artifactId", id);
                                 var artifact = processSelected(run.id(), request, source, id, target, preflight,
-                                        stage -> run.stage(index, stage));
+                                        stage -> run.stage(index, stage), batch, slot);
                                 run.completed(index, artifact);
                             } finally {
                                 MDC.clear();
@@ -177,7 +219,8 @@ public class TransportService {
     }
 
     private ArtifactResult processSelected(String transportId, TransportRequest request, SourcePackage source,
-                                           String id, TargetPackage target, boolean preflight, Consumer<Stage> progress) {
+                                           String id, TargetPackage target, boolean preflight, Consumer<Stage> progress,
+                                           DeployBatch batch, ProcessingSlot slot) {
         String packageId = source.selection().packageId();
         // Supplied artifacts keep source-stage failure precedence. Preflight rejects the entire package first.
         if (preflight && target.error() != null) {
@@ -185,70 +228,101 @@ public class TransportService {
             event(transportId, id, Stage.TARGET, "started");
             event(transportId, id, Stage.TARGET, "failed");
             return new ArtifactResult(packageId, id, null, TransportAction.NONE,
-                    List.of(), DeployStatus.NOT_REQUESTED, target.error());
+                    List.of(), DeployStatus.NOT_REQUESTED, target.error(), target.grade());
         }
-        return process(transportId, request, packageId, id, source.artifacts(), target.error(), progress).withPackageId(packageId);
+        return process(transportId, request, packageId, id, source.artifacts(), target, progress, batch, slot);
     }
 
     private TargetPackage prepareTarget(String transportId, TransportRequest request, CpiPackage source) {
-        if (request.dryRun()) return new TargetPackage(TargetPackageStatus.NOT_CHECKED, null);
+        if (request.dryRun()) return new TargetPackage(TargetPackageStatus.NOT_CHECKED, null, null);
         try {
             if (api.getPackage(request.target().id(), source.id()).isPresent())
-                return new TargetPackage(TargetPackageStatus.EXISTING, null);
+                return new TargetPackage(TargetPackageStatus.EXISTING, null, null);
         } catch (RuntimeException failure) {
-            return new TargetPackage(TargetPackageStatus.CHECK_FAILED, targetError("TARGET_CHECK_FAILED", failure));
+            return targetFailure(TargetPackageStatus.CHECK_FAILED, "TARGET_CHECK_FAILED", failure);
         }
         if (!request.createPackages().contains(source.id())) {
             return new TargetPackage(TargetPackageStatus.NOT_FOUND,
-                    new ArtifactError("PACKAGE_NOT_FOUND_IN_TARGET", "TARGET: HTTP 404; CPI package not found"));
+                    new ArtifactError("PACKAGE_NOT_FOUND_IN_TARGET", "TARGET: HTTP 404; CPI package not found"),
+                    ArtifactGrade.FIX_REQUIRED);
         }
         log.info("transportId={} packageId={} step=PACKAGE_CREATE phase=START result=PENDING", transportId, source.id());
         try {
             api.createPackage(request.target().id(), source);
             log.info("transportId={} packageId={} step=PACKAGE_CREATE phase=END result=OK", transportId, source.id());
-            return new TargetPackage(TargetPackageStatus.CREATED, null);
+            return new TargetPackage(TargetPackageStatus.CREATED, null, null);
         } catch (RuntimeException failure) {
             log.info("transportId={} packageId={} step=PACKAGE_CREATE phase=END result=FAILED", transportId, source.id());
-            return new TargetPackage(TargetPackageStatus.CREATE_FAILED, targetError("PACKAGE_CREATE_FAILED", failure));
+            return targetFailure(TargetPackageStatus.CREATE_FAILED, "PACKAGE_CREATE_FAILED", failure);
         }
     }
 
-    private ArtifactError targetError(String code, RuntimeException failure) {
-        String detail = failure instanceof CpiCallException call
+    private TargetPackage targetFailure(TargetPackageStatus status, String code, RuntimeException failure) {
+        return new TargetPackage(status, new ArtifactError(code, "TARGET: " + failureDescription(failure)), callFailureGrade(failure));
+    }
+
+    private static String failureDescription(RuntimeException failure) {
+        return failure instanceof CpiCallException call
                 ? "HTTP " + call.httpStatus() + "; CPI call failed" : "CPI processing failed";
-        return new ArtifactError(code, "TARGET: " + detail);
+    }
+
+    private static ArtifactGrade callFailureGrade(RuntimeException failure) {
+        Integer status = failure instanceof CpiCallException call ? call.httpStatus() : null;
+        if (status != null && status >= 400 && status < 500 && status != 408 && status != 429) {
+            return ArtifactGrade.FIX_REQUIRED;
+        }
+        return ArtifactGrade.RETRYABLE;
     }
 
     private ArtifactResult process(String transportId, TransportRequest request, String packageId, String id,
-                                   List<CpiArtifact> artifacts, ArtifactError packageError, Consumer<Stage> progress) {
+                                   List<CpiArtifact> artifacts, TargetPackage target, Consumer<Stage> progress,
+                                   DeployBatch batch, ProcessingSlot slot) {
         Stage stage = Stage.LOOKUP;
         TransportAction action = TransportAction.NONE;
         DeployStatus deployStatus = request.dryRun() && request.deploy()
                 ? DeployStatus.SKIPPED_DRY_RUN : DeployStatus.NOT_REQUESTED;
         List<ConfigurationItem> items = List.of();
         ArtifactError error = null;
+        ArtifactGrade grade = ArtifactGrade.SUCCESS;
         String successResult = "succeeded";
         var deployFailure = DeployOutcome.DeployFailure.NONE;
         boolean exists = false;
+        boolean reusedPreview = false;
         event(transportId, id, stage, "started");
         try {
             var artifact = artifacts.stream().filter(a -> id.equals(a.id())).findFirst();
             if (artifact.isEmpty()) {
                 error = new ArtifactError(stage.code, "LOOKUP: artifact absent from DEV package");
+                grade = ArtifactGrade.FIX_REQUIRED;
             } else {
-                stage = next(transportId, id, stage, Stage.DOWNLOAD, progress);
-                byte[] zip = api.downloadArtifact(request.source().id(), id);
-                stage = next(transportId, id, stage, Stage.CONFIGURATION_READ, progress);
-                var source = configurations.read(request.source().id(), id);
-                stage = next(transportId, id, stage, request.dryRun() ? Stage.UPLOAD : Stage.TARGET, progress);
+                event(transportId, id, stage, "succeeded");
+                String tenantId = request.source().id();
+                String version = artifact.get().version();
+                var cached = request.dryRun() ? Optional.<PreviewBundles.Bundle>empty()
+                        : previewBundles.find(request.previewId(), tenantId, id, version);
+                SourceReads reads;
+                if (cached.isPresent()) {
+                    var bundle = cached.get();
+                    reads = new SourceReads(bundle.zip(), bundle.configurations());
+                    reusedPreview = true;
+                } else {
+                    progress.accept(Stage.DOWNLOAD);
+                    reads = readSources(transportId, tenantId, id);
+                }
+                var source = reads.configurations();
+                stage = request.dryRun() ? Stage.UPLOAD : Stage.TARGET;
+                event(transportId, id, stage, "started");
+                progress.accept(stage);
                 if (request.dryRun()) {
                     items = source;
-                } else if (packageError != null) {
-                    error = packageError;
+                    previewBundles.put(transportId, tenantId, id, version, reads.zip(), items);
+                } else if (target.error() != null) {
+                    error = target.error();
+                    grade = target.grade();
                 } else {
                     exists = api.artifactExists(request.target().id(), id);
                     stage = next(transportId, id, stage, Stage.UPLOAD, progress);
-                    String content = Base64.getEncoder().encodeToString(zip);
+                    String content = Base64.getEncoder().encodeToString(reads.zip());
                     if (exists) api.updateArtifact(request.target().id(), id, artifact.get().name(), content);
                     else api.createArtifact(request.target().id(), artifact.get().name(), id, packageId, content);
                     action = exists ? TransportAction.UPDATED : TransportAction.CREATED;
@@ -257,36 +331,45 @@ public class TransportService {
                                     ConfigurationStatus.BUNDLED))
                             .toList();
                 }
-                if (error == null) {
-                    event(transportId, id, stage, request.dryRun() ? "SKIPPED_DRY_RUN" : "succeeded");
-                    stage = Stage.DEPLOY;
-                    event(transportId, id, stage, "started");
-                    if (request.deploy() && !request.dryRun()) {
-                        progress.accept(stage);
-                        var outcome = deployment.deployAndWaitOutcome(request.target().id(), id);
-                        deployStatus = outcome.status();
-                        deployFailure = outcome.failure();
-                        if (deployStatus != DeployStatus.STARTED) {
-                            error = new ArtifactError(deployStatus == DeployStatus.TIMEOUT ? "DEPLOY_TIMEOUT" : stage.code,
-                                    "DEPLOY: CPI deployment " + deployStatus);
-                            if (deployFailure == DeployOutcome.DeployFailure.RUNTIME_ERROR) {
-                                error = deployment.errorDetail(request.target().id(), id, configurations.sensitiveValues(source));
-                            }
+            }
+            if (error == null) {
+                event(transportId, id, stage, request.dryRun() ? "SKIPPED_DRY_RUN" : "succeeded");
+                stage = Stage.DEPLOY;
+                event(transportId, id, stage, "started");
+                if (request.deploy() && !request.dryRun()) {
+                    progress.accept(stage);
+                    var outcome = batch.deployAndAwait(id, slot::close);
+                    deployStatus = outcome.status();
+                    deployFailure = outcome.failure();
+                    if (deployStatus != DeployStatus.STARTED) {
+                        error = new ArtifactError(deployStatus == DeployStatus.TIMEOUT ? "DEPLOY_TIMEOUT" : stage.code,
+                                "DEPLOY: CPI deployment " + deployStatus);
+                        if (deployFailure == DeployOutcome.DeployFailure.RUNTIME_ERROR) {
+                            grade = ArtifactGrade.FIX_REQUIRED;
+                            error = deployment.errorDetail(request.target().id(), id, configurations.sensitiveValues(items));
+                        } else {
+                            grade = ArtifactGrade.RETRYABLE;
                         }
-                    } else {
-                        successResult = request.dryRun() ? "SKIPPED_DRY_RUN" : "NOT_REQUESTED";
                     }
+                } else {
+                    successResult = request.dryRun() ? "SKIPPED_DRY_RUN" : "NOT_REQUESTED";
                 }
             }
+        } catch (ReadFailure failure) {
+            return new ArtifactResult(packageId, id, null, action, items, deployStatus, failure.error, failure.grade);
         } catch (RuntimeException failure) {
             if (stage == Stage.DEPLOY) {
                 deployStatus = DeployStatus.ERROR;
-                deployFailure = DeployOutcome.DeployFailure.CALL_FAILED;
+                if (deployFailure != DeployOutcome.DeployFailure.RUNTIME_ERROR) {
+                    deployFailure = DeployOutcome.DeployFailure.CALL_FAILED;
+                    grade = ArtifactGrade.RETRYABLE;
+                }
+            } else {
+                grade = callFailureGrade(failure);
             }
             // AI-NOTE: CPI bodies can echo unknown sensitive values; use a categorical summary. (근거: REQ-012 AC-3, run 20260928-cpi-transport)
             // REQ-309 permits only masked ErrorInformation in ArtifactError.detail; other failures remain categorical.
-            String detail = failure instanceof CpiCallException call
-                    ? "HTTP " + call.httpStatus() + "; CPI call failed" : "CPI processing failed";
+            String detail = failureDescription(failure);
             // AI-NOTE: 갱신 PUT의 "400, 본문 없음"은 직전 run에서 편집 락 때 한 번 관찰한 형태일 뿐 락만의 신호가 아니다.
             // 그래서 락을 감지·해제하지 않고 안내만 붙인다. 생성 POST·Configurations·DEPLOY·본문 있는 400에는 붙이지 않는다.
             // (근거: REQ-315 AC-1·AC-2, 01_spec.md B2, run 20261020-defect-fix)
@@ -307,7 +390,55 @@ public class TransportService {
             }
         }
         event(transportId, id, stage, error == null ? successResult : "failed " + error.code(), logFields);
-        return new ArtifactResult(id, null, action, items, deployStatus, error);
+        return new ArtifactResult(packageId, id, null, action, items, deployStatus, error, grade, reusedPreview);
+    }
+
+    private record SourceReads(byte[] zip, List<ConfigurationItem> configurations) {}
+
+    private static final class ReadFailure extends RuntimeException {
+        final ArtifactError error;
+        final ArtifactGrade grade;
+
+        ReadFailure(Stage stage, RuntimeException cause) {
+            error = new ArtifactError(stage.code, stage + ": " + failureDescription(cause));
+            grade = callFailureGrade(cause);
+        }
+    }
+
+    private SourceReads readSources(String transportId, String tenantId, String id) {
+        var context = MDC.getCopyOfContextMap();
+        CompletableFuture<List<ConfigurationItem>> configuration;
+        byte[] zip;
+        // Closing waits for both reads and propagates a shutdown interrupt to the child.
+        try (var reader = Executors.newVirtualThreadPerTaskExecutor()) {
+            configuration = CompletableFuture.supplyAsync(() -> {
+                MDC.setContextMap(context);
+                try {
+                    return readStep(transportId, id, Stage.CONFIGURATION_READ, () -> configurations.read(tenantId, id));
+                } finally {
+                    MDC.clear();
+                }
+            }, reader);
+            zip = readStep(transportId, id, Stage.DOWNLOAD, () -> api.downloadArtifact(tenantId, id));
+        }
+        try {
+            return new SourceReads(zip, configuration.join());
+        } catch (CompletionException failure) {
+            if (failure.getCause() instanceof ReadFailure read) throw read;
+            throw failure;
+        }
+    }
+
+    private <T> T readStep(String transportId, String id, Stage stage, Supplier<T> read) {
+        event(transportId, id, stage, "started");
+        try {
+            T value = read.get();
+            event(transportId, id, stage, "succeeded");
+            return value;
+        } catch (RuntimeException failure) {
+            event(transportId, id, stage, "failed");
+            throw new ReadFailure(stage, failure);
+        }
     }
 
     private Stage next(String transportId, String id, Stage previous, Stage next, Consumer<Stage> progress) {

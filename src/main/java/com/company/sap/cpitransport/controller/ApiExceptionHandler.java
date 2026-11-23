@@ -40,9 +40,9 @@ public class ApiExceptionHandler {
 
     private ResponseEntity<ErrorResponse> response(Code code) {
         int status = switch (code) {
-            case INVALID_REQUEST, INVALID_SERVICE_KEY, TEMPLATE_MISMATCH -> 400;
+            case INVALID_REQUEST, INVALID_SERVICE_KEY, TEMPLATE_MISMATCH, RETRY_NOT_ALLOWED, NOTHING_TO_RETRY -> 400;
             case ENVIRONMENT_NOT_CONFIGURED -> 503;
-            case PACKAGE_NOT_FOUND, TENANT_NOT_FOUND, TEMPLATE_NOT_FOUND, JOB_NOT_FOUND -> 404;
+            case PACKAGE_NOT_FOUND, TENANT_NOT_FOUND, TEMPLATE_NOT_FOUND, JOB_NOT_FOUND, TRANSPORT_NOT_FOUND -> 404;
             case TEMPLATE_STORE_UNREADABLE, AUDIT_STORE_UNREADABLE -> 500;
             case CPI_UNAVAILABLE -> 502;
             case TEMPLATE_NAME_DUPLICATE, TENANT_NAME_DUPLICATE, TENANT_READ_ONLY, TENANT_STORE_NOT_CONFIGURED,
@@ -55,6 +55,9 @@ public class ApiExceptionHandler {
         return switch (code) {
             case READ_ONLY_MODE -> "Read-only mode: real transport is disabled";
             case JOB_NOT_FOUND -> "Job not found";
+            case TRANSPORT_NOT_FOUND -> "Transport not found";
+            case RETRY_NOT_ALLOWED -> "A preview cannot be retried as a real transport";
+            case NOTHING_TO_RETRY -> "No failed or skipped iFlows to retry";
             case JOB_NOT_RUNNING -> "Job is no longer running";
             case JOB_ALREADY_RUNNING -> "A real transport job is already running";
             case INVALID_REQUEST -> "Invalid request";

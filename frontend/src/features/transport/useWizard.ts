@@ -193,6 +193,7 @@ export function useWizard(visible = true, activeJobId?: string) {
     if (!requestPackages?.length || requestPackages.some(p => (p.artifactIds?.length ?? 0) > MAX_ARTIFACTS)) return;
     const template = options.withoutTemplate ? null : d.template;
     const body: TransportRequest = { packages: requestPackages, dryRun: !real, deploy: real ? deploy : false, sourceTenantId, targetTenantId };
+    if (real && d.preview) body.previewId = d.preview.transportId;
     if (real && options.createPackages?.length) body.createPackages = options.createPackages;
     if (template) body.templateId = template.id;
     inFlight.current = true;

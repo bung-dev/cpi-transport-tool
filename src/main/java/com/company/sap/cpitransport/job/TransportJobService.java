@@ -53,6 +53,17 @@ public class TransportJobService {
         }
     }
 
+    public TransportResponse retrySource(String transportId) {
+        synchronized (this) {
+            var run = running.get(transportId);
+            if (run != null && run.active() != null) throw new AlreadyRunning(transportId);
+        }
+        var original = history.findAll().stream().filter(row -> transportId.equals(row.transportId()))
+                .findFirst().orElseThrow(() -> new ErrorResponse.ApiException(ErrorResponse.Code.TRANSPORT_NOT_FOUND));
+        if (original.dryRun()) throw new ErrorResponse.ApiException(ErrorResponse.Code.RETRY_NOT_ALLOWED);
+        return original;
+    }
+
     public TransportRun.Snapshot snapshot(String id) {
         return store.require(id);
     }
@@ -80,6 +91,9 @@ public class TransportJobService {
             if (executor.awaitTermination(SHUTDOWN_WAIT_SECONDS, TimeUnit.SECONDS)) return;
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
+        } finally {
+            // Drain queued progress before handing the jobs file to the next application context.
+            store.close();
         }
         synchronized (this) {
             // A worker may return after another application context has recovered the jobs file.

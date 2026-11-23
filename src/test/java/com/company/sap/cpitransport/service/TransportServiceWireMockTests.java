@@ -64,6 +64,8 @@ class TransportServiceWireMockTests {
             prd.stubFor(post(urlEqualTo(deploy(id))).willReturn(noContent()));
             prd.stubFor(get(urlEqualTo(runtime(id))).willReturn(okJson("{\"d\":{\"Status\":\"STARTED\"}}")));
         }
+        // 20261121-perf-retry REQ-904: 배포 확인은 런타임 목록을 읽는다.
+        com.company.sap.cpitransport.stub.RuntimeListStub.stub(prd, "STARTED", "A", "B", "C");
     }
 
     @AfterEach void tearDown() { if (dev != null) dev.stop(); if (prd != null) prd.stop(); }
@@ -92,7 +94,9 @@ class TransportServiceWireMockTests {
         assertThat(prd.getAllServeEvents()).extracting(e -> e.getRequest().getMethod().getName() + " " + e.getRequest().getUrl())
                 .allMatch(r -> r.equals("POST /token") || r.equals("GET /api/v1/") || r.equals("GET " + PACKAGE)
                         || r.equals("GET " + path("A")) || r.equals((existing ? "PUT " + path("A") : "POST " + COLLECTION))
-                        || r.equals("POST " + deploy("A")) || r.equals("GET " + runtime("A")));
+                        || r.equals("POST " + deploy("A"))
+                        || r.startsWith("GET " + com.company.sap.cpitransport.stub.RuntimeListStub.PATH)
+                                && !r.startsWith("GET " + com.company.sap.cpitransport.stub.RuntimeListStub.PATH + "(")); // REQ-904 목록 조회
         assertThat(UUID.fromString(response.transportId()).toString()).isEqualTo(response.transportId());
         assertThat(response.finishedAt()).isAfter(response.startedAt());
         assertThat(json.readTree(json.writeValueAsString(response)).path("startedAt").asString()).endsWith("Z");
@@ -253,7 +257,7 @@ class TransportServiceWireMockTests {
     @DisplayName("REQ-009 AC-3, AC-4, REQ-701: deployment failure or timeout preserves upload and bundled configurations")
     void req009_ac3_deployment(String status) {
         if (status.equals("HTTP_FAILURE")) prd.stubFor(post(urlEqualTo(deploy("A"))).willReturn(serverError()));
-        else prd.stubFor(get(urlEqualTo(runtime("A"))).willReturn(okJson("{\"d\":{\"Status\":\"" + status + "\"}}")));
+        else com.company.sap.cpitransport.stub.RuntimeListStub.stub(prd, status, "A"); // REQ-904 목록 조회
         var result = run(List.of("A"), false, true).results().getFirst();
         assertThat(result.error().code()).isEqualTo(status.equals("WAITING") ? "DEPLOY_TIMEOUT" : "DEPLOY_FAILED");
         assertThat(result.deployStatus()).isEqualTo(status.equals("WAITING") ? DeployStatus.TIMEOUT : DeployStatus.ERROR);

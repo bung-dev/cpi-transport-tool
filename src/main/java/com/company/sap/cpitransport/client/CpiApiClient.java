@@ -3,6 +3,7 @@ package com.company.sap.cpitransport.client;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -101,6 +102,16 @@ public class CpiApiClient {
                 .map(node -> field(node, "Status"));
     }
 
+    public Map<String, String> listRuntimeStatuses(String environment) {
+        var statuses = new HashMap<String, String>();
+        // A failed runtime list is retried on the next deployment polling interval.
+        for (var entry : list(environment, "/IntegrationRuntimeArtifacts", false,
+                node -> Map.entry(field(node, "Id"), field(node, "Status")))) {
+            statuses.put(entry.getKey(), entry.getValue());
+        }
+        return statuses;
+    }
+
     public CpiHttpExecutor.OnceResponse getDeployErrorInformation(String tenantId, String id) {
         return http.executeOnce(tenantId, ROOT + "/IntegrationRuntimeArtifacts('" + identifier(id)
                 + "')/ErrorInformation/$value");
@@ -169,13 +180,17 @@ public class CpiApiClient {
     }
 
     private <T> List<T> list(String environment, String path, Function<JsonNode, T> convert) {
+        return list(environment, path, true, convert);
+    }
+
+    private <T> List<T> list(String environment, String path, boolean retryTransient, Function<JsonNode, T> convert) {
         URI base = http.apiUrl(environment);
         URI current = URI.create(base.toString() + ROOT + path);
         List<T> values = new ArrayList<>();
         for (int page = 1; page <= 50; page++) {
             String requestPath = (current.getRawPath().isEmpty() ? "/" : current.getRawPath())
                     + (current.getRawQuery() == null ? "" : "?" + current.getRawQuery());
-            JsonNode response = data(http.executePage(environment, requestPath).getBody());
+            JsonNode response = data(http.executePage(environment, requestPath, retryTransient).getBody());
             JsonNode results = response.path("results");
             if (!results.isArray()) throw invalidResponse();
             results.valueStream().map(convert).forEach(values::add);

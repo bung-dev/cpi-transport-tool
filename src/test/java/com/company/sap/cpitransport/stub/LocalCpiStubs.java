@@ -145,6 +145,22 @@ public final class LocalCpiStubs {
         once(prd, "auth-retry", upload("IF_Fault_AuthRetry"), upload("IF_Fault_AuthRetry"),
                 aResponse().withStatus(401), created());
         prd.stubFor(put(urlPathEqualTo(artifact("IF_Order_Sync"))).willReturn(ok()));
+        // 20261121-perf-retry REQ-904: 배포 확인은 런타임 목록(IntegrationRuntimeArtifacts)을 한 번에 읽는다.
+        // 단건 조회와 같은 뜻: DeployError는 ERROR, DeployTimeout·RuntimeGet500은 목록에 없음(배포 중),
+        // IF_Order_Sync는 첫 목록에 없고 다음부터 STARTED. 나머지는 STARTED.
+        var statuses = new LinkedHashMap<String, String>();
+        for (var pkg : packages) {
+            String id = pkg.get("Id");
+            for (String a : id.equals("PkgTransportDemo") ? List.of("IF_Order_Sync", "IF_Customer_Push")
+                    : id.equals("PkgFaultDemo") ? FAULTS : id.equals("PkgCreateFail") ? List.of("IF_CreateFail") : List.of("IF_Orphan")) {
+                if (a.equals("IF_Fault_DeployTimeout") || a.equals("IF_Fault_RuntimeGet500")) continue;
+                statuses.put(a, a.equals("IF_Fault_DeployError") ? "ERROR" : "STARTED");
+            }
+        }
+        var first = new LinkedHashMap<>(statuses);
+        first.remove("IF_Order_Sync");
+        once(prd, "runtime-list", RuntimeListStub.list(), RuntimeListStub.list(),
+                okJson(RuntimeListStub.body(first)), okJson(RuntimeListStub.body(statuses)));
     }
     private static MappingBuilder upload(String id) {
         return post(urlPathEqualTo(ROOT + "IntegrationDesigntimeArtifacts")).withRequestBody(matchingJsonPath("$.Id", equalTo(id)));

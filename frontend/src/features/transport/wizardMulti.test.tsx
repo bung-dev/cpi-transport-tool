@@ -286,6 +286,8 @@ describe('REQ-622 확인창의 대상 패키지 상태', () => {
       packages: [{ packageId: 'PkgTransportDemo' }, { packageId: 'PkgNotInPrd' }],
       createPackages: ['PkgNotInPrd'],
       dryRun: false, deploy: false, sourceTenantId: 'DEV', targetTenantId: 'PRD',
+      // 20261121-perf-retry REQ-902: 미리보기 뒤 실제 이관은 그 미리보기 ID를 보낸다.
+      previewId: 't-dry',
     });
   });
 

@@ -53,6 +53,7 @@ export function TransportWizard({ wizard: w }: { wizard: Wizard }) {
       {w.routeDialog && <RouteDialog onApply={w.changeRoute} onClose={w.closeRouteDialog} />}
       {w.confirm && !w.realDisabled && w.preview && w.route.target && (
         <ConfirmDialog
+          previewId={w.preview.transportId}
           targetName={w.targetName}
           routeText={w.routeText}
           packages={w.preview.packages.map(p => ({ ...p, packageName: p.packageName ?? w.packages.find(selected => selected.id === p.packageId)?.name ?? null }))}

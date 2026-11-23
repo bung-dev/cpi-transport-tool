@@ -3,7 +3,15 @@ package com.company.sap.cpitransport.model;
 import java.util.List;
 
 public record TransportRequest(List<PackageSelection> packages, List<String> createPackages,
-        boolean dryRun, boolean deploy, TenantRef source, TenantRef target) {
+        boolean dryRun, boolean deploy, TenantRef source, TenantRef target, String previewId, String retryOf) {
+    public TransportRequest(List<PackageSelection> packages, List<String> createPackages,
+                            boolean dryRun, boolean deploy, TenantRef source, TenantRef target, String previewId) {
+        this(packages, createPackages, dryRun, deploy, source, target, previewId, null);
+    }
+    public TransportRequest(List<PackageSelection> packages, List<String> createPackages,
+                            boolean dryRun, boolean deploy, TenantRef source, TenantRef target) {
+        this(packages, createPackages, dryRun, deploy, source, target, null);
+    }
     public TransportRequest(String packageId, List<String> artifactIds, boolean dryRun, boolean deploy,
                             TenantRef source, TenantRef target) {
         this(List.of(new PackageSelection(packageId, artifactIds)), List.of(), dryRun, deploy, source, target);

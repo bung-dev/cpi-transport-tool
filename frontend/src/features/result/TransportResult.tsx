@@ -6,6 +6,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Switch } from '../../components/ui/Switch';
 import { formatTime } from '../../lib/formatTime';
+import { RetryDialog } from './RetryDialog';
 import { ArtifactCard } from './ArtifactCard';
 import { deployOutcome } from './deployOutcome';
 import { failedArtifactCount, initialExpanded, isProblemArtifact, totalProblemCount } from './problems';
@@ -42,8 +43,10 @@ export function TransportResult({ result, onOpenReal, activeJobId }: Props) {
     setOnlyProblems(false);
   }
 
+  const [retryId, setRetryId] = useState<string>();
   const problemTotal = totalProblemCount(result.results);
   const failedArtifacts = failedArtifactCount(result.results);
+  const retryCount = failedArtifacts + (result.skipped?.length ?? 0);
   const hasProblemArtifact = result.results.some(isProblemArtifact);
   const hasResults = result.results.length > 0;
   const setAll = (value: boolean) => setExpanded(result.results.map(() => value));
@@ -66,12 +69,16 @@ export function TransportResult({ result, onOpenReal, activeJobId }: Props) {
         </h3>
         {result.dryRun ? <Badge tone="neutral">미리보기</Badge> : <Badge tone="accent">실제 이관</Badge>}
         {result.deploy && <Badge tone="info">배포</Badge>}
+        {!result.dryRun && retryCount > 0 && (
+          <Button className="ml-auto" onClick={() => setRetryId(result.transportId)}>실패한 {retryCount}개 다시 이관</Button>
+        )}
         {onOpenReal && result.dryRun && (
           <Button className="ml-auto" disabled={realDisabled || !!activeJobId} aria-describedby={activeJobId || notice ? noticeId : undefined} onClick={onOpenReal}>
             이 구성으로 실제 이관
           </Button>
         )}
       </div>
+      {retryId === result.transportId && <RetryDialog result={result} onClose={() => setRetryId(undefined)} />}
       {outcome && <p className={outcome.tone === 'success' ? 'text-success-fg' : 'text-danger-fg'}>{outcome.summary}</p>}
       {onOpenReal && result.dryRun && (activeJobId || notice) && <p id={noticeId} className="text-sm text-ink-secondary">
         {activeJobId ? <ActiveJobNotice jobId={activeJobId} /> : notice}
@@ -79,6 +86,8 @@ export function TransportResult({ result, onOpenReal, activeJobId }: Props) {
       {/* 경로·템플릿은 메타 dl 밖에 둔다(dl의 용어 목록과 순서는 그대로, REQ-424). 머리 줄 바로 다음은 배포 결과 요약 자리라 그 뒤에 둔다(REQ-309 AC-8). */}
       <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         <p className="min-w-0 break-all font-medium">{route}</p>
+        {result.retryOf && <a className="min-w-0 break-all text-primary underline"
+          href={`#/history?transportId=${encodeURIComponent(result.retryOf)}`}>다시 이관 — 원래 이관 {result.retryOf}</a>}
         {result.template && <p className="min-w-0 break-all text-ink-secondary">{`템플릿 ${result.template.name}`}</p>}
       </div>
       {summary && <div className="grid grid-cols-3 gap-3">
@@ -86,6 +95,12 @@ export function TransportResult({ result, onOpenReal, activeJobId }: Props) {
         <Stat label="성공" value={summary.succeeded} valueClass={summary.succeeded >= 1 ? 'text-success-fg' : 'text-ink'} />
         <Stat label="실패" value={summary.failed} valueClass={summary.failed >= 1 ? 'text-danger-fg' : 'text-ink'} />
       </div>}
+      {summary?.fixRequired != null && summary.retryable != null && summary.skipped != null &&
+        summary.failed + summary.skipped > 0 && (
+          <p className="text-sm text-ink-secondary">
+            고쳐야 함 {summary.fixRequired} · 다시 시도 가능 {summary.retryable} · 건너뜀 {summary.skipped}
+          </p>
+        )}
       <dl className="grid grid-cols-1 gap-x-6 gap-y-2 rounded-lg border border-hairline bg-canvas px-4 py-3 sm:grid-cols-2 lg:grid-cols-4 min-w-0">
         <Meta label="이관 ID">
           <span className="font-mono text-[13px]">{result.transportId}</span>

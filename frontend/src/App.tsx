@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { BrandIcon } from './components/ui/icons';
 import { Button } from './components/ui/Button';
 import { HistoryTab } from './features/history/HistoryTab';
-import { ActiveJobBanner, useActiveJob } from './features/job/ActiveJobBanner';
+import { ActiveJobBanner, ActiveJobContext, useActiveJob } from './features/job/ActiveJobBanner';
 import { JobScreen } from './features/job/JobScreen';
 import { Dashboard } from './features/dashboard/Dashboard';
 import { TransportWizard } from './features/transport/TransportWizard';
@@ -114,19 +114,21 @@ function AppShell() {
       {route !== 'job' && activeJob && <ActiveJobBanner job={activeJob} />}
     </header>
     <main ref={main} tabIndex={-1} className="mx-auto w-full max-w-[1200px] min-w-0 px-4 py-8 md:px-6">
-      <div key={`${route}-${revision}`} className="min-w-0">
-        {route === 'dashboard' && <Dashboard onForward={(template, packageId) => {
-          wizard.forwardPackage(template, packageId);
-          go('transport');
-        }} />}
-        {route === 'transport' && <TransportWizard wizard={wizard} />}
-        {route === 'job' && <JobScreen onNew={() => { wizard.restart(); go('transport'); }} />}
-        {route === 'history' && <HistoryTab />}
-        {route === 'tenants' && <TenantTab initiallyCreate={create === 'tenant'} />}
-        {route === 'templates' && <TemplatesScreen initiallyCreate={create === 'template'} onUse={useTemplate} />}
-        {route === 'audit' && <AuditScreen />}
-        {route === 'settings' && <SettingsScreen />}
-      </div>
+      <ActiveJobContext.Provider value={activeJob}>
+        <div key={`${route}-${revision}`} className="min-w-0">
+          {route === 'dashboard' && <Dashboard onForward={(template, packageId) => {
+            wizard.forwardPackage(template, packageId);
+            go('transport');
+          }} />}
+          {route === 'transport' && <TransportWizard wizard={wizard} />}
+          {route === 'job' && <JobScreen onNew={() => { wizard.restart(); go('transport'); }} />}
+          {route === 'history' && <HistoryTab />}
+          {route === 'tenants' && <TenantTab initiallyCreate={create === 'tenant'} />}
+          {route === 'templates' && <TemplatesScreen initiallyCreate={create === 'template'} onUse={useTemplate} />}
+          {route === 'audit' && <AuditScreen />}
+          {route === 'settings' && <SettingsScreen />}
+        </div>
+      </ActiveJobContext.Provider>
     </main>
     <VersionFooter />
     {palette && <CommandPalette overlaid={palette.overlaid} previewReason={wizard.previewReason} realReason={wizard.realReason} onClose={() => setPalette(null)} onCommand={command} />}

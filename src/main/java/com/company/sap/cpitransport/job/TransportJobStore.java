@@ -4,11 +4,14 @@ import com.company.sap.cpitransport.model.*;
 import com.company.sap.cpitransport.service.TransportHistoryStore;
 import com.company.sap.cpitransport.service.TransportService.Stage;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.*;
 import java.time.Clock;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,13 +22,21 @@ import tools.jackson.databind.ObjectMapper;
 public class TransportJobStore {
     private static final Logger log = LoggerFactory.getLogger(TransportJobStore.class);
     private static final int FINISHED_LIMIT = 20;
+    private static final long SAVE_INTERVAL = TimeUnit.SECONDS.toNanos(1);
     private final Path file;
     private final ObjectMapper json;
     // Updates arrive under the individual run's lock. Never acquire a run lock from this store.
     private final Map<String, SavedJob> jobs = new LinkedHashMap<>();
 
+    private final ScheduledExecutorService writer = Executors.newSingleThreadScheduledExecutor(
+            Thread.ofPlatform().daemon().name("transport-job-writer").factory());
+    private final AtomicInteger writes = new AtomicInteger();
+    private ScheduledFuture<?> pending;
+    private CompletableFuture<Void> latestWrite = CompletableFuture.completedFuture(null);
+    private long lastWrite;
+
     record SavedJob(@JsonIgnoreProperties("result") TransportRun.Snapshot progress, String transportId,
-                    TemplateRef template, List<ArtifactResult> completedResults) {
+                    TemplateRef template, List<ArtifactResult> completedResults, Boolean cancelRequested, String retryOf) {
         void validate() {
             Objects.requireNonNull(progress.jobId());
             Objects.requireNonNull(progress.status());
@@ -51,9 +62,9 @@ public class TransportJobStore {
             var packages = progress.packages();
             if (status == JobStatus.RUNNING) {
                 if (result == null) {
-                    result = progress.response(JobStatus.INTERRUPTED, clock.instant(), completedResults, template);
                     items = items.stream().map(item -> item.stage() == Stage.DONE ? item : item.at(Stage.SKIPPED, null))
                             .toList();
+                    result = progress.response(JobStatus.INTERRUPTED, clock.instant(), completedResults, items, template, retryOf);
                     try {
                         history.append(result);
                     } catch (RuntimeException failure) {
@@ -70,7 +81,7 @@ public class TransportJobStore {
             var snapshot = new TransportRun.Snapshot(progress.jobId(), status, progress.dryRun(), progress.deploy(),
                     progress.startedAt(), finishedAt, items.size(), items.size(), progress.sourceTenant(),
                     progress.targetTenant(), packages, items, result);
-            return new SavedJob(snapshot, transportId, template, List.of());
+            return new SavedJob(snapshot, transportId, template, List.of(), cancelRequested, retryOf);
         }
 
         private static List<TransportRun.Item> terminalItems(List<TransportRun.Item> items, List<ArtifactResult> results) {
@@ -106,7 +117,7 @@ public class TransportJobStore {
         boolean recovered = jobs.values().stream().anyMatch(job -> job.progress().status() == JobStatus.RUNNING);
         jobs.replaceAll((id, job) -> job.restore(results.get(job.transportId()), history, clock));
         boolean trimmed = trimFinished();
-        if (recovered || trimmed) write();
+        if (recovered || trimmed) write(List.copyOf(jobs.values()));
     }
 
     private void load() {
@@ -132,12 +143,59 @@ public class TransportJobStore {
         return job.progress();
     }
 
-    synchronized void save(SavedJob job) {
+    synchronized CompletableFuture<Void> save(SavedJob job) {
+        if (writer.isShutdown()) return CompletableFuture.completedFuture(null);
         // Reinsertion preserves completion order even when finish times tie.
-        jobs.remove(job.progress().jobId());
+        var previous = jobs.remove(job.progress().jobId());
         jobs.put(job.progress().jobId(), job);
-        if (job.progress().status() != JobStatus.RUNNING) trimFinished();
-        write();
+        boolean terminal = job.progress().status() != JobStatus.RUNNING;
+        if (terminal) trimFinished();
+        boolean immediate = previous == null || terminal
+                || !Objects.equals(previous.cancelRequested(), job.cancelRequested());
+        if (pending == null) latestWrite = new CompletableFuture<>();
+        schedule(immediate);
+        return immediate ? latestWrite : CompletableFuture.completedFuture(null);
+    }
+
+    private void schedule(boolean immediate) {
+        if (pending != null) {
+            if (!immediate || pending.getDelay(TimeUnit.NANOSECONDS) <= 0) return;
+            pending.cancel(false);
+        }
+        var scheduledBatch = latestWrite;
+        long delay = immediate ? 0 : SAVE_INTERVAL - (System.nanoTime() - lastWrite);
+        pending = writer.schedule(() -> flush(scheduledBatch), Math.max(0, delay), TimeUnit.NANOSECONDS);
+    }
+
+    // Only the single writer calls flush. New updates can enter the store during file I/O.
+    private void flush(CompletableFuture<Void> scheduledBatch) {
+        List<SavedJob> snapshot;
+        synchronized (this) {
+            if (scheduledBatch != latestWrite || pending == null) return;
+            snapshot = List.copyOf(jobs.values());
+            pending = null;
+            lastWrite = System.nanoTime();
+        }
+        write(snapshot);
+        scheduledBatch.complete(null);
+    }
+
+    int writeCount() {
+        return writes.get();
+    }
+
+    @PreDestroy
+    void close() {
+        CompletableFuture<Void> last;
+        synchronized (this) {
+            if (!writer.isShutdown()) {
+                if (pending != null) schedule(true);
+                writer.shutdown();
+            }
+            last = latestWrite;
+        }
+        last.join();
+        writer.close();
     }
 
     private boolean trimFinished() {
@@ -149,12 +207,12 @@ public class TransportJobStore {
         return excess > 0;
     }
 
-    private void write() {
+    private void write(List<SavedJob> snapshot) {
         try {
             Files.createDirectories(file.getParent());
             var temp = Files.createTempFile(file.getParent(), "jobs-", ".tmp");
             try {
-                Files.write(temp, json.writeValueAsBytes(jobs.values()));
+                Files.write(temp, json.writeValueAsBytes(snapshot));
                 try {
                     Files.move(temp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
                 } catch (AtomicMoveNotSupportedException unsupported) {
@@ -165,6 +223,8 @@ public class TransportJobStore {
             }
         } catch (IOException | RuntimeException failure) {
             log.warn("Could not save transport jobs file");
+        } finally {
+            writes.incrementAndGet();
         }
     }
 }

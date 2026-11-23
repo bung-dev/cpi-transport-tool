@@ -104,7 +104,8 @@ class TenantTransportWireMockTests {
                 .filteredOn(c -> c.key().equals("Timeout"))
                 .singleElement().isEqualTo(new ConfigurationItem("Timeout", "30000", "xsd:integer", ConfigurationStatus.BUNDLED));
         stubs.prd().verify(2, postRequestedFor(urlPathEqualTo("/api/v1/DeployIntegrationDesigntimeArtifact")));
-        stubs.prd().verify(getRequestedFor(urlPathEqualTo("/api/v1/IntegrationRuntimeArtifacts('IF_Customer_Push')")));
+        // 20261121-perf-retry REQ-904: 배포 확인은 대상(PRD)의 런타임 목록으로 한다.
+        stubs.prd().verify(getRequestedFor(urlPathEqualTo(com.company.sap.cpitransport.stub.RuntimeListStub.PATH)));
         assertThat(stubs.dev().getAllServeEvents()).noneMatch(e -> e.getRequest().getMethod().getName().equals("PUT"));
         assertThat(stubs.prd().getAllServeEvents()).noneMatch(e -> e.getRequest().getUrl().endsWith("/$value"));
         // Populate a source CSRF session too, proving the target cache does not satisfy it.

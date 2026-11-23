@@ -30,6 +30,10 @@ public class DeployService {
         }
     }
 
+    DeployBatch newBatch(String tenantId) {
+        return new DeployBatch(api, tenantId, settings, clock, sleeper);
+    }
+
     public DeployStatus deployAndWait(String id) { return deployAndWait("PRD", id); }
 
     public DeployStatus deployAndWait(String targetTenantId, String id) {

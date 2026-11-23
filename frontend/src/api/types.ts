@@ -27,7 +27,9 @@ export interface ArtifactError {
 export interface ArtifactResult {
   packageId?: string;
   artifactId: string;
+  reusedPreview?: boolean;
   status: ArtifactStatus;
+  grade?: 'SUCCESS' | 'FIX_REQUIRED' | 'RETRYABLE' | 'SKIPPED' | null;
   action: TransportAction;
   configurations: ConfigurationItem[];
   deployStatus: DeployStatus;
@@ -38,6 +40,9 @@ export interface TransportSummary {
   total: number;
   succeeded: number;
   failed: number;
+  fixRequired?: number | null;
+  retryable?: number | null;
+  skipped?: number | null;
 }
 
 export type TargetPackageStatus = 'NOT_CHECKED' | 'EXISTING' | 'CREATED' | 'CREATE_FAILED' | 'NOT_FOUND' | 'CHECK_FAILED';
@@ -50,6 +55,8 @@ export interface TransportPackage {
 
 export interface TransportResponse {
   jobStatus?: FinishedJobStatus;
+  skipped?: { packageId: string; artifactId: string }[];
+  retryOf?: string;
   sourceTenant?: TenantRef;
   targetTenant?: TenantRef;
   /** 템플릿으로 실행한 경우 실행 당시의 템플릿 id·이름. 템플릿 없이 실행했으면 필드가 없다(REQ-424·425). */
@@ -103,6 +110,7 @@ export interface TransportJob extends ActiveJob {
 }
 
 export interface TransportRequest {
+  previewId?: string;
   sourceTenantId?: string;
   targetTenantId?: string;
   packages: { packageId: string; artifactIds?: string[] }[];
